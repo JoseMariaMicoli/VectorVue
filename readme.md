@@ -1,3 +1,15 @@
+```text
+__      __         _              __   __            
+ \ \    / /        | |             \ \ / /            
+  \ \  / /__   ___ | |_  ___   _ __ \ V / _   _   ___ 
+   \ \/ / _ \ / __|| __|/ _ \ | '__| \ / | | | | / _ \
+    \  /  __/| (__ | |_| (_) || |    | | | |_| ||  __/
+     \/ \___| \___| \__|\___/ |_|    \_/  \__,_| \___|
+
+                                                      
+             >> ADVERSARY REPORTING FRAMEWORK <<
+
+```
 # Red Team & Penetration Testing Reporting Framework
 
 A comprehensive, Markdown-first reporting framework for modern security consultants. This repository provides a structured workflow from pre-engagement to final delivery.
@@ -7,17 +19,17 @@ A comprehensive, Markdown-first reporting framework for modern security consulta
 ```text
 .
 ├── 01-Pre-Engagement/
-│   └── checklist.md          # Legal, RoE, and scope verification
+│   └── Rules_of_Engagement_CheckList.md          # Legal, RoE, and scope verification
 ├── 02-Executive-Summary/
-│   └── template.md           # High-level narrative for stakeholders
+│   └── Executive_Summary_Template.md             # High-level narrative for stakeholders
 ├── 03-Risk-Assessment/
-│   └── matrix.md             # Likelihood vs. Impact heatmap
+│   └── Risk_Assessment_Matrix.md                 # Likelihood vs. Impact heatmap
 ├── 04-Technical-Details/
-│   ├── findings-template.md  # Detailed vulnerability write-up format
-│   └── remediation-library.md # OWASP Top 10 database (Web, API, Mobile, AD)
+│   ├── Technical_Details_Template.md             # Detailed vulnerability write-up format
+│   └── Remediation-Library.md                    # OWASP Top 10 database (Web, API, Mobile, AD)
 ├── 05-Delivery/
-│   └── tracker.xlsx          # Client-facing remediation tracking sheet
-└── examples/                 # PROTOTYPES: Full dummy reports for reference
+│   └── Remediation_Tracker.md                    # Client-facing remediation tracking sheet
+└── examples/                                     # PROTOTYPES: Full dummy reports for reference
     ├── example-exec-summary.md
     ├── example-technical-detail.md
     └── example-risk-matrix.md
