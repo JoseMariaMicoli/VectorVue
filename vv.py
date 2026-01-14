@@ -549,41 +549,57 @@ class VectorVueShell(cmd.Cmd):
             print(f"[-] Database Error: {e}")
 
     def do_usage(self, arg):
-        """Displays perfectly aligned command interface with Management features."""
-        c, y, g, r, b = "\033[36m", "\033[33m", "\033[32m", "\033[0m", "\033[1m"
-        print(f"\n{b}┌────────────────────────────────────────────────────────────┐")
-        print(f"│ {c}VECTORVUE COMMAND SPECIFICATION v1.4{r}{b}                             │")
-        print(f"├────────────────────────────────────────────────────────────┤")
-        print(f"│ {y}SETUP & DATA ENTRY{r}{b}                                           │")
-        print(f"│  {g}init{r}            - Prepare folders & repair database       │")
-        print(f"│  {g}new{r}             - Interactive Finding Wizard             │")
-        print(f"│  {g}seed{r}            - Populate DB with 10 Demo Findings      │")
-        print(f"├────────────────────────────────────────────────────────────┤")
-        print(f"│ {y}MANAGEMENT & QUERY{r}{b}                                          │")
-        print(f"│  {g}list <target>{r}    - Table of Findings, IDs & Statuses      │")
-        print(f"│  {g}library{r}          - View Golden Remediation Library        │")
-        print(f"│  {g}status <id> <val>{r} - Update state (e.g. status 1 Fixed)      │")
-        print(f"│  {g}delete <id>{r}      - Permanent removal by Finding ID        │")
-        print(f"│  {g}query <sql>{r}      - Raw SQL search (e.g. SELECT *...)      │")
-        print(f"├────────────────────────────────────────────────────────────┤")
-        print(f"│ {y}REPORT GENERATION{r}{b}                                          │")
-        print(f"│  {g}report_roe{r}       - Legal & RoE Checklist (F01)             │")
-        print(f"│  {g}report_executive{r} - High-level Summary (F02)               │")
-        print(f"│  {g}report_risk{r}      - Risk Methodology & Heatmap (F03)         │")
-        print(f"│  {g}report_technical{r} - Technical Deep Dive (F04)               │")
-        print(f"│  {g}report_full{r}      - One-click Suite Generation (F05)        │")
-        print(f"├────────────────────────────────────────────────────────────┤")
-        print(f"│ {y}FULL WORKFLOW EXAMPLE: TargetCorp{r}{b}                             │")
-        print(f"│  {g}init{r}                 -> Prepare environment for TargetCorp │")
-        print(f"│  {g}seed{r}                 -> Seed initial data for TargetCorp   │")
-        print(f"│  {g}list \"TargetCorp\"{r}     -> Identify IDs for the project       │")
-        print(f"│  {g}status 1 \"Fixed\"{r}     -> Mark TargetCorp ID 1 as Fixed      │")
-        print(f"│  {g}status 2 \"Accepted\"{r}  -> Mark TargetCorp ID 2 as Risk Acc.  │")
-        print(f"│  {g}delete 99{r}            -> Remove a test entry from DB        │")
-        print(f"│  {g}library \"API\"{r}        -> Lookup API remediations for report │")
-        print(f"│  {g}query SELECT * FROM findings WHERE company='TargetCorp'{r}   │")
-        print(f"│  {g}report_full \"TargetCorp\"{r} -> Final Delivery for client    │")
-        print(f"└──────────────────────────────────────────────────────────────┘{r}")
+            """Displays perfectly aligned command interface for v1.6."""
+            # Define colors
+            c, y, g, r, b = "\033[36m", "\033[33m", "\033[32m", "\033[0m", "\033[1m"
+            
+            # Internal width of the box (excluding borders and 1-space padding)
+            W = 62 
+
+            def p_line(text, color_content=r):
+                # Formats the text to the fixed width first, THEN adds color
+                content = f"{text:<{W}}"
+                print(f"│ {color_content}{content}{r}{b} │")
+
+            # Top Border
+            print(f"\n{b}┌{'─' * (W + 2)}┐")
+            
+            # Header
+            p_line(f"VECTORVUE COMMAND SPECIFICATION v1.6", c)
+            print(f"├{'─' * (W + 2)}┤")
+            
+            # Sections
+            p_line("SETUP & DATA ENTRY", y)
+            p_line("  init             - Prepare folders & repair database")
+            p_line("  new              - Interactive Finding Wizard")
+            p_line("  seed             - Populate DB with 10 Demo Findings")
+            print(f"├{'─' * (W + 2)}┤")
+            
+            p_line("MANAGEMENT & QUERY", y)
+            p_line("  list <target>    - Table of Findings, IDs & Statuses")
+            p_line("  library          - View 40-Point Golden Remediation Lib")
+            p_line("  status <id> <val> - Update state (e.g. status 1 Fixed)")
+            p_line("  delete <id>      - Permanent removal by Finding ID")
+            p_line("  query <sql>      - Raw SQL search (e.g. SELECT *...)")
+            print(f"├{'─' * (W + 2)}┤")
+            
+            p_line("REPORT GENERATION", y)
+            p_line("  report_executive - High-level Summary (F02)")
+            p_line("  report_technical - Technical Deep Dive (F04)")
+            p_line("  report_full      - One-click Suite Generation (F05)")
+            print(f"├{'─' * (W + 2)}┤")
+            
+            p_line("FULL WORKFLOW EXAMPLE: TargetCorp", y)
+            p_line("  init                 -> Setup workspace")
+            p_line("  seed                 -> Seed initial data")
+            p_line("  list \"TargetCorp\"     -> Identify IDs")
+            p_line("  status 1 \"Fixed\"      -> Update lifecycle")
+            p_line("  library \"API\"        -> Lookup remediations")
+            p_line("  query SELECT * FROM findings WHERE company='TargetCorp'")
+            p_line("  report_full \"TargetCorp\" -> Final Delivery")
+            
+            # Bottom Border
+            print(f"└{'─' * (W + 2)}┘{r}")
 
     def do_exit(self, arg):
         """Exits the shell."""
