@@ -6,6 +6,57 @@ import shutil
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
+library_data = {
+    "Web App (OWASP Top 10)": [
+        ("A01", "Broken Access Control", "Implement centralized access control; use 'Deny by Default'."),
+        ("A02", "Security Misconfiguration", "Automate hardening; remove default accounts and verbose error pages."),
+        ("A03", "Software/Data Integrity", "Use digital signatures for updates; verify CI/CD pipeline security."),
+        ("A04", "Cryptographic Failures", "Encrypt data at rest/transit (AES-256/TLS 1.3); disable old protocols."),
+        ("A05", "Injection (SQLi, XSS)", "Use parameterized queries and context-aware output encoding."),
+        ("A06", "Insecure Design", "Shift-left security; perform Threat Modeling during the design phase."),
+        ("A07", "Authentication Failures", "Implement Phishing-resistant MFA (FIDO2); enforce account lockouts."),
+        ("A08", "Integrity Failures", "Verify plugins/libraries; use Subresource Integrity (SRI) for CDN assets."),
+        ("A09", "Logging & Alerting", "Log all auth failures/high-value transactions; use a SIEM for alerts."),
+        ("A10", "SSRF / Exception Handling", "Sanitize inputs for URLs; implement strict allowlists for outbound calls.")
+    ],
+    "API Security (OWASP API)": [
+        ("API1", "BOLA (Object Level)", "Validate that the logged-in user owns the resource requested in the URL."),
+        ("API2", "Broken Authentication", "Use standard OAuth2/OpenID Connect; secure tokens with short TTLs."),
+        ("API3", "BOPLA (Property Level)", "Use Data Transfer Objects (DTOs) to prevent 'Mass Assignment' of fields."),
+        ("API4", "Unrestricted Consumption", "Set Rate Limits (TPS) and quotas for CPU/Memory/Payload size."),
+        ("API5", "Broken Function Level", "Enforce RBAC (Role-Based Access Control) on all admin endpoints."),
+        ("API6", "Unrestricted Business Logic", "Validate workflow sequences to prevent bypassing payment or approval steps."),
+        ("API7", "SSRF (API Specific)", "Block API access to internal metadata services (e.g., AWS IMDS)."),
+        ("API8", "Security Misconfiguration", "Disable unnecessary HTTP methods (PUT/PATCH/DELETE) and CORS wildcards."),
+        ("API9", "Improper Inventory", "Maintain OpenAPI/Swagger docs; sunset 'Zombie' (old) API versions."),
+        ("API10", "Unsafe Consumption", "Sanitize data from third-party APIs before processing; use strict schema validation.")
+    ],
+    "Mobile Security (OWASP Mobile)": [
+        ("M1", "Improper Credentials", "Use Android Keystore/iOS Keychain; never hardcode API keys."),
+        ("M2", "Inadequate Supply Chain", "Verify third-party SDKs; use Software Bill of Materials (SBOM) tracking."),
+        ("M3", "Insecure Authentication", "Implement MFA and biometric backing; avoid local-only auth bypasses."),
+        ("M4", "Insufficient Input Validation", "Sanitize data from IPC, URLs, and QR codes to prevent deep-link attacks."),
+        ("M5", "Insecure Communication", "Enforce TLS; implement Certificate Pinning to stop MitM attacks."),
+        ("M6", "Inadequate Privacy", "Limit PII collection; use 'Purpose Limitation' and data minimization."),
+        ("M7", "Binary Protection", "Use Obfuscation (DexGuard/ProGuard) and Anti-Tampering checks."),
+        ("M8", "Security Misconfiguration", "Disable Debug mode; set 'allowBackup=false' in Android Manifest."),
+        ("M9", "Insecure Data Storage", "Encrypt local SQLite/Realm databases using SQLCipher."),
+        ("M10", "Insufficient Cryptography", "Use modern primitives (AES-GCM/Argon2); avoid hardcoded salts.")
+    ],
+    "AD & Infrastructure (Red Team)": [
+        ("AD-01", "Kerberoasting", "Use gMSAs or passwords with >25 characters for Service Accounts."),
+        ("AD-02", "AS-REP Roasting", "Enable 'Do not require Kerberos preauthentication' only where necessary."),
+        ("AD-03", "BloodHound Path", "Audit High-Privileged groups (Domain Admins); reduce 'Nested' permissions."),
+        ("AD-04", "GPO Misconfiguration", "Restrict 'SeDebugPrivilege' and 'SeImpersonatePrivilege' to Admins."),
+        ("NET-01", "LLMNR/NBNS", "Disable via GPO; enable SMB Signing to prevent relaying."),
+        ("NET-02", "SNMP Public String", "Disable SNMP v1/v2c; use v3 with authPriv or restrict to allowlists."),
+        ("INF-01", "Unquoted Service Path", "Wrap service executables in quotes: 'C:\\Program Files\\App\\srv.exe'."),
+        ("INF-02", "Cleartext in Shares", "Automate scanning of SYSVOL and File Shares for secrets."),
+        ("INF-03", "Weak TLS/SSL", "Disable SSLv3, TLS 1.0/1.1; enforce TLS 1.2+ with Strong Ciphers."),
+        ("INF-04", "Default Credentials", "Enforce a 'Change Password on First Login' policy for all appliances.")
+    ]
+}
+
 # --- HELPER UTILITIES ---
 def get_icon(key):
     """Returns a symbolic icon for categories and severities."""
@@ -35,7 +86,8 @@ def init_db():
         ("description", "TEXT"),
         ("remediation", "TEXT"),
         ("steps", "TEXT"),
-        ("evidence", "TEXT")
+        ("evidence", "TEXT"),
+        ("status", "TEXT DEFAULT 'Open'")  # <--- ADD THIS LINE
     ]
     
     # Check for missing columns (to repair older database versions)
@@ -60,11 +112,12 @@ def add_finding_full(data):
     conn.close()
 
 def query_findings(column, value):
-    """Retrieves records with explicit column ordering."""
     conn = sqlite3.connect('vectorvue.db')
     c = conn.cursor()
-    # Explicitly define order: 0:id, 1:company, 2:category, 3:title, 4:severity, 5:likelihood, 6:impact...
-    c.execute(f"SELECT id, company, category, title, severity, likelihood, impact, description, remediation, steps, evidence FROM findings WHERE {column} = ?", (value,))
+    # Explicitly including 'status' as the last column (index 11)
+    c.execute(f"""SELECT id, company, category, title, severity, likelihood, impact, 
+                  description, remediation, steps, evidence, status 
+                  FROM findings WHERE {column} = ?""", (value,))
     res = c.fetchall()
     conn.close()
     return res
@@ -295,20 +348,35 @@ class VectorVueShell(cmd.Cmd):
                 ("API3", "BOPLA (Property Level)", "Use Data Transfer Objects (DTOs) to prevent 'Mass Assignment' of fields."),
                 ("API4", "Unrestricted Consumption", "Set Rate Limits (TPS) and quotas for CPU/Memory/Payload size."),
                 ("API5", "Broken Function Level", "Enforce RBAC (Role-Based Access Control) on all admin endpoints."),
+                ("API6", "Unrestricted Business Logic", "Validate workflow sequences to prevent bypassing payment or approval steps."),
                 ("API7", "SSRF (API Specific)", "Block API access to internal metadata services (e.g., AWS IMDS)."),
-                ("API9", "Improper Inventory", "Maintain OpenAPI/Swagger docs; sunset 'Zombie' (old) API versions.")
+                ("API8", "Security Misconfiguration", "Disable unnecessary HTTP methods (PUT/PATCH/DELETE) and CORS wildcards."),
+                ("API9", "Improper Inventory", "Maintain OpenAPI/Swagger docs; sunset 'Zombie' (old) API versions."),
+                ("API10", "Unsafe Consumption", "Sanitize data from third-party APIs before processing; use strict schema validation.")
             ],
             "Mobile Security (OWASP Mobile)": [
                 ("M1", "Improper Credentials", "Use Android Keystore/iOS Keychain; never hardcode API keys."),
+                ("M2", "Inadequate Supply Chain", "Verify third-party SDKs; use Software Bill of Materials (SBOM) tracking."),
+                ("M3", "Insecure Authentication", "Implement MFA and biometric backing; avoid local-only auth bypasses."),
+                ("M4", "Insufficient Input Validation", "Sanitize data from IPC, URLs, and QR codes to prevent deep-link attacks."),
                 ("M5", "Insecure Communication", "Enforce TLS; implement Certificate Pinning to stop MitM attacks."),
+                ("M6", "Inadequate Privacy", "Limit PII collection; use 'Purpose Limitation' and data minimization."),
                 ("M7", "Binary Protection", "Use Obfuscation (DexGuard/ProGuard) and Anti-Tampering checks."),
-                ("M9", "Insecure Data Storage", "Encrypt local SQLite/Realm databases using SQLCipher.")
+                ("M8", "Security Misconfiguration", "Disable Debug mode; set 'allowBackup=false' in Android Manifest."),
+                ("M9", "Insecure Data Storage", "Encrypt local SQLite/Realm databases using SQLCipher."),
+                ("M10", "Insufficient Cryptography", "Use modern primitives (AES-GCM/Argon2); avoid hardcoded salts.")
             ],
             "AD & Infrastructure (Red Team)": [
-                ("AD", "Kerberoasting", "Use gMSAs or passwords with >25 characters for Service Accounts."),
-                ("Net", "LLMNR/NBNS", "Disable via GPO; enable SMB Signing to prevent relaying."),
-                ("Infra", "Unquoted Service Path", "Wrap service executables in quotes: 'C:\\Program Files\\App\\srv.exe'."),
-                ("Infra", "Cleartext in Shares", "Automate scanning of SYSVOL and File Shares for secrets.")
+                ("AD-01", "Kerberoasting", "Use gMSAs or passwords with >25 characters for Service Accounts."),
+                ("AD-02", "AS-REP Roasting", "Enable 'Do not require Kerberos preauthentication' only where necessary."),
+                ("AD-03", "BloodHound Path", "Audit High-Privileged groups (Domain Admins); reduce 'Nested' permissions."),
+                ("AD-04", "GPO Misconfiguration", "Restrict 'SeDebugPrivilege' and 'SeImpersonatePrivilege' to Admins."),
+                ("NET-01", "LLMNR/NBNS", "Disable via GPO; enable SMB Signing to prevent relaying."),
+                ("NET-02", "SNMP Public String", "Disable SNMP v1/v2c; use v3 with authPriv or restrict to allowlists."),
+                ("INF-01", "Unquoted Service Path", "Wrap service executables in quotes: 'C:\\Program Files\\App\\srv.exe'."),
+                ("INF-02", "Cleartext in Shares", "Automate scanning of SYSVOL and File Shares for secrets."),
+                ("INF-03", "Weak TLS/SSL", "Disable SSLv3, TLS 1.0/1.1; enforce TLS 1.2+ with Strong Ciphers."),
+                ("INF-04", "Default Credentials", "Enforce a 'Change Password on First Login' policy for all appliances.")
             ]
         }
         for section, rows in library_data.items():
@@ -325,6 +393,26 @@ class VectorVueShell(cmd.Cmd):
                 pdf.set_y(max(end_y_id, end_y_title, end_y_rem))
         pdf.output("04-Technical-Details/Golden_Remediation_Library.pdf")
         print("[+] Master Golden Remediation Library Generated.")
+
+    def do_library(self, arg):
+        """Displays the Golden Remediation Library: library <category>"""
+        c, y, g, r, b = "\033[36m", "\033[33m", "\033[32m", "\033[0m", "\033[1m"
+        
+        # If no category is specified, show all categories
+        target_cats = [arg] if arg in library_data else library_data.keys()
+
+        for cat in target_cats:
+            print(f"\n{b}{y}[ {cat.upper()} ]{r}")
+            print(f"{b}{'ID':<6} | {'VULNERABILITY':<30} | {'REMEDIATION'}{r}")
+            print("-" * 90)
+            
+            for code, title, rem in library_data[cat]:
+                # Truncate remediation for terminal view if it's too long
+                clean_rem = (rem[:50] + '..') if len(rem) > 50 else rem
+                print(f"{c}{code:<6}{r} | {title:<30} | {g}{clean_rem}{r}")
+            print("-" * 90)
+
+        print(f"\n{b}Tip:{r} Use 'library \"Web App (OWASP Top 10)\"' to filter for a specific set.")
 
     def do_report_technical(self, company):
         """Generates Technical Deep Dive (Folder 04)."""
@@ -387,29 +475,115 @@ class VectorVueShell(cmd.Cmd):
                         
         print(f"\n[***] ALL ASSETS DELIVERED FOR {company.upper()}")
 
+    def do_list(self, company):
+        """Displays a summary table of findings: list <company>"""
+        if not company:
+            print("Usage: list <company>"); return
+        
+        findings = query_findings('company', company)
+        if not findings:
+            print(f"[-] No findings found for {company}."); return
+
+        print(f"\n[ ENGAGEMENT DATA: {company.upper()} ]")
+        print(f"{'ID':<4} | {'SEV':<10} | {'VULNERABILITY TITLE':<40} | {'STATUS':<12}")
+        print("-" * 75)
+        
+        for f in findings:
+            f_id, _, _, title, sev, _, _, _, _, _, _, status = f
+            # Defaults to 'Open' if status is None
+            current_status = status if status else "Open"
+            print(f"{f_id:<4} | {sev:<10} | {title[:40]:<40} | {current_status:<12}")
+        print("-" * 75 + "\n")
+
+    def do_status(self, arg):
+        """Update finding status: status <id> <NewStatus>"""
+        try:
+            finding_id, new_status = arg.split(None, 1)
+            conn = sqlite3.connect('vectorvue.db')
+            c = conn.cursor()
+            c.execute("UPDATE findings SET status = ? WHERE id = ?", (new_status, finding_id))
+            conn.commit()
+            if c.rowcount > 0:
+                print(f"[+] Finding {finding_id} updated to: {new_status}")
+            else:
+                print(f"[-] Finding ID {finding_id} not found.")
+            conn.close()
+        except ValueError:
+            print("Usage: status <id> <NewStatus> (e.g., status 1 Fixed)")
+
+    def do_delete(self, arg):
+        """Permanent removal: delete <id>"""
+        if not arg:
+            print("Usage: delete <id>"); return
+        confirm = input(f"[*] Confim deletion of ID {arg}? (y/n): ")
+        if confirm.lower() == 'y':
+            conn = sqlite3.connect('vectorvue.db')
+            c = conn.cursor()
+            c.execute("DELETE FROM findings WHERE id = ?", (arg,))
+            conn.commit()
+            conn.close()
+            print(f"[!] Finding {arg} purged from database.")
+
+    def do_query(self, sql):
+        """Execute custom SQL queries: query SELECT * FROM findings WHERE severity='High'"""
+        if not sql:
+            print("Usage: query <SQL_STATEMENT>"); return
+        
+        try:
+            conn = sqlite3.connect('vectorvue.db')
+            c = conn.cursor()
+            c.execute(sql)
+            rows = c.fetchall()
+            
+            # Fetch column names for the header
+            colnames = [description[0] for description in c.description]
+            print(f"\n[ SQL RESULTS ]\n{' | '.join(colnames)}")
+            print("-" * (len(' | '.join(colnames)) + 5))
+            
+            for row in rows:
+                print(" | ".join(str(item) for item in row))
+            
+            conn.close()
+            print(f"\n[+] Total records returned: {len(rows)}")
+        except Exception as e:
+            print(f"[-] Database Error: {e}")
+
     def do_usage(self, arg):
-        """Displays perfectly aligned command interface."""
+        """Displays perfectly aligned command interface with Management features."""
         c, y, g, r, b = "\033[36m", "\033[33m", "\033[32m", "\033[0m", "\033[1m"
         print(f"\n{b}┌────────────────────────────────────────────────────────────┐")
-        print(f"│ {c}VECTORVUE COMMAND SPECIFICATION v1.3{r}{b}                             │")
+        print(f"│ {c}VECTORVUE COMMAND SPECIFICATION v1.4{r}{b}                             │")
         print(f"├────────────────────────────────────────────────────────────┤")
-        print(f"│ {y}SETUP & DATA ENTRY{r}{b}                                          │")
+        print(f"│ {y}SETUP & DATA ENTRY{r}{b}                                           │")
         print(f"│  {g}init{r}            - Prepare folders & repair database       │")
         print(f"│  {g}new{r}             - Interactive Finding Wizard             │")
         print(f"│  {g}seed{r}            - Populate DB with 10 Demo Findings      │")
         print(f"├────────────────────────────────────────────────────────────┤")
-        print(f"│ {y}REPORT GENERATION{r}{b}                                           │")
-        print(f"│  {g}report_roe{r}      - Legal & RoE Checklist (F01)             │")
-        print(f"│  {g}report_executive{r}- High-level Summary (F02)               │")
+        print(f"│ {y}MANAGEMENT & QUERY{r}{b}                                          │")
+        print(f"│  {g}list <target>{r}    - Table of Findings, IDs & Statuses      │")
+        print(f"│  {g}library{r}          - View Golden Remediation Library        │")
+        print(f"│  {g}status <id> <val>{r} - Update state (e.g. status 1 Fixed)      │")
+        print(f"│  {g}delete <id>{r}      - Permanent removal by Finding ID        │")
+        print(f"│  {g}query <sql>{r}      - Raw SQL search (e.g. SELECT *...)      │")
+        print(f"├────────────────────────────────────────────────────────────┤")
+        print(f"│ {y}REPORT GENERATION{r}{b}                                          │")
+        print(f"│  {g}report_roe{r}       - Legal & RoE Checklist (F01)             │")
+        print(f"│  {g}report_executive{r} - High-level Summary (F02)               │")
         print(f"│  {g}report_risk{r}      - Risk Methodology & Heatmap (F03)         │")
-        print(f"│  {g}report_library{r}   - Master Remediation Library (F04)       │")
-        print(f"│  {g}report_technical{r}- Technical Deep Dive (F04)               │")
+        print(f"│  {g}report_technical{r} - Technical Deep Dive (F04)               │")
         print(f"│  {g}report_full{r}      - One-click Suite Generation (F05)        │")
         print(f"├────────────────────────────────────────────────────────────┤")
-        print(f"│ {y}EXAMPLES{r}{b}                                                   │")
-        print(f"│  {g}seed{r}            - (Run this first to test the system)    │")
-        print(f"│  {g}report_full CorpX{r} - Generates all assets for CorpX         │")
-        print(f"└────────────────────────────────────────────────────────────┘{r}")
+        print(f"│ {y}FULL WORKFLOW EXAMPLE: TargetCorp{r}{b}                             │")
+        print(f"│  {g}init{r}                 -> Prepare environment for TargetCorp │")
+        print(f"│  {g}seed{r}                 -> Seed initial data for TargetCorp   │")
+        print(f"│  {g}list \"TargetCorp\"{r}     -> Identify IDs for the project       │")
+        print(f"│  {g}status 1 \"Fixed\"{r}     -> Mark TargetCorp ID 1 as Fixed      │")
+        print(f"│  {g}status 2 \"Accepted\"{r}  -> Mark TargetCorp ID 2 as Risk Acc.  │")
+        print(f"│  {g}delete 99{r}            -> Remove a test entry from DB        │")
+        print(f"│  {g}library \"API\"{r}        -> Lookup API remediations for report │")
+        print(f"│  {g}query SELECT * FROM findings WHERE company='TargetCorp'{r}   │")
+        print(f"│  {g}report_full \"TargetCorp\"{r} -> Final Delivery for client    │")
+        print(f"└──────────────────────────────────────────────────────────────┘{r}")
 
     def do_exit(self, arg):
         """Exits the shell."""
