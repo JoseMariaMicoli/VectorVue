@@ -1,0 +1,17 @@
+venv/
+*.db
+*.pdf
+.DS_Store
+# Database
+vectorvue.db
+
+# Generated Reports
+01-Pre-Engagement/
+02-Executive-Summary/
+03-Risk-Assessment/
+04-Technical-Details/
+05-Delivery/
+
+# Python Cache
+__pycache__/
+*.pyc
