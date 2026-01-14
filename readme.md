@@ -10,72 +10,95 @@ __      __         _              __   __
              >> ADVERSARY REPORTING FRAMEWORK <<
 
 ```
-# Red Team & Penetration Testing Reporting Framework
 
-A comprehensive, Markdown-first reporting framework for modern security consultants. This repository provides a structured workflow from pre-engagement to final delivery.
+**VectorVue is a high-fidelity reporting automation engine designed to transform technical vulnerabilities into professional, boardroom-ready intelligence.** It provides a centralized SQLite backend to manage findings across Web, API, Mobile, and Infrastructure assessments.
 
-## 📁 Repository Structure
+---
 
-```text
-.
-├── 01-Pre-Engagement/
-│   └── Rules_of_Engagement_CheckList.md          # Legal, RoE, and scope verification
-├── 02-Executive-Summary/
-│   └── Executive_Summary_Template.md             # High-level narrative for stakeholders
-├── 03-Risk-Assessment/
-│   └── Risk_Assessment_Matrix.md                 # Likelihood vs. Impact heatmap
-├── 04-Technical-Details/
-│   ├── Technical_Details_Template.md             # Detailed vulnerability write-up format
-│   └── Remediation-Library.md                    # OWASP Top 10 database (Web, API, Mobile, AD)
-├── 05-Delivery/
-│   └── Remediation_Tracker.md                    # Client-facing remediation tracking sheet
-└── examples/                                     # PROTOTYPES: Full dummy reports for reference
-    ├── example-exec-summary.md
-    ├── example-technical-detail.md
-    └── example-risk-matrix.md
+### ⚠️ DISCLAIMER
+
+**For Authorized Security Testing Purposes Only.**
+
+The use of this framework for reporting or documenting systems without prior mutual consent is illegal. The authors assume no liability for misuse, data loss, or legal consequences resulting from the use of this software. By using VectorVue, you agree to operate within the legal boundaries of your jurisdiction.
+
+---
+
+## 🚀 Project Status: Stable
+
+* [x] **SQLite Backend:** Centralized finding management and persistence.
+* [x] **Golden Remediation Library:** Pre-mapped OWASP & AD remediations.
+* [x] **Dynamic PDF Engine:** Automated "CLASSIFIED" watermarking and branding.
+* [x] **Executive Summary Module:** High-level stakeholder summaries.
+* [x] **Technical Detailer:** Deep-dive reproduction steps and evidence tracking.
+* [x] **Risk Heatmap:** Automated Likelihood vs. Impact matrix.
+* [x] **Engagement Wizard:** Interactive CLI for rapid finding entry.
+* [x] **Multi-Target Support:** Segmented reporting by Company/Target.
+
+---
+
+## 🛠 Project Structure
+
+### 🛰 The VectorVue Core (`vv.py`)
+
+The command-line interface and logic engine for all reporting operations.
+
+### 📊 The Data Layer (`vectorvue.db`)
+
+A structured SQLite database that serves as the single source of truth for all engagements.
+
+---
+
+## ⚙️ Setup & Execution
+
+### 1. Environment Setup
+
+Clone the repository and install the necessary dependencies via the requirements file.
+
+```bash
+# Install Dependencies
+pip install -r requirements.txt
+
+# Launch the Reporting Engine
+python3 vv.py
 
 ```
 
-## 🚀 Usage Procedure
+---
 
-### 1. Initialization
+## 🕹 Command Reference (CLI Usage)
 
-* **Clone & Clean:** Clone this repo for each new engagement.
-* **Checklist:** Start with `01-Pre-Engagement/checklist.md` to verify all legal and scope requirements are signed.
-
-### 2. Referencing Examples
-
-If you are unsure how to word a finding or how to structure the attack narrative, refer to the **`examples/`** folder. It contains fully populated dummy reports that demonstrate:
-
-* How to translate technical vulnerabilities into business risk.
-* The level of detail required for "Reproduction Steps."
-* How to properly annotate screenshots and link them in Markdown.
-
-### 3. Drafting the Report
-
-* **Technical First:** Document findings in `04-Technical-Details/` as they occur. Use the `remediation-library.md` to ensure your advice is industry-standard (OWASP/NIST).
-* **Risk Heatmap:** Use the `03-Risk-Assessment/matrix.md` to rank your findings.
-* **Executive Narrative:** Draft the final summary for management in `02-Executive-Summary/`.
-
-### 4. Final Delivery
-
-* **Conversion:** Convert your `.md` files to PDF using **Pandoc** or **Obsidian**.
-* **Handover:** Deliver the **Final PDF** and the **Remediation Tracker (xlsx)** to the client.
+| Command | Action | Usage Example |
+| --- | --- | --- |
+| **`init`** | Initializes the local database and creates the 5-stage folder structure. | `init` |
+| **`new`** | Launches the interactive wizard to manually add a new finding to the DB. | `new` |
+| **`seed`** | Injects 10 industry-standard findings (SQLi, BOLA, etc.) for testing. | `seed` |
+| **`report_executive`** | Generates a high-level PDF summary in Folder 02. | `report_executive "TargetCorp"` |
+| **`report_technical`** | Generates a technical deep-dive report in Folder 04. | `report_technical "TargetCorp"` |
+| **`report_full`** | Generates all report modules and aggregates them in Folder 05. | `report_full "TargetCorp"` |
+| **`usage`** | Displays the help menu with all available commands. | `usage` |
+| **`exit`** | Safely closes the database connection and exits the shell. | `exit` |
 
 ---
 
 ## 🛡️ Remediation Library Coverage
 
-This framework includes a "Golden Library" of remediations for:
+VectorVue includes a standardized "Golden Library" to ensure remediation advice is industry-standard:
 
-* **Web & API:** Full OWASP Top 10 (2021/2023).
-* **Mobile:** Full OWASP Mobile Top 10 (2024).
-* **Infrastructure:** Active Directory (Kerberoasting, BloodHound paths), Network, and Cloud.
+| Category | Coverage Areas |
+| --- | --- |
+| **Web & API** | OWASP Top 10 (BOLA, SQLi, Mass Assignment, IDOR) |
+| **Active Directory** | Kerberoasting, LLMNR/NBNS Poisoning, AS-REP Roasting |
+| **Infrastructure** | Unquoted Service Paths, SNMP Public Strings, Weak Protocols |
+| **Mobile** | PII in Logcat, Hardcoded API Keys, Insecure Data Storage |
+
+---
+
+## 🔒 Rules of Engagement & Safety
+
+1. **Isolation:** Keep the `vectorvue.db` localized to your encrypted assessment machine.
+2. **Cleanup:** Use the `exit` command to safely close database handles.
+3. **Data Integrity:** Do not manually edit the SQLite database unless using the `vv.py` interface to prevent index corruption.
 
 ---
 
-## ⚖️ Legal Disclaimer
-
-*This framework is for authorized security auditing purposes only. Unauthorized use of these templates for illegal activities is strictly prohibited. The authors are not responsible for any misuse or damage caused by the use of this material.*
-
----
+**Would you like me to generate the `requirements.txt` file content now so you can add it to your repo?**
