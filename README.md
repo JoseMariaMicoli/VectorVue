@@ -89,5 +89,3 @@ VectorVue includes a standardized "Golden Library" to ensure remediation advice 
 3. **Data Integrity:** Do not manually edit the SQLite database unless using the `vv.py` interface to prevent index corruption.
 
 ---
-
-**Would you like me to generate the `requirements.txt` file content now so you can add it to your repo?**
