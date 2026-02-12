@@ -78,10 +78,6 @@ VectorVue includes a standardized "Golden Library" to ensure remediation advice 
 
 ---
 
-**Would you like me to help you format the Git commit message to perfectly summarize these new features?**
-
----
-
 ## 🔒 Rules of Engagement & Safety
 
 1. **Isolation:** Keep the `vectorvue.db` localized to your encrypted assessment machine.
