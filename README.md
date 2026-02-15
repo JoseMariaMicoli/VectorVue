@@ -131,6 +131,4 @@ VectorVue includes a complete suite of professional documentation for architects
 
 **VectorVue v2.1** | *Precision Intelligence. Tactical Reporting.*
 
-```
-
 ---
