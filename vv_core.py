@@ -1,9 +1,94 @@
-# --- START OF FILE vv_core.py ---
-
 import sqlite3
+import math
+import os
+import sys
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Tuple
 from pathlib import Path
+
+# --- CRYPTOGRAPHY LAYER ---
+try:
+    from cryptography.fernet import Fernet
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+    print("WARNING: 'cryptography' module not found. DB encryption disabled (Plaintext mode).")
+    print("INSTALL: pip install cryptography")
+
+# --- NIST REPORTING TEMPLATE ---
+NIST_800_115_SKELETON = """# PENTEST REPORT: [TARGET_NAME]
+**Date:** [DATE]
+**Methodology:** NIST SP 800-115
+**Classification:** CONFIDENTIAL
+
+## 1. Executive Summary
+[High-level overview of risk for management. Do not include technical jargon here.]
+
+## 2. Assessment Methodology
+The assessment followed the NIST SP 800-115 standard:
+1. **Planning:** Rules of Engagement defined.
+2. **Discovery:** Asset identification and scanning.
+3. **Attack:** Exploit validation (evidence-based).
+4. **Reporting:** Analysis and remediation planning.
+
+## 3. Summary of Findings
+| ID | Severity | Title |
+|----|----------|-------|
+| 01 | CRITICAL | [Example Title] |
+
+## 4. Technical Findings & Evidence
+
+### 4.1 [Finding Title]
+**CVSS:** 9.8 (Critical) | **ID:** VUE-01
+**Description:**
+[Technical description]
+
+**Evidence:**
+```bash
+[Paste Evidence Here]
+```
+
+**Remediation:**
+[Specific technical fix]
+
+## 5. Appendices
+"""
+
+class CryptoManager:
+    """Handles Column-Level Encryption for the Database"""
+    KEY_FILE = "vector.key"
+
+    def __init__(self):
+        self.cipher = None
+        if CRYPTO_AVAILABLE:
+            self.load_or_generate_key()
+
+    def load_or_generate_key(self):
+        if os.path.exists(self.KEY_FILE):
+            with open(self.KEY_FILE, "rb") as f:
+                key = f.read()
+        else:
+            key = Fernet.generate_key()
+            with open(self.KEY_FILE, "wb") as f:
+                f.write(key)
+        self.cipher = Fernet(key)
+
+    def encrypt(self, text: str) -> str:
+        if not self.cipher or not text: return text
+        try:
+            return self.cipher.encrypt(text.encode()).decode()
+        except Exception:
+            return text  # Fallback if already corrupted/string issues
+
+    def decrypt(self, text: str) -> str:
+        if not self.cipher or not text: return text
+        try:
+            # Check if it looks like a Fernet token (basic check)
+            if text.startswith("gAAAA"):
+                return self.cipher.decrypt(text.encode()).decode()
+            return text
+        except Exception:
+            return text  # Return raw if decryption fails (legacy data)
 
 # --- BUILT-IN INTELLIGENCE (Golden Remediation Library) ---
 GOLDEN_LIBRARY = {
@@ -20,37 +105,74 @@ GOLDEN_LIBRARY = {
         ("A10", "SSRF", "Sanitize inputs for URLs; implement strict allowlists for outbound calls.")
     ],
     "API Security (OWASP API)": [
-        ("API1", "BOLA (Object Level)", "Validate that the logged-in user owns the resource requested in the URL."),
+        ("API1", "BOLA (Object Level)", "Validate that the logged-in user owns the resource requested."),
         ("API2", "Broken Authentication", "Use standard OAuth2/OpenID Connect; secure tokens with short TTLs."),
-        ("API3", "BOPLA (Property Level)", "Use Data Transfer Objects (DTOs) to prevent 'Mass Assignment' of fields."),
+        ("API3", "BOPLA (Property Level)", "Use Data Transfer Objects (DTOs) to prevent 'Mass Assignment'."),
         ("API4", "Unrestricted Consumption", "Set Rate Limits (TPS) and quotas for CPU/Memory/Payload size."),
-        ("API5", "Broken Function Level", "Enforce RBAC (Role-Based Access Control) on all admin endpoints."),
-        ("API6", "Unrestricted Business Logic", "Validate workflow sequences to prevent bypassing payment or approval steps."),
-        ("API7", "SSRF (API Specific)", "Block API access to internal metadata services (e.g., AWS IMDS)."),
-        ("API8", "Security Misconfiguration", "Disable unnecessary HTTP methods (PUT/PATCH/DELETE) and CORS wildcards."),
-        ("API9", "Improper Inventory", "Maintain OpenAPI/Swagger docs; sunset 'Zombie' (old) API versions."),
-        ("API10", "Unsafe Consumption", "Sanitize data from third-party APIs before processing; use strict schema validation.")
-    ],
-    "Mobile Security (OWASP Mobile)": [
-        ("M1", "Improper Credentials", "Use Android Keystore/iOS Keychain; never hardcode API keys."),
-        ("M2", "Inadequate Supply Chain", "Verify third-party SDKs; use Software Bill of Materials (SBOM) tracking."),
-        ("M3", "Insecure Authentication", "Implement MFA and biometric backing; avoid local-only auth bypasses."),
-        ("M4", "Insufficient Input Validation", "Sanitize data from IPC, URLs, and QR codes to prevent deep-link attacks."),
-        ("M5", "Insecure Communication", "Enforce TLS; implement Certificate Pinning to stop MitM attacks."),
-        ("M6", "Inadequate Privacy", "Limit PII collection; use 'Purpose Limitation' and data minimization."),
-        ("M7", "Binary Protection", "Use Obfuscation (DexGuard/ProGuard) and Anti-Tampering checks."),
-        ("M8", "Security Misconfiguration", "Disable Debug mode; set 'allowBackup=false' in Android Manifest."),
-        ("M9", "Insecure Data Storage", "Encrypt local SQLite/Realm databases using SQLCipher."),
-        ("M10", "Insufficient Cryptography", "Use modern primitives (AES-GCM/Argon2); avoid hardcoded salts.")
+        ("API5", "Broken Function Level", "Enforce RBAC (Role-Based Access Control) on all admin endpoints.")
     ],
     "AD & Infrastructure": [
         ("AD-01", "Kerberoasting", "Use gMSAs or passwords with >25 characters for Service Accounts."),
         ("AD-02", "AS-REP Roasting", "Enable 'Do not require Kerberos preauthentication' only where necessary."),
-        ("AD-03", "BloodHound Path", "Audit High-Privileged groups (Domain Admins); reduce 'Nested' permissions."),
-        ("NET-01", "LLMNR/NBNS", "Disable via GPO; enable SMB Signing to prevent relaying."),
-        ("INF-01", "Unquoted Service Path", "Wrap service executables in quotes: 'C:\\Program Files\\App\\srv.exe'.")
+        ("NET-01", "LLMNR/NBNS", "Disable via GPO; enable SMB Signing to prevent relaying.")
     ]
 }
+
+# --- CVSS CALCULATOR LOGIC ---
+class CVSSCalculator:
+    METRICS = {
+        "AV": {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.2},
+        "AC": {"L": 0.77, "H": 0.44},
+        "PR": {
+            "N": {"U": 0.85, "C": 0.85},
+            "L": {"U": 0.62, "C": 0.68},
+            "H": {"U": 0.27, "C": 0.50}
+        },
+        "UI": {"N": 0.85, "R": 0.62},
+        "S":  {"U": 6.42, "C": 7.52},
+        "C":  {"N": 0.0, "L": 0.22, "H": 0.56},
+        "I":  {"N": 0.0, "L": 0.22, "H": 0.56},
+        "A":  {"N": 0.0, "L": 0.22, "H": 0.56}
+    }
+
+    @staticmethod
+    def calculate(vector_str: str) -> float:
+        try:
+            parts = vector_str.upper().split('/')
+            d = {}
+            for p in parts:
+                if ':' in p:
+                    k, v = p.split(':')
+                    d[k] = v
+
+            scope = d.get("S", "U")
+            av = CVSSCalculator.METRICS["AV"][d.get("AV", "N")]
+            ac = CVSSCalculator.METRICS["AC"][d.get("AC", "L")]
+            ui = CVSSCalculator.METRICS["UI"][d.get("UI", "N")]
+            pr = CVSSCalculator.METRICS["PR"][d.get("PR", "N")][scope]
+            c = CVSSCalculator.METRICS["C"][d.get("C", "N")]
+            i = CVSSCalculator.METRICS["I"][d.get("I", "N")]
+            a = CVSSCalculator.METRICS["A"][d.get("A", "N")]
+
+            iss = 1 - ((1 - c) * (1 - i) * (1 - a))
+            
+            if scope == 'U':
+                impact = 6.42 * iss
+            else:
+                impact = 7.52 * (iss - 0.029) - 3.25 * math.pow(iss - 0.02, 15)
+
+            if impact <= 0: return 0.0
+
+            exploitability = 8.22 * av * ac * pr * ui
+            
+            if scope == 'U':
+                base_score = min((impact + exploitability), 10)
+            else:
+                base_score = min(1.08 * (impact + exploitability), 10)
+
+            return math.ceil(base_score * 10) / 10.0
+        except Exception:
+            return 0.0
 
 # --- DATA MODELS ---
 
@@ -66,6 +188,8 @@ class Finding:
     status: str = "Open"
     evidence: str = "" 
     remediation: str = ""
+    project_id: str = "DEFAULT"
+    cvss_vector: str = ""
 
 @dataclass
 class MitreTechnique:
@@ -86,6 +210,7 @@ class IntelligenceEngine:
 
     def __init__(self):
         self.mitre_cache: Dict[str, MitreTechnique] = {}
+        self.techniques_list: List[MitreTechnique] = [] 
         self._load_mitre_reference()
 
     def _load_mitre_reference(self):
@@ -105,14 +230,18 @@ class IntelligenceEngine:
                             
                             tech = MitreTechnique(tid, name, desc)
                             self.mitre_cache[tid.upper()] = tech
+                            self.techniques_list.append(tech)
         except Exception:
             pass
 
     def lookup_mitre(self, technique_id: str) -> Optional[MitreTechnique]:
         return self.mitre_cache.get(technique_id.upper())
 
+    def search_techniques(self, query: str) -> List[MitreTechnique]:
+        q = query.upper()
+        return [t for t in self.techniques_list if q in t.id.upper() or q in t.name.upper()]
+
     def get_remediation_suggestion(self, category: str) -> List[Tuple[str, str, str]]:
-        """Returns list of (ID, Title, Remediation) based on category fuzzy match."""
         results = []
         for key, items in GOLDEN_LIBRARY.items():
             if category.lower() in key.lower() or key.lower() in category.lower():
@@ -122,10 +251,11 @@ class IntelligenceEngine:
 # --- CORE DATABASE MANAGER ---
 
 class Database:
-    """Primary SQLite Database"""
+    """Primary SQLite Database with Encryption and Migration"""
     DB_NAME = "vectorvue.db"
 
     def __init__(self):
+        self.crypto = CryptoManager()
         self.conn = sqlite3.connect(self.DB_NAME, check_same_thread=False)
         self.check_schema()
 
@@ -140,21 +270,45 @@ class Database:
                       tactic_id TEXT DEFAULT '',
                       status TEXT DEFAULT 'Open',
                       evidence TEXT DEFAULT '',
-                      remediation TEXT DEFAULT '')''')
+                      remediation TEXT DEFAULT '',
+                      project_id TEXT DEFAULT 'DEFAULT',
+                      cvss_vector TEXT DEFAULT '')''')
+        
+        # Migrations for existing DBs
+        try:
+            c.execute("ALTER TABLE findings ADD COLUMN project_id TEXT DEFAULT 'DEFAULT'")
+        except sqlite3.OperationalError:
+            pass 
+        
+        try:
+            c.execute("ALTER TABLE findings ADD COLUMN cvss_vector TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass 
+
         self.conn.commit()
 
-    def get_findings(self) -> List[Finding]:
+    def get_findings(self, project_id: str = "DEFAULT") -> List[Finding]:
+        """Returns findings for project, decrypts sensitive fields"""
+        # Safety check for None
+        if project_id is None: project_id = "DEFAULT"
+        
         c = self.conn.cursor()
-        c.execute("SELECT * FROM findings ORDER BY cvss_score DESC")
+        c.execute("SELECT * FROM findings WHERE project_id=? ORDER BY cvss_score DESC", (project_id,))
         rows = c.fetchall()
-        # Mapping row to object assuming consistent schema order
+        
         results = []
         for r in rows:
             try:
+                # Decrypt sensitive text fields
+                desc = self.crypto.decrypt(r[2])
+                evidence = self.crypto.decrypt(r[7])
+                remediation = self.crypto.decrypt(r[8])
+
                 results.append(Finding(
-                    id=r[0], title=r[1], description=r[2], 
+                    id=r[0], title=r[1], description=desc, 
                     cvss_score=r[3], mitre_id=r[4], tactic_id=r[5], 
-                    status=r[6], evidence=r[7], remediation=r[8]
+                    status=r[6], evidence=evidence, remediation=remediation,
+                    project_id=r[9], cvss_vector=r[10]
                 ))
             except IndexError:
                 continue 
@@ -162,20 +316,36 @@ class Database:
 
     def add_finding(self, f: Finding) -> int:
         c = self.conn.cursor()
+        
+        # Encrypt sensitive fields before storage
+        enc_desc = self.crypto.encrypt(f.description)
+        enc_evid = self.crypto.encrypt(f.evidence)
+        enc_rem = self.crypto.encrypt(f.remediation)
+
         c.execute("""INSERT INTO findings 
-                     (title, description, cvss_score, mitre_id, tactic_id, status, evidence, remediation) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                  (f.title, f.description, f.cvss_score, f.mitre_id, f.tactic_id, f.status, f.evidence, f.remediation))
+                     (title, description, cvss_score, mitre_id, tactic_id, status, 
+                      evidence, remediation, project_id, cvss_vector) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (f.title, enc_desc, f.cvss_score, f.mitre_id, f.tactic_id, f.status, 
+                   enc_evid, enc_rem, f.project_id, f.cvss_vector))
         self.conn.commit()
         return c.lastrowid
 
     def update_finding(self, f: Finding):
         if not f.id: return
         c = self.conn.cursor()
+        
+        # Encrypt sensitive fields
+        enc_desc = self.crypto.encrypt(f.description)
+        enc_evid = self.crypto.encrypt(f.evidence)
+        enc_rem = self.crypto.encrypt(f.remediation)
+
         c.execute("""UPDATE findings SET 
-                     title=?, description=?, cvss_score=?, mitre_id=?, status=?, evidence=?, remediation=?
+                     title=?, description=?, cvss_score=?, mitre_id=?, status=?, 
+                     evidence=?, remediation=?, project_id=?, cvss_vector=?
                      WHERE id=?""",
-                  (f.title, f.description, f.cvss_score, f.mitre_id, f.status, f.evidence, f.remediation, f.id))
+                  (f.title, enc_desc, f.cvss_score, f.mitre_id, f.status, 
+                   enc_evid, enc_rem, f.project_id, f.cvss_vector, f.id))
         self.conn.commit()
 
     def delete_finding(self, fid: int):

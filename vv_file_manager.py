@@ -1,5 +1,3 @@
-# --- START OF FILE vv_file_manager.py ---
-
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +13,7 @@ from vv_fs import FileSystemService
 from vv_theme import CYBER_CSS
 
 class VimDirectoryTree(DirectoryTree):
+    """Custom Directory Tree with Vim Bindings"""
     BINDINGS = [
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
@@ -87,6 +86,7 @@ class FileManagerView(Container):
     ]
 
     class FileSelected(Message):
+        """Message sent when a file is selected for opening"""
         def __init__(self, path: Path):
             self.path = path
             super().__init__()
@@ -141,6 +141,7 @@ class FileManagerView(Container):
 
     @on(DirectoryTree.FileSelected)
     def on_file_selected(self, event):
+        # Propagate the event to the Main App
         self.post_message(self.FileSelected(event.path))
 
     @work(exclusive=True, thread=True)

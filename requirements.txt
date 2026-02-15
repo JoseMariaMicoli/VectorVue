@@ -1,7 +1,9 @@
 aiosqlite==0.22.1
 certifi==2026.1.4
+cffi==2.0.0
 charset-normalizer==3.4.4
 colorama==0.4.6
+cryptography==46.0.5
 cvss==3.1
 defusedxml==0.7.1
 fonttools==4.61.1
@@ -15,6 +17,7 @@ mdurl==0.1.2
 pathlib==1.0.1
 pillow==12.1.0
 platformdirs==4.5.1
+pycparser==3.0
 Pygments==2.19.2
 requests==2.32.5
 rich==14.3.2

@@ -1,8 +1,5 @@
-# --- START OF FILE vv.py ---
-
 import os
 import sys
-import time
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -13,15 +10,15 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import (
     ListView, ListItem, Label, Input, 
-    TextArea, Button, Static, ContentSwitcher, LoadingIndicator
+    TextArea, Button, Static, ContentSwitcher, DataTable
 )
 from textual.binding import Binding
-from textual.screen import Screen
+from textual.screen import Screen, ModalScreen
 from textual.reactive import reactive
 
 # Custom Modules
 try:
-    from vv_core import Database, Finding, IntelligenceEngine
+    from vv_core import Database, Finding, IntelligenceEngine, CVSSCalculator, NIST_800_115_SKELETON
     from vv_fs import FileSystemService
     from vv_file_manager import FileManagerView
     from vv_theme import CYBER_CSS, CyberColors
@@ -29,43 +26,99 @@ except ImportError as e:
     print(f"CRITICAL: Dependency missing. {e}")
     sys.exit(1)
 
-# --- CUSTOM WIDGETS ---
+# --- CUSTOM SCREENS ---
 
-class HeaderHUD(Static):
-    """Top Banner with Tool Info and Active File"""
-    current_file = reactive("NO FILE ACTIVE")
+class MitreLookupScreen(ModalScreen):
+    """Overlay to search and select MITRE techniques"""
+    CSS = """
+    MitreLookupScreen {
+        align: center middle;
+        background: rgba(0,0,0,0.8);
+    }
+    #mitre-container {
+        width: 80%;
+        height: 80%;
+        background: #111;
+        border: heavy #00FFFF;
+        padding: 1;
+    }
+    #mitre-search { margin-bottom: 1; }
+    DataTable { height: 1fr; border: solid #444; }
+    """
 
     def compose(self) -> ComposeResult:
-        yield Label("VECTORVUE v2.1 [TACTICAL]", classes="hud-title")
-        yield Label(f"// BUFFER: {self.current_file}", classes="hud-file")
+        with Container(id="mitre-container"):
+            yield Label("[bold cyan]MITRE ATT&CK KNOWLEDGE BASE[/]")
+            yield Input(placeholder="Search ID or Name...", id="mitre-search")
+            yield DataTable(id="mitre-table", cursor_type="row")
+            yield Button("CLOSE", id="btn-close-mitre", variant="error")
+
+    def on_mount(self):
+        dt = self.query_one(DataTable)
+        dt.add_columns("ID", "Technique Name", "Description (Truncated)")
+        self.refresh_table("")
+        self.query_one("#mitre-search").focus()
+
+    @on(Input.Changed, "#mitre-search")
+    def on_search(self, event):
+        self.refresh_table(event.value)
+
+    def refresh_table(self, query):
+        dt = self.query_one(DataTable)
+        dt.clear()
+        results = self.app.intel.search_techniques(query)
+        for t in results:
+            desc_short = t.description[:60] + "..." if len(t.description) > 60 else t.description
+            dt.add_row(t.id, t.name, desc_short, key=t.id)
+
+    @on(DataTable.RowSelected)
+    def on_row_selected(self, event):
+        row_key = event.row_key.value
+        technique = self.app.intel.lookup_mitre(row_key)
+        if technique:
+            # Pass back to main app
+            self.app.query_one("#inp-mitre").value = technique.id
+            self.app.query_one("#inp-title").value = technique.name
+            self.app.update_status(f"IMPORTED: {technique.id}", CyberColors.ELECTRIC_CYAN)
+        self.dismiss()
+
+    @on(Button.Pressed, "#btn-close-mitre")
+    def close_screen(self):
+        self.dismiss()
+
+class HeaderHUD(Static):
+    """Top Banner with Project & File Info"""
+    current_file = reactive("NO FILE ACTIVE")
+    
+    def compose(self) -> ComposeResult:
+        with Horizontal():
+            yield Label("VECTORVUE v2.4 [TACTICAL]", classes="hud-title")
+            # Project Input in Header
+            yield Label(" PROJECT:", classes="hud-label-sm")
+            yield Input(value="DEFAULT", id="hud-project-input", classes="hud-input")
+            yield Label(f"// BUFFER: {self.current_file}", id="hud-file-lbl", classes="hud-file")
 
     def watch_current_file(self, val):
         if self.is_mounted:
             try:
-                self.query_one(".hud-file", Label).update(f"// BUFFER: {val}")
+                self.query_one("#hud-file-lbl").update(f"// BUFFER: {val}")
             except Exception:
                 pass
 
 class ShutdownScreen(Screen):
-    """Cinematic Exit Screen - FIXED"""
+    """Cinematic Exit Screen"""
     def compose(self) -> ComposeResult:
         with Container(id="shutdown-container"):
-            # FIX: Use Rich Markup [bold white] instead of style argument
             yield Label("[bold white]INITIATING SHUTDOWN SEQUENCE[/]", classes="shutdown-header")
             
             with Horizontal(classes="shutdown-row"):
-                yield Label("CLOSING DATABASE CONNECTION...", classes="shutdown-label")
+                yield Label("ENCRYPTING & CLOSING DATABASE...", classes="shutdown-label")
                 yield Label("...", id="st-db", classes="shutdown-status status-pending")
-            
-            with Horizontal(classes="shutdown-row"):
-                yield Label("PURGING TEMPORARY BUFFERS...", classes="shutdown-label")
-                yield Label("...", id="st-tmp", classes="shutdown-status status-pending")
             
             with Horizontal(classes="shutdown-row"):
                 yield Label("SECURING FILESYSTEM...", classes="shutdown-label")
                 yield Label("...", id="st-fs", classes="shutdown-status status-pending")
             
-            # FIX: Use Rich Markup [bold red] instead of style argument
             yield Label("[bold red]SYSTEM HALTED[/]", id="final-msg")
 
     def on_mount(self):
@@ -74,24 +127,13 @@ class ShutdownScreen(Screen):
 
     @work
     async def run_shutdown_sequence(self):
-        # Cinematic delay logic
         await asyncio.sleep(0.5)
         if self.app.db: self.app.db.close()
-        self.query_one("#st-db").update("[OK]")
-        self.query_one("#st-db").remove_class("status-pending")
-        self.query_one("#st-db").add_class("status-done")
-
-        await asyncio.sleep(0.4)
-        FileSystemService.cleanup_temp_files()
-        self.query_one("#st-tmp").update("[OK]")
-        self.query_one("#st-tmp").remove_class("status-pending")
-        self.query_one("#st-tmp").add_class("status-done")
-
-        await asyncio.sleep(0.4)
-        self.query_one("#st-fs").update("[SECURE]")
-        self.query_one("#st-fs").remove_class("status-pending")
-        self.query_one("#st-fs").add_class("status-done")
-
+        self.query_one("#st-db").update("[LOCKED]").add_class("status-done")
+        
+        await asyncio.sleep(0.5)
+        self.query_one("#st-fs").update("[SECURE]").add_class("status-done")
+        
         await asyncio.sleep(0.5)
         self.query_one("#final-msg").visible = True
         await asyncio.sleep(0.8)
@@ -103,7 +145,6 @@ class FindingItem(ListItem):
         self.finding = finding
 
     def compose(self) -> ComposeResult:
-        # FIX: Explicitly convert score to float to handle string inputs safely
         try:
             score = float(self.finding.cvss_score)
         except (ValueError, TypeError):
@@ -112,7 +153,6 @@ class FindingItem(ListItem):
         score_fmt = f"{score:.1f}"
         icon = "⚡" if score >= 9.0 else "●"
         
-        # Color coding for list items using Rich markup
         color = "white"
         if score >= 9.0: color = CyberColors.RED_ALERT
         elif score >= 7.0: color = CyberColors.AMBER_WARNING
@@ -123,7 +163,11 @@ class FindingItem(ListItem):
 # --- MAIN APPLICATION ---
 
 class CyberTUI(App):
-    CSS = CYBER_CSS 
+    CSS = CYBER_CSS + """
+    .hud-label-sm { color: #666; content-align: center middle; width: 10; padding-top: 1;}
+    .hud-input { width: 20; height: 1; border: none; background: #111; color: #00FFFF; }
+    .hud-input:focus { border: none; }
+    """
     
     BINDINGS = [
         Binding("q", "quit_app", "Quit"),
@@ -131,30 +175,22 @@ class CyberTUI(App):
         Binding("ctrl+s", "save_db", "Save"),
     ]
     
+    current_project_id = reactive("DEFAULT")
+
     def compose(self) -> ComposeResult:
-        # 1. Header HUD
         yield HeaderHUD(id="hud-header")
         
-        # 2. Main Content Area (Left)
         with ContentSwitcher(initial="editor-view", id="view-switcher"):
-            # Editor
             with Container(id="editor-view"):
-                yield TextArea(
-                    language="markdown", 
-                    theme="dracula", 
-                    id="editor-main",
-                    show_line_numbers=True
-                )
-            # File Manager
+                yield TextArea(language="markdown", theme="dracula", id="editor-main")
             yield FileManagerView(id="fm-view")
 
-        # 3. Lateral Tools (Right)
         with Container(id="lateral-tools"):
-            # Info Panels
+            # Risk Info
             yield Label("RISK ASSESSMENT:", classes="cyber-label")
             yield Static("NO SIGNAL", id="info-severity", classes="info-box")
             
-            yield Label("CVSS 4.0 SCORE:", classes="cyber-label")
+            yield Label("CVSS 3.1 SCORE:", classes="cyber-label")
             yield Static("0.0", id="info-score", classes="info-box")
             
             yield Label("MITRE MAPPING:", classes="cyber-label")
@@ -164,21 +200,23 @@ class CyberTUI(App):
             yield Label("VECTOR TITLE:", classes="cyber-label")
             yield Input(id="inp-title", placeholder="Vulnerability Title...")
             
-            yield Label("SCORE / MITRE ID:", classes="cyber-label")
+            yield Label("CVSS VECTOR:", classes="cyber-label")
+            yield Input(id="inp-vector", placeholder="CVSS:3.1/AV:N/AC:L...")
             
-            # --- INPUT ROW LAYOUT ---
+            yield Label("SCORE / MITRE ID:", classes="cyber-label")
             with Horizontal(classes="input-row"):
                 yield Input(id="inp-score", type="number", placeholder="9.8", classes="half-input")
                 yield Input(id="inp-mitre", placeholder="T1548", classes="half-input")
             
-            # Queue
+            yield Button("MITRE INTEL", id="btn-mitre-menu")
+
             yield Label("FINDINGS QUEUE:", classes="cyber-label")
             yield ListView(id="findings-list")
             
-            # Actions
             yield Label("OPERATIONS:", classes="cyber-label")
             yield Button("COMMIT DB", id="btn-save", classes="btn-save")
             yield Button("NEW ENTRY", id="btn-new")
+            yield Button("NIST TEMPLATE", id="btn-nist")
             yield Button("DELETE", id="btn-del", classes="btn-delete")
             
             yield Label("SYSTEM:", classes="cyber-label")
@@ -186,7 +224,6 @@ class CyberTUI(App):
             yield Button("EXPORT .MD", id="btn-save-md")
             yield Button("SHUTDOWN", id="btn-exit")
         
-        # 4. Status Bar
         yield Label("SYSTEM READY", id="status-bar")
 
     def on_mount(self):
@@ -206,123 +243,24 @@ class CyberTUI(App):
         bar.update(f"[{ts}] {msg}")
         bar.styles.color = color
 
-    # --- MITRE LOOKUP ---
-    @on(Input.Changed, "#inp-mitre")
-    def on_mitre_input(self, event):
-        val = event.value.strip().upper()
-        mitre_box = self.query_one("#info-mitre")
-        
-        # Intelligence Engine Lookup
-        if len(val) >= 4:
-            info = self.intel.lookup_mitre(val)
-            if info:
-                # Found match in IntelligenceEngine
-                mitre_box.update(f"{info.id}\n{info.name[:20]}")
-                mitre_box.styles.color = CyberColors.ELECTRIC_CYAN
-                mitre_box.styles.border = "heavy", CyberColors.ELECTRIC_CYAN
-                self.update_status(f"INTEL MATCH: {info.name}", CyberColors.ELECTRIC_CYAN)
-            else:
-                mitre_box.update("UNKNOWN ID")
-                mitre_box.styles.color = CyberColors.AMBER_WARNING
-                mitre_box.styles.border = "solid", CyberColors.AMBER_WARNING
-        else:
-            mitre_box.update("WAITING...")
-            mitre_box.styles.border = "solid", CyberColors.STEEL_BORDER
+    # --- PROJECT LOGIC ---
+    @on(Input.Changed, "#hud-project-input")
+    def on_project_changed(self, event):
+        val = event.value.strip()
+        if not val: val = "DEFAULT"
+        self.current_project_id = val
+        self.new_entry() # Clear editor to prevent cross-contamination
+        self.refresh_list()
+        self.update_status(f"PROJECT ACTIVE: {self.current_project_id}", CyberColors.ELECTRIC_CYAN)
 
-    # --- SCORE & SEVERITY ---
-    @on(Input.Changed, "#inp-score")
-    def on_score_input(self, event):
-        try:
-            score = float(event.value)
-        except ValueError:
-            score = 0.0
-        
-        self.update_risk_panels(score)
-
-    def update_risk_panels(self, score):
-        sev_box = self.query_one("#info-severity")
-        score_box = self.query_one("#info-score")
-        
-        score_box.update(str(score))
-        
-        # Reset classes
-        for cls in ["risk-crit", "risk-high", "risk-med", "risk-low"]:
-            sev_box.remove_class(cls)
-            score_box.remove_class(cls)
-
-        if score >= 9.0:
-            sev_box.update("CRITICAL")
-            sev_box.add_class("risk-crit")
-            score_box.add_class("risk-crit")
-        elif score >= 7.0:
-            sev_box.update("HIGH")
-            sev_box.add_class("risk-high")
-            score_box.add_class("risk-high")
-        elif score >= 4.0:
-            sev_box.update("MEDIUM")
-            sev_box.add_class("risk-med")
-            score_box.add_class("risk-med")
-        else:
-            sev_box.update("LOW")
-            sev_box.add_class("risk-low")
-            score_box.add_class("risk-low")
-
-    # --- VIEWPORT LOGIC ---
-    def action_toggle_file_manager(self):
-        switcher = self.query_one("#view-switcher", ContentSwitcher)
-        if switcher.current == "editor-view":
-            switcher.current = "fm-view"
-            self.query_one("FileManagerView").action_refresh()
-            self.query_one("FileManagerView")._focus_tree()
-        else:
-            switcher.current = "editor-view"
-            self.query_one("#editor-main").focus()
-
-    @on(FileManagerView.FileSelected)
-    def on_file_selected(self, event):
-        path = event.path
-        self.read_file_worker(path)
-        self.query_one("#view-switcher").current = "editor-view"
-        self.query_one("#editor-main").focus()
-
-    @work(exclusive=True, thread=True)
-    def read_file_worker(self, path: Path):
-        success, content, _ = FileSystemService.read_file(path)
-        if success:
-            self.app.call_from_thread(self._load_editor, content, path.name)
-        else:
-            self.app.call_from_thread(self.update_status, "READ ERROR", CyberColors.RED_ALERT)
-
-    def _load_editor(self, content, title):
-        self.current_id = None
-        self.query_one("#inp-title").value = title
-        self.query_one("#editor-main").load_text(content)
-        self.query_one("#hud-header").current_file = title
-        self.update_status("FILE LOADED", CyberColors.PHOSPHOR_GREEN)
-
-    # --- DB OPS ---
     def refresh_list(self):
         lv = self.query_one("#findings-list", ListView)
-        lv.clear()
-        for f in self.db.get_findings():
+        lv.clear() # CRITICAL: Explicitly clear before reloading
+        findings = self.db.get_findings(project_id=self.current_project_id)
+        for f in findings:
             lv.append(FindingItem(f))
 
-    def on_list_view_selected(self, event):
-        f = event.item.finding
-        self.current_id = f.id
-        self.query_one("#inp-title").value = f.title
-        self.query_one("#inp-score").value = str(f.cvss_score)
-        self.query_one("#inp-mitre").value = f.mitre_id
-        
-        full_text = f.description
-        if f.evidence: full_text = f"## EVIDENCE\n{f.evidence}\n\n" + full_text
-        if f.remediation: full_text += f"\n\n## REMEDIATION\n{f.remediation}"
-            
-        self.query_one("#editor-main").load_text(full_text)
-        self.query_one("#hud-header").current_file = f"DB:{f.id}"
-        self.update_risk_panels(f.cvss_score)
-        self.update_status(f"RECORD {f.id} LOADED", CyberColors.PHOSPHOR_GREEN)
-
+    # --- BUTTON HANDLERS ---
     @on(Button.Pressed)
     def on_buttons(self, event):
         bid = event.button.id
@@ -332,6 +270,55 @@ class CyberTUI(App):
         elif bid == "btn-del": self.delete_entry()
         elif bid == "btn-save-md": self.export_md()
         elif bid == "btn-file-mgr": self.action_toggle_file_manager()
+        elif bid == "btn-mitre-menu": self.app.push_screen(MitreLookupScreen())
+        elif bid == "btn-nist": self.load_nist_template()
+
+    def load_nist_template(self):
+        # Loads the NIST 800-115 Skeleton into the editor
+        self.new_entry()
+        template = NIST_800_115_SKELETON.replace("[DATE]", datetime.now().strftime("%Y-%m-%d"))
+        self.query_one("#editor-main").load_text(template)
+        self.query_one("#inp-title").value = f"NIST_Report_{self.current_project_id}"
+        self.update_status("NIST TEMPLATE LOADED", CyberColors.PHOSPHOR_GREEN)
+
+    # --- CORE LOGIC (CVSS, MITRE, FILES) ---
+    @on(Input.Changed, "#inp-vector")
+    def on_vector(self, event):
+        score = CVSSCalculator.calculate(event.value)
+        self.query_one("#inp-score").value = str(score)
+        self.update_risk(score)
+
+    @on(Input.Changed, "#inp-score")
+    def on_score(self, event):
+        try: self.update_risk(float(event.value))
+        except: pass
+
+    def update_risk(self, score):
+        sev = self.query_one("#info-severity")
+        sc = self.query_one("#info-score")
+        sc.update(str(score))
+        for c in ["risk-crit","risk-high","risk-med","risk-low"]:
+            sev.remove_class(c); sc.remove_class(c)
+        
+        if score >= 9.0: cls="risk-crit"; txt="CRITICAL"
+        elif score >= 7.0: cls="risk-high"; txt="HIGH"
+        elif score >= 4.0: cls="risk-med"; txt="MEDIUM"
+        else: cls="risk-low"; txt="LOW"
+        
+        sev.update(txt); sev.add_class(cls); sc.add_class(cls)
+
+    # MITRE Input Handler (Direct typing)
+    @on(Input.Changed, "#inp-mitre")
+    def on_mitre_text(self, event):
+        val = event.value.strip().upper()
+        mbox = self.query_one("#info-mitre")
+        if len(val) >= 4:
+            info = self.intel.lookup_mitre(val)
+            if info:
+                mbox.update(f"{info.id}\n{info.name[:15]}")
+                mbox.styles.border = "heavy", CyberColors.ELECTRIC_CYAN
+            else:
+                mbox.update("UNKNOWN"); mbox.styles.border = "solid", CyberColors.AMBER_WARNING
 
     def save_db(self):
         try: score = float(self.query_one("#inp-score").value)
@@ -343,7 +330,9 @@ class CyberTUI(App):
             description=self.query_one("#editor-main").text,
             cvss_score=score,
             mitre_id=self.query_one("#inp-mitre").value,
-            tactic_id="", status="Open"
+            tactic_id="", status="Open",
+            project_id=self.current_project_id, # STRICT PROJECT ID SAVE
+            cvss_vector=self.query_one("#inp-vector").value
         )
         
         if self.current_id: self.db.update_finding(f)
@@ -357,23 +346,41 @@ class CyberTUI(App):
         self.query_one("#inp-title").value = ""
         self.query_one("#inp-score").value = "0.0"
         self.query_one("#inp-mitre").value = ""
+        self.query_one("#inp-vector").value = ""
         self.query_one("#editor-main").load_text("")
         self.query_one("#hud-header").current_file = "NEW BUFFER"
-        self.query_one("#inp-title").focus()
+        self.update_risk(0.0)
 
     def delete_entry(self):
         if self.current_id:
             self.db.delete_finding(self.current_id)
             self.new_entry()
             self.refresh_list()
-            self.update_status("RECORD DELETED", CyberColors.RED_ALERT)
+
+    def action_toggle_file_manager(self):
+        sw = self.query_one("#view-switcher")
+        if sw.current == "editor-view":
+            sw.current = "fm-view"
+            self.query_one("FileManagerView")._focus_tree()
+        else:
+            sw.current = "editor-view"
+            self.query_one("#editor-main").focus()
+
+    @on(FileManagerView.FileSelected)
+    def on_file(self, event):
+        success, content, _ = FileSystemService.read_file(event.path)
+        if success:
+            self.new_entry() # Prepare UI
+            self.query_one("#editor-main").load_text(content)
+            self.query_one("#inp-title").value = event.path.name
+            self.query_one("#view-switcher").current = "editor-view"
 
     def export_md(self):
-        title = self.query_one("#inp-title").value.replace(" ", "_") or "Untitled"
+        title = self.query_one("#inp-title").value.replace(" ","_") or "Untitled"
         if not title.endswith(".md"): title += ".md"
         path = Path("05-Delivery") / title
-        success, msg = FileSystemService.atomic_write(path, self.query_one("#editor-main").text)
-        self.update_status(msg.upper(), CyberColors.PHOSPHOR_GREEN if success else CyberColors.RED_ALERT)
+        FileSystemService.atomic_write(path, self.query_one("#editor-main").text)
+        self.update_status(f"EXPORTED: {title}", CyberColors.PHOSPHOR_GREEN)
 
 if __name__ == '__main__':
     if sys.platform == "win32": os.system("cls")

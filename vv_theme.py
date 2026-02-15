@@ -1,7 +1,7 @@
 # --- START OF FILE vv_theme.py ---
 
 """
-VectorVue v2.1 - Phosphor Cyberpunk Design System
+VectorVue v2.3 - Phosphor Cyberpunk Design System
 Centralized Theme & Layout Configuration
 """
 
@@ -222,4 +222,6 @@ ShutdownScreen {{
 
 .status-pending {{ color: $steel; }}
 .status-done {{ color: $p-green; }}
+
+
 """

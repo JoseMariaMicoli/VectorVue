@@ -8,7 +8,7 @@ from typing import Tuple, Union
 
 class FileSystemService:
     """
-    VectorVue v2.1: Critical I/O Abstraction Layer.
+    VectorVue v2.3: Critical I/O Abstraction Layer.
     """
 
     @staticmethod
