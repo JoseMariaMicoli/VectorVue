@@ -29,6 +29,49 @@ except ImportError as e:
     sys.exit(1)
 
 # =============================================================================
+# PHASE 2: RUNTIME EXECUTOR (Background Task Management)
+# =============================================================================
+
+class RuntimeExecutor:
+    """Background task executor for Phase 2 runtime features."""
+    
+    def __init__(self, db):
+        self.db = db
+        self.running = False
+        self.task_interval = 30  # Check every 30 seconds
+    
+    async def run_maintenance_loop(self):
+        """Run background maintenance tasks periodically."""
+        self.running = True
+        while self.running:
+            try:
+                # Execute scheduled tasks
+                pending = self.db.get_pending_scheduled_tasks(limit=5)
+                for task in pending:
+                    self.db.execute_scheduled_task(task["id"])
+                
+                # Deliver pending webhooks
+                webhooks = self.db.get_pending_webhooks(limit=5)
+                for webhook in webhooks:
+                    self.db.deliver_webhook(webhook["id"], "automated_delivery", {"timestamp": datetime.utcnow().isoformat()})
+                
+                # Enforce session timeouts (120 min inactivity)
+                expired_count = self.db.enforce_session_timeouts(inactivity_minutes=120)
+                
+                # Execute retention policies
+                retention_results = self.db.execute_retention_policies()
+                
+                # Sleep before next cycle
+                await asyncio.sleep(self.task_interval)
+            except Exception as e:
+                # Silently continue on errors (don't crash the TUI)
+                await asyncio.sleep(self.task_interval)
+    
+    def stop(self):
+        """Stop the executor gracefully."""
+        self.running = False
+
+# =============================================================================
 # WIDGETS
 # =============================================================================
 
@@ -983,6 +1026,7 @@ class CyberTUI(App):
         self.db          = Database(self.crypto)
         self.intel       = None
         self.current_id  = None
+        self.runtime_executor = RuntimeExecutor(self.db)
 
         sw = self.query_one("#view-switcher")
         if not self.db.has_users():
@@ -1024,6 +1068,14 @@ class CyberTUI(App):
         if camps:
             self.current_campaign_id = camps[0].id
             self.query_one("#lbl-active-camp").update(camps[0].name)
+        
+        # Start Phase 2 runtime executor (background task scheduler)
+        self.runtime_maintenance_task()
+
+    @work(exclusive=True)
+    async def runtime_maintenance_task(self):
+        """Background task executor - runs Phase 2 features continuously."""
+        await self.runtime_executor.run_maintenance_loop()
 
     def unlock_ui(self):
         user = self.db.current_user
@@ -1034,6 +1086,7 @@ class CyberTUI(App):
             self.query_one("#btn-del").disabled = True
 
     def action_logout(self):
+        self.runtime_executor.stop()
         self.db.logout()
         self.current_id = None
         self.intel = None
@@ -1049,6 +1102,7 @@ class CyberTUI(App):
     # -------------------------------------------------------------------------
 
     def action_quit_app(self):
+        self.runtime_executor.stop()
         self.query_one("#view-switcher").current = "shutdown-view"
         self.update_status("WARNING: TERMINATION REQUESTED", CyberColors.RED_ALERT)
 
