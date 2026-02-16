@@ -10,7 +10,7 @@ import secrets
 import csv
 import io
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Any
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -25,35 +25,27 @@ except ImportError:
     print("CRITICAL: 'cryptography' module not found. Run: pip install cryptography")
     sys.exit(1)
 
-# --- NIST TEMPLATE ---
+
+#--- NIST TEMPLATE ---
 NIST_800_115_SKELETON = """# PENTEST REPORT: [TARGET_NAME]
-**Date:** [DATE]
-**Methodology:** NIST SP 800-115
-**Classification:** CONFIDENTIAL
-
-## 1. Executive Summary
+Date: [DATE]
+Methodology: NIST SP 800-115
+Classification: CONFIDENTIAL
+1. Executive Summary
 [High-level overview of risk for management.]
-
-## 2. Assessment Methodology
-1. **Planning:** Rules of Engagement defined.
-2. **Discovery:** Asset identification and scanning.
-3. **Attack:** Exploit validation (evidence-based).
-4. **Reporting:** Analysis and remediation planning.
-
-## 3. Summary of Findings
-| ID | Severity | Title |
-|----|----------|-------|
-| 01 | CRITICAL | [Example] |
-
-## 4. Technical Findings
-
-### 4.1 [Finding Title]
-**CVSS:** 9.8 (Critical) | **ID:** VUE-01
-**Description:** [Technical description]
-
-**Evidence:**
-```bash
-**Remediation:** [Specific technical fix]
+2. Assessment Methodology
+Planning: Rules of Engagement defined.
+Discovery: Asset identification and scanning.
+Attack: Exploit validation (evidence-based).
+Reporting: Analysis and remediation planning.
+3. Summary of Findings
+ID	Severity	Title
+01	CRITICAL	[Example]
+4. Technical Findings
+4.1 [Finding Title]
+CVSS: 9.8 (Critical) | ID: VUE-01
+Description: [Technical description]
+Evidence:
 
 ## 5. Appendices
 
@@ -82,7 +74,7 @@ class SessionCrypto:
     """
     PBKDF2 Key Derivation + AES (Fernet) Encryption.
     v2.5: Adds HMAC-signed session files and per-user key wrapping.
-    The derived key resides ONLY in memory.
+    v3.0: Adds Row Integrity HMAC.
     """
     SALT_FILE  = "vectorvue.salt"
     ITERATIONS = 480_000
@@ -150,6 +142,14 @@ class SessionCrypto:
         payload["sig"] = sig
         return hmac.compare_digest(expected, sig or "")
 
+    def calculate_row_hmac(self, row_data: List[Any]) -> str:
+        """Calculates HMAC for a database row to ensure integrity."""
+        if not self._raw_key:
+            return ""
+        # Convert all items to string and concatenate
+        payload = "".join(str(x) for x in row_data).encode()
+        return hmac.new(self._raw_key[:32], payload, hashlib.sha256).hexdigest()
+
     def encrypt(self, data: str) -> str:
         if not self.fernet or not data:
             return data
@@ -166,7 +166,7 @@ class SessionCrypto:
                 return self.fernet.decrypt(token.encode()).decode()
             return token
         except InvalidToken:
-            raise ValueError("DECRYPTION_FAILED")
+            return "[ENCRYPTED_DATA]"
         except Exception:
             return token
 
@@ -515,7 +515,7 @@ GOLDEN_LIBRARY = {
 }
 
 # =============================================================================
-# CVSS CALCULATOR — unchanged from v2.4
+# CVSS CALCULATOR
 # =============================================================================
 
 class CVSSCalculator:
@@ -568,7 +568,7 @@ class CVSSCalculator:
             return 0.0
 
 # =============================================================================
-# DATA MODELS
+# DATA MODELS (v3.0 Updated)
 # =============================================================================
 
 @dataclass
@@ -627,6 +627,87 @@ class Project:
     group_id: Optional[int] = None
     archived: bool = False
 
+# --- v3.0 CAMPAIGN MODELS ---
+
+@dataclass
+class Campaign:
+    id: Optional[int]
+    name: str
+    project_id: str
+    created_at: str
+    created_by: int
+    status: str
+
+@dataclass
+class Asset:
+    id: Optional[int]
+    campaign_id: int
+    type: str  # host, user, service, domain, container, cloud
+    name: str
+    address: str
+    os: str
+    tags: str
+    first_seen: str
+    last_seen: str
+
+@dataclass
+class Credential:
+    id: Optional[int]
+    campaign_id: int
+    asset_id: Optional[int]
+    cred_type: str  # password, hash, ticket, key, token
+    identifier: str
+    secret: str  # Encrypted
+    source: str
+    captured_by: int
+    captured_at: str
+
+@dataclass
+class Session:
+    id: Optional[int]
+    campaign_id: int
+    asset_id: int
+    session_type: str
+    user: str
+    pid: int
+    tunnel: str
+    status: str
+    opened_at: str
+    closed_at: str
+
+@dataclass
+class Loot:
+    id: Optional[int]
+    campaign_id: int
+    asset_id: int
+    path: str
+    description: str
+    classification: str
+    hash: str
+    stored_at: str
+
+@dataclass
+class Action:
+    id: Optional[int]
+    campaign_id: int
+    asset_id: Optional[int]
+    mitre_technique: str
+    command: str
+    result: str
+    operator: str
+    timestamp: str
+    detection: str  # detected, missed, blocked, unknown
+
+@dataclass
+class Relation:
+    id: Optional[int]
+    campaign_id: int
+    src_type: str
+    src_id: int
+    rel_type: str # authenticated_to, pivoted_to, dumped
+    dst_type: str
+    dst_id: int
+
 # =============================================================================
 # INTELLIGENCE ENGINE
 # =============================================================================
@@ -664,6 +745,18 @@ class IntelligenceEngine:
     def search_techniques(self, query: str) -> List[MitreTechnique]:
         q = query.upper()
         return [t for t in self.techniques_list if q in t.id.upper() or q in t.name.upper()]
+
+    def get_tactic_from_id(self, technique_id: str) -> str:
+        # Simplified mapping for demonstration. In prod, this would query a full DB.
+        tid = technique_id.upper()
+        if tid.startswith("T1566"): return "Initial Access"
+        if tid.startswith("T1059"): return "Execution"
+        if tid.startswith("T1543"): return "Persistence"
+        if tid.startswith("T1068"): return "Privilege Escalation"
+        if tid.startswith("T1021"): return "Lateral Movement"
+        if tid.startswith("T1003"): return "Credential Access"
+        if tid.startswith("T1041"): return "Exfiltration"
+        return "Unknown Tactic"
 
     def get_remediation_suggestion(self, category: str) -> List[Tuple]:
         results = []
@@ -705,7 +798,7 @@ class Database:
     def _run_migrations(self):
         c = self.conn.cursor()
 
-        # Original findings table (backward compat)
+        # v1.0 - v2.0 Schemas
         c.execute('''CREATE TABLE IF NOT EXISTS findings (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             title           TEXT NOT NULL,
@@ -721,12 +814,10 @@ class Database:
             evidence_hash   TEXT    DEFAULT '')''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)''')
-
         c.execute('''CREATE TABLE IF NOT EXISTS groups (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT UNIQUE NOT NULL,
             description TEXT DEFAULT '')''')
-
         c.execute('''CREATE TABLE IF NOT EXISTS users (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             username      TEXT UNIQUE NOT NULL,
@@ -736,22 +827,20 @@ class Database:
             group_id      INTEGER REFERENCES groups(id),
             created_at    TEXT NOT NULL,
             last_login    TEXT DEFAULT '')''')
-
         c.execute('''CREATE TABLE IF NOT EXISTS sessions (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id       INTEGER NOT NULL REFERENCES users(id),
             session_token TEXT UNIQUE NOT NULL,
             created_at    TEXT NOT NULL,
             expires_at    TEXT NOT NULL)''')
-
         c.execute('''CREATE TABLE IF NOT EXISTS projects (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT UNIQUE NOT NULL,
             description TEXT DEFAULT '',
             group_id    INTEGER REFERENCES groups(id),
             archived    INTEGER DEFAULT 0)''')
-
-        # Audit log — append-only by application convention
+        
+        # v2.5 Audit Log
         c.execute('''CREATE TABLE IF NOT EXISTS audit_log (
             id              TEXT PRIMARY KEY,
             timestamp       TEXT NOT NULL,
@@ -762,7 +851,7 @@ class Database:
             old_value_hash  TEXT DEFAULT '',
             new_value_hash  TEXT DEFAULT '')''')
 
-        # Migrate findings: add new columns if missing
+        # v2.5 Findings Migration
         for col, typedef in [
             ("created_by",       "INTEGER DEFAULT NULL"),
             ("last_modified_by", "INTEGER DEFAULT NULL"),
@@ -775,6 +864,87 @@ class Database:
             except Exception:
                 pass
 
+        # --- v3.0 CAMPAIGN MIGRATIONS ---
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS campaigns (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT UNIQUE NOT NULL,
+            project_id  TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            created_by  INTEGER REFERENCES users(id),
+            status      TEXT DEFAULT 'active',
+            integrity_hash TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS assets (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER REFERENCES campaigns(id),
+            type        TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            address     TEXT,
+            os          TEXT,
+            tags        TEXT,
+            first_seen  TEXT,
+            last_seen   TEXT,
+            integrity_hash TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS credentials (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER REFERENCES campaigns(id),
+            asset_id    INTEGER REFERENCES assets(id),
+            cred_type   TEXT NOT NULL,
+            identifier  TEXT NOT NULL,
+            secret      TEXT NOT NULL,
+            source      TEXT,
+            captured_by INTEGER REFERENCES users(id),
+            captured_at TEXT,
+            integrity_hash TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS sessions_ops (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id  INTEGER REFERENCES campaigns(id),
+            asset_id     INTEGER REFERENCES assets(id),
+            session_type TEXT,
+            user         TEXT,
+            pid          INTEGER,
+            tunnel       TEXT,
+            status       TEXT,
+            opened_at    TEXT,
+            closed_at    TEXT,
+            integrity_hash TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS loot (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id    INTEGER REFERENCES campaigns(id),
+            asset_id       INTEGER REFERENCES assets(id),
+            path           TEXT,
+            description    TEXT,
+            classification TEXT,
+            hash           TEXT,
+            stored_at      TEXT,
+            integrity_hash TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS actions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER REFERENCES campaigns(id),
+            asset_id        INTEGER REFERENCES assets(id),
+            mitre_technique TEXT,
+            command         TEXT,
+            result          TEXT,
+            operator        TEXT,
+            timestamp       TEXT,
+            detection       TEXT,
+            integrity_hash  TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS relations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER REFERENCES campaigns(id),
+            src_type    TEXT,
+            src_id      INTEGER,
+            rel_type    TEXT,
+            dst_type    TEXT,
+            dst_id      INTEGER,
+            integrity_hash TEXT DEFAULT '')''')
+
         # Seed defaults
         c.execute("INSERT OR IGNORE INTO groups (name, description) VALUES (?, ?)",
                   ("default", "Default operator group"))
@@ -783,12 +953,11 @@ class Database:
         self.conn.commit()
 
     # -------------------------------------------------------------------------
-    # CANARY
+    # CANARY & AUTH (Existing v2.5 Logic)
     # -------------------------------------------------------------------------
-
+    
     def verify_or_set_canary(self) -> bool:
-        if not self.crypto:
-            return True
+        if not self.crypto: return True
         CANARY = "VECTORVUE_SECURE_ACCESS"
         c = self.conn.cursor()
         c.execute("SELECT value FROM meta WHERE key='canary'")
@@ -804,45 +973,29 @@ class Database:
             self.conn.commit()
             return True
 
-    # -------------------------------------------------------------------------
-    # USER MANAGEMENT
-    # -------------------------------------------------------------------------
-
     def has_users(self) -> bool:
         c = self.conn.cursor()
         c.execute("SELECT COUNT(*) FROM users")
         return c.fetchone()[0] > 0
 
-    def register_user(self, username: str, password: str,
-                      role: str = Role.OPERATOR,
-                      group_name: str = "default") -> Tuple[bool, str]:
-        if not username or not password:
-            return False, "Username and password are required."
-        if len(password) < 8:
-            return False, "Password must be at least 8 characters."
-
+    def register_user(self, username: str, password: str, role: str = Role.OPERATOR, group_name: str = "default") -> Tuple[bool, str]:
+        if not username or not password: return False, "Username and password are required."
+        if len(password) < 8: return False, "Password must be at least 8 characters."
         c = self.conn.cursor()
         c.execute("SELECT COUNT(*) FROM users")
-        if c.fetchone()[0] == 0:
-            role = Role.ADMIN   # First user is always admin
-
-        # Resolve or create group
+        if c.fetchone()[0] == 0: role = Role.ADMIN
         c.execute("SELECT id FROM groups WHERE name=?", (group_name,))
         row = c.fetchone()
-        if row:
-            group_id = row["id"]
+        if row: group_id = row["id"]
         else:
             c.execute("INSERT INTO groups (name) VALUES (?)", (group_name,))
             group_id = c.lastrowid
-
         user_salt = os.urandom(32)
-        pw_hash   = self.crypto.derive_user_password_hash(password, user_salt)
-        salt_b64  = base64.b64encode(user_salt).decode()
-        now       = datetime.utcnow().isoformat()
-
+        pw_hash = self.crypto.derive_user_password_hash(password, user_salt)
+        salt_b64 = base64.b64encode(user_salt).decode()
+        now = datetime.utcnow().isoformat()
         try:
-            c.execute("""INSERT INTO users (username, password_hash, salt, role, group_id, created_at)
-                         VALUES (?, ?, ?, ?, ?, ?)""",
+            c.execute("INSERT INTO users (username, password_hash, salt, role, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                       (username, pw_hash, salt_b64, role, group_id, now))
             self.conn.commit()
             self._audit("SYSTEM", "REGISTER", "user", username)
@@ -854,23 +1007,18 @@ class Database:
         c = self.conn.cursor()
         c.execute("SELECT * FROM users WHERE username=?", (username,))
         row = c.fetchone()
-        if not row:
-            return False, "Invalid credentials."
-
+        if not row: return False, "Invalid credentials."
         salt_bytes = base64.b64decode(row["salt"])
         if not self.crypto.verify_password(password, row["password_hash"], salt_bytes):
             self._audit(username, "LOGIN_FAIL", "user", username)
             return False, "Invalid credentials."
-
-        token   = self.crypto.make_session_token()
-        now     = datetime.utcnow()
+        token = self.crypto.make_session_token()
+        now = datetime.utcnow()
         expires = now + timedelta(hours=12)
-        c.execute("""INSERT INTO sessions (user_id, session_token, created_at, expires_at)
-                     VALUES (?, ?, ?, ?)""",
+        c.execute("INSERT INTO sessions (user_id, session_token, created_at, expires_at) VALUES (?, ?, ?, ?)",
                   (row["id"], token, now.isoformat(), expires.isoformat()))
         c.execute("UPDATE users SET last_login=? WHERE id=?", (now.isoformat(), row["id"]))
         self.conn.commit()
-
         self.current_user = User(
             id=row["id"], username=row["username"],
             password_hash=row["password_hash"], role=row["role"],
@@ -889,26 +1037,19 @@ class Database:
             json.dump(payload, f)
 
     def resume_session(self) -> bool:
-        if not os.path.exists(self.SESSION_FILE):
-            return False
+        if not os.path.exists(self.SESSION_FILE): return False
         try:
-            with open(self.SESSION_FILE, "r") as f:
-                payload = json.load(f)
+            with open(self.SESSION_FILE, "r") as f: payload = json.load(f)
             if self.crypto and self.crypto._raw_key:
                 payload_copy = dict(payload)
-                if not self.crypto.verify_session_file(payload_copy):
-                    return False
-            if datetime.utcnow() > datetime.fromisoformat(payload["expires_at"]):
-                return False
+                if not self.crypto.verify_session_file(payload_copy): return False
+            if datetime.utcnow() > datetime.fromisoformat(payload["expires_at"]): return False
             c = self.conn.cursor()
-            c.execute("SELECT * FROM sessions WHERE session_token=? AND user_id=?",
-                      (payload["token"], payload["user_id"]))
-            if not c.fetchone():
-                return False
+            c.execute("SELECT * FROM sessions WHERE session_token=? AND user_id=?", (payload["token"], payload["user_id"]))
+            if not c.fetchone(): return False
             c.execute("SELECT * FROM users WHERE id=?", (payload["user_id"],))
             urow = c.fetchone()
-            if not urow:
-                return False
+            if not urow: return False
             self.current_user = User(
                 id=urow["id"], username=urow["username"],
                 password_hash=urow["password_hash"], role=urow["role"],
@@ -916,8 +1057,7 @@ class Database:
                 last_login=urow["last_login"], salt=urow["salt"]
             )
             return True
-        except Exception:
-            return False
+        except Exception: return False
 
     def logout(self):
         if self.current_user:
@@ -925,8 +1065,7 @@ class Database:
             c = self.conn.cursor()
             c.execute("DELETE FROM sessions WHERE user_id=?", (self.current_user.id,))
             self.conn.commit()
-        if os.path.exists(self.SESSION_FILE):
-            os.remove(self.SESSION_FILE)
+        if os.path.exists(self.SESSION_FILE): os.remove(self.SESSION_FILE)
         self.current_user = None
 
     def list_users(self) -> List[User]:
@@ -1003,27 +1142,238 @@ class Database:
         return True, f"Project '{name}' archived."
 
     # -------------------------------------------------------------------------
-    # FINDINGS (RBAC-aware)
+    # CAMPAIGN OPERATIONS (v3.0)
     # -------------------------------------------------------------------------
 
+    def create_campaign(self, name: str, project_id: str) -> Tuple[bool, str]:
+        self._require_role(Role.OPERATOR)
+        created_at = datetime.utcnow().isoformat()
+        c = self.conn.cursor()
+        try:
+            # HMAC calculation for integrity
+            row_data = [name, project_id, created_at, self.current_user.id, "active"]
+            h = self.crypto.calculate_row_hmac(row_data)
+            
+            c.execute("INSERT INTO campaigns (name, project_id, created_at, created_by, status, integrity_hash) VALUES (?, ?, ?, ?, ?, ?)",
+                      (name, project_id, created_at, self.current_user.id, "active", h))
+            self.conn.commit()
+            self._audit(self.current_user.username, "CREATE_CAMPAIGN", "campaign", name)
+            return True, f"Campaign '{name}' initialized."
+        except sqlite3.IntegrityError:
+            return False, "Campaign name exists."
+
+    def list_campaigns(self, project_id: str) -> List[Campaign]:
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM campaigns WHERE project_id=?", (project_id,))
+        return [Campaign(r["id"], r["name"], r["project_id"], r["created_at"], r["created_by"], r["status"]) for r in c.fetchall()]
+
+    def get_campaign_by_name(self, name: str) -> Optional[Campaign]:
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM campaigns WHERE name=?", (name,))
+        r = c.fetchone()
+        return Campaign(r["id"], r["name"], r["project_id"], r["created_at"], r["created_by"], r["status"]) if r else None
+
+    # --- ASSETS ---
+
+    def add_asset(self, campaign_id: int, type: str, name: str, address: str = "", os: str = "", tags: str = "") -> int:
+        self._require_role(Role.OPERATOR)
+        now = datetime.utcnow().isoformat()
+        c = self.conn.cursor()
+        
+        row_data = [campaign_id, type, name, address, os, tags, now, now]
+        h = self.crypto.calculate_row_hmac(row_data)
+
+        c.execute("""INSERT INTO assets (campaign_id, type, name, address, os, tags, first_seen, last_seen, integrity_hash)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (campaign_id, type, name, address, os, tags, now, now, h))
+        self.conn.commit()
+        aid = c.lastrowid
+        self._audit(self.current_user.username, "ADD_ASSET", "asset", str(aid), new_value=name)
+        return aid
+
+    def list_assets(self, campaign_id: int) -> List[Asset]:
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM assets WHERE campaign_id=?", (campaign_id,))
+        return [Asset(r["id"], r["campaign_id"], r["type"], r["name"], r["address"], r["os"], r["tags"], r["first_seen"], r["last_seen"]) for r in c.fetchall()]
+
+    # --- CREDENTIALS ---
+
+    def add_credential(self, campaign_id: int, asset_id: int, cred_type: str, identifier: str, secret: str, source: str) -> int:
+        self._require_role(Role.OPERATOR)
+        now = datetime.utcnow().isoformat()
+        enc_secret = self.crypto.encrypt(secret)
+        
+        row_data = [campaign_id, asset_id, cred_type, identifier, enc_secret, source, self.current_user.id, now]
+        h = self.crypto.calculate_row_hmac(row_data)
+
+        c = self.conn.cursor()
+        c.execute("""INSERT INTO credentials (campaign_id, asset_id, cred_type, identifier, secret, source, captured_by, captured_at, integrity_hash)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (campaign_id, asset_id, cred_type, identifier, enc_secret, source, self.current_user.id, now, h))
+        self.conn.commit()
+        cid = c.lastrowid
+        self._audit(self.current_user.username, "CAPTURE_CRED", "credential", str(cid))
+        return cid
+
+    def list_credentials(self, campaign_id: int) -> List[Credential]:
+        self._require_role(Role.OPERATOR)
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM credentials WHERE campaign_id=?", (campaign_id,))
+        res = []
+        for r in c.fetchall():
+            dec_secret = self.crypto.decrypt(r["secret"])
+            res.append(Credential(r["id"], r["campaign_id"], r["asset_id"], r["cred_type"], r["identifier"], dec_secret, r["source"], r["captured_by"], r["captured_at"]))
+        return res
+
+    # --- ACTIONS & TIMELINE ---
+
+    def log_action(self, campaign_id: int, asset_id: int, mitre_technique: str, command: str, result: str, detection: str) -> int:
+        self._require_role(Role.OPERATOR)
+        now = datetime.utcnow().isoformat()
+        operator = self.current_user.username
+        
+        row_data = [campaign_id, asset_id, mitre_technique, command, result, operator, now, detection]
+        h = self.crypto.calculate_row_hmac(row_data)
+
+        c = self.conn.cursor()
+        c.execute("""INSERT INTO actions (campaign_id, asset_id, mitre_technique, command, result, operator, timestamp, detection, integrity_hash)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (campaign_id, asset_id, mitre_technique, command, result, operator, now, detection, h))
+        self.conn.commit()
+        aid = c.lastrowid
+        
+        # Auto-update asset last_seen
+        if asset_id:
+            c.execute("UPDATE assets SET last_seen=? WHERE id=?", (now, asset_id))
+            self.conn.commit()
+            
+        self._audit(self.current_user.username, "EXEC_ACTION", "action", str(aid), new_value=mitre_technique)
+        return aid
+
+    def list_actions(self, campaign_id: int) -> List[Action]:
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM actions WHERE campaign_id=? ORDER BY timestamp ASC", (campaign_id,))
+        return [Action(r["id"], r["campaign_id"], r["asset_id"], r["mitre_technique"], r["command"], r["result"], r["operator"], r["timestamp"], r["detection"]) for r in c.fetchall()]
+
+    # --- RELATIONS (ATTACK GRAPH) ---
+
+    def add_relation(self, campaign_id: int, src_type: str, src_id: int, rel_type: str, dst_type: str, dst_id: int):
+        self._require_role(Role.OPERATOR)
+        row_data = [campaign_id, src_type, src_id, rel_type, dst_type, dst_id]
+        h = self.crypto.calculate_row_hmac(row_data)
+        
+        c = self.conn.cursor()
+        c.execute("""INSERT INTO relations (campaign_id, src_type, src_id, rel_type, dst_type, dst_id, integrity_hash)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                  (campaign_id, src_type, src_id, rel_type, dst_type, dst_id, h))
+        self.conn.commit()
+
+    # --- ATTACK PATH & REPORTING (v3.0) ---
+
+    def build_attack_path(self, campaign_id: int) -> str:
+        actions = self.list_actions(campaign_id)
+        if not actions: return "No actions logged."
+        
+        intel = IntelligenceEngine()
+        narrative = [f"# Attack Path: Campaign {campaign_id}\n"]
+        
+        # Tactic Grouping
+        by_tactic = {}
+        for a in actions:
+            tactic = intel.get_tactic_from_id(a.mitre_technique)
+            if tactic not in by_tactic: by_tactic[tactic] = []
+            by_tactic[tactic].append(a)
+            
+        order = ["Initial Access", "Execution", "Persistence", "Privilege Escalation", "Credential Access", "Lateral Movement", "Collection", "Exfiltration"]
+        
+        for phase in order:
+            if phase in by_tactic:
+                narrative.append(f"## {phase}")
+                for a in by_tactic[phase]:
+                    ts = a.timestamp.split("T")[1][:8]
+                    asset_name = "Unknown"
+                    if a.asset_id:
+                        c = self.conn.cursor()
+                        c.execute("SELECT name FROM assets WHERE id=?", (a.asset_id,))
+                        res = c.fetchone()
+                        if res: asset_name = res["name"]
+                        
+                    narrative.append(f"- **{ts}** [{a.mitre_technique}] on `{asset_name}` by {a.operator}")
+                    narrative.append(f"  - Command: `{a.command}`")
+                    narrative.append(f"  - Result: {a.result}")
+                    narrative.append(f"  - Detection: {a.detection}\n")
+        
+        return "\n".join(narrative)
+
+    def calculate_detection_coverage(self, campaign_id: int) -> Dict[str, float]:
+        actions = self.list_actions(campaign_id)
+        if not actions: return {}
+        
+        stats = {} # Tactic -> {total, detected}
+        intel = IntelligenceEngine()
+        
+        for a in actions:
+            tactic = intel.get_tactic_from_id(a.mitre_technique)
+            if tactic not in stats: stats[tactic] = {"total": 0, "detected": 0}
+            stats[tactic]["total"] += 1
+            if a.detection in ["detected", "blocked"]:
+                stats[tactic]["detected"] += 1
+        
+        percentages = {}
+        for tac, counts in stats.items():
+            percentages[tac] = round((counts["detected"] / counts["total"]) * 100, 1)
+        
+        return percentages
+
+    def generate_campaign_report(self, campaign_id: int) -> str:
+        c = self.conn.cursor()
+        c.execute("SELECT name FROM campaigns WHERE id=?", (campaign_id,))
+        camp = c.fetchone()
+        name = camp["name"] if camp else "Unknown"
+
+        path = self.build_attack_path(campaign_id)
+        coverage = self.calculate_detection_coverage(campaign_id)
+        creds = self.list_credentials(campaign_id)
+        
+        report = [f"# RED TEAM CAMPAIGN REPORT: {name.upper()}",
+                  f"**Date:** {datetime.utcnow().strftime('%Y-%m-%d')}",
+                  "\n## 1. Executive Summary",
+                  "This report details the adversarial simulation conducted...",
+                  "\n## 2. Attack Path Narrative\n",
+                  path,
+                  "\n## 3. Detection Coverage",
+                  "| Tactic | Detection Rate |",
+                  "|--------|----------------|"]
+        
+        for tac, rate in coverage.items():
+            report.append(f"| {tac} | {rate}% |")
+            
+        report.append("\n## 4. Crown Jewels / Credentials Accessed")
+        for cr in creds:
+            report.append(f"- {cr.cred_type.upper()}: `{cr.identifier}` ({cr.source})")
+            
+        actor = self.current_user.username if self.current_user else "SYSTEM"
+        self._audit(actor, "GEN_REPORT", "campaign", str(campaign_id))
+        
+        return "\n".join(report)
+
+    # -------------------------------------------------------------------------
+    # FINDINGS & PROJECT OPERATIONS (Legacy support)
+    # -------------------------------------------------------------------------
+    
     def _visible_filter(self) -> str:
-        if not self.current_user:
-            return "1=0"
-        if role_gte(self.current_user.role, Role.ADMIN):
-            return "1=1"
+        if not self.current_user: return "1=0"
+        if role_gte(self.current_user.role, Role.ADMIN): return "1=1"
         uid = self.current_user.id
         if role_gte(self.current_user.role, Role.LEAD):
-            return (f"(visibility='global' OR created_by={uid} OR assigned_to={uid})")
+             return (f"(visibility='global' OR created_by={uid} OR assigned_to={uid})")
         return f"(visibility='global' OR created_by={uid} OR assigned_to={uid})"
 
     def get_findings(self, project_id: str = "DEFAULT") -> List[Finding]:
-        if project_id is None:
-            project_id = "DEFAULT"
+        if project_id is None: project_id = "DEFAULT"
         c = self.conn.cursor()
         vis = self._visible_filter()
-        c.execute(
-            f"SELECT * FROM findings WHERE project_id=? AND ({vis}) ORDER BY cvss_score DESC",
-            (project_id,))
+        c.execute(f"SELECT * FROM findings WHERE project_id=? AND ({vis}) ORDER BY cvss_score DESC", (project_id,))
         return self._rows_to_findings(c.fetchall())
 
     def _rows_to_findings(self, rows) -> List[Finding]:
@@ -1031,8 +1381,7 @@ class Database:
         keys = None
         for r in rows:
             try:
-                if keys is None:
-                    keys = r.keys()
+                if keys is None: keys = r.keys()
                 desc = self.crypto.decrypt(r["description"]) if self.crypto else r["description"]
                 evid = self.crypto.decrypt(r["evidence"])    if self.crypto else r["evidence"]
                 rem  = self.crypto.decrypt(r["remediation"]) if self.crypto else r["remediation"]
@@ -1049,8 +1398,7 @@ class Database:
                     visibility=r["visibility"] if "visibility" in keys else "group",
                     tags=r["tags"] if "tags" in keys else "",
                 ))
-            except (KeyError, ValueError):
-                continue
+            except (KeyError, ValueError): continue
         return results
 
     def add_finding(self, f: Finding) -> int:
@@ -1063,15 +1411,9 @@ class Database:
         evid = self.crypto.encrypt(f.evidence)    if self.crypto else f.evidence
         rem  = self.crypto.encrypt(f.remediation) if self.crypto else f.remediation
         c = self.conn.cursor()
-        c.execute("""INSERT INTO findings
-                     (title, description, cvss_score, mitre_id, tactic_id, status,
-                      evidence, remediation, project_id, cvss_vector, evidence_hash,
-                      created_by, last_modified_by, assigned_to, visibility, tags)
+        c.execute("""INSERT INTO findings (title, description, cvss_score, mitre_id, tactic_id, status, evidence, remediation, project_id, cvss_vector, evidence_hash, created_by, last_modified_by, assigned_to, visibility, tags)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                  (f.title, desc, f.cvss_score, f.mitre_id, f.tactic_id, f.status,
-                   evid, rem, f.project_id, f.cvss_vector, f.evidence_hash,
-                   f.created_by, f.last_modified_by, f.assigned_to,
-                   f.visibility, f.tags))
+                  (f.title, desc, f.cvss_score, f.mitre_id, f.tactic_id, f.status, evid, rem, f.project_id, f.cvss_vector, f.evidence_hash, f.created_by, f.last_modified_by, f.assigned_to, f.visibility, f.tags))
         self.conn.commit()
         fid = c.lastrowid
         actor = self.current_user.username if self.current_user else "SYSTEM"
@@ -1079,24 +1421,17 @@ class Database:
         return fid
 
     def update_finding(self, f: Finding):
-        if not f.id:
-            return
+        if not f.id: return
         self._check_write_permission(f.id)
         f.evidence_hash = f.calculate_evidence_hash()
-        if self.current_user:
-            f.last_modified_by = self.current_user.id
+        if self.current_user: f.last_modified_by = self.current_user.id
         desc = self.crypto.encrypt(f.description) if self.crypto else f.description
         evid = self.crypto.encrypt(f.evidence)    if self.crypto else f.evidence
         rem  = self.crypto.encrypt(f.remediation) if self.crypto else f.remediation
         c = self.conn.cursor()
-        c.execute("""UPDATE findings SET
-                     title=?, description=?, cvss_score=?, mitre_id=?, status=?,
-                     evidence=?, remediation=?, project_id=?, cvss_vector=?,
-                     evidence_hash=?, last_modified_by=?, assigned_to=?, visibility=?, tags=?
+        c.execute("""UPDATE findings SET title=?, description=?, cvss_score=?, mitre_id=?, status=?, evidence=?, remediation=?, project_id=?, cvss_vector=?, evidence_hash=?, last_modified_by=?, assigned_to=?, visibility=?, tags=?
                      WHERE id=?""",
-                  (f.title, desc, f.cvss_score, f.mitre_id, f.status,
-                   evid, rem, f.project_id, f.cvss_vector, f.evidence_hash,
-                   f.last_modified_by, f.assigned_to, f.visibility, f.tags, f.id))
+                  (f.title, desc, f.cvss_score, f.mitre_id, f.status, evid, rem, f.project_id, f.cvss_vector, f.evidence_hash, f.last_modified_by, f.assigned_to, f.visibility, f.tags, f.id))
         self.conn.commit()
         actor = self.current_user.username if self.current_user else "SYSTEM"
         self._audit(actor, "EDIT_FINDING", "finding", str(f.id), new_value=f.title)
@@ -1110,45 +1445,17 @@ class Database:
         c.execute("DELETE FROM findings WHERE id=?", (fid,))
         self.conn.commit()
 
-    def assign_finding(self, fid: int, username: str) -> Tuple[bool, str]:
-        self._require_role(Role.LEAD)
-        c = self.conn.cursor()
-        c.execute("SELECT id FROM users WHERE username=?", (username,))
-        row = c.fetchone()
-        if not row:
-            return False, f"User '{username}' not found."
-        c.execute("UPDATE findings SET assigned_to=? WHERE id=?", (row["id"], fid))
-        self.conn.commit()
-        actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "ASSIGN_FINDING", "finding", str(fid), new_value=username)
-        return True, f"Finding {fid} assigned to {username}."
-
-    def search_findings(self, query: str) -> List[Finding]:
-        c = self.conn.cursor()
-        vis  = self._visible_filter()
-        like = f"%{query}%"
-        c.execute(
-            f"SELECT * FROM findings WHERE ({vis}) AND "
-            f"(title LIKE ? OR mitre_id LIKE ? OR tags LIKE ?) ORDER BY cvss_score DESC",
-            (like, like, like))
-        return self._rows_to_findings(c.fetchall())
-
     # -------------------------------------------------------------------------
-    # AUDIT LOG
+    # AUDIT LOG (v2.5)
     # -------------------------------------------------------------------------
 
-    def _audit(self, actor: str, action: str, target_type: str,
-               target_id: str = "", old_value: str = "", new_value: str = ""):
+    def _audit(self, actor: str, action: str, target_type: str, target_id: str = "", old_value: str = "", new_value: str = ""):
         ts = datetime.utcnow().isoformat()
-        entry_id = hashlib.sha256(
-            f"{ts}{actor}{action}{target_id}".encode()
-        ).hexdigest()[:32]
+        entry_id = hashlib.sha256(f"{ts}{actor}{action}{target_id}".encode()).hexdigest()[:32]
         old_hash = hashlib.sha256(old_value.encode()).hexdigest() if old_value else ""
         new_hash = hashlib.sha256(new_value.encode()).hexdigest() if new_value else ""
         c = self.conn.cursor()
-        c.execute("""INSERT OR IGNORE INTO audit_log
-                     (id, timestamp, username, action, target_type, target_id,
-                      old_value_hash, new_value_hash)
+        c.execute("""INSERT OR IGNORE INTO audit_log (id, timestamp, username, action, target_type, target_id, old_value_hash, new_value_hash)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                   (entry_id, ts, actor, action, target_type, target_id, old_hash, new_hash))
         self.conn.commit()
@@ -1160,95 +1467,22 @@ class Database:
         return [dict(r) for r in c.fetchall()]
 
     # -------------------------------------------------------------------------
-    # EXPORTS
-    # -------------------------------------------------------------------------
-
-    def export_markdown(self, project_id: str) -> str:
-        findings = self.get_findings(project_id)
-        lines = [f"# VectorVue Report — {project_id}\n",
-                 f"**Generated:** {datetime.utcnow().isoformat()} UTC\n\n"]
-        for f in sorted(findings, key=lambda x: x.cvss_score, reverse=True):
-            lines += [f"## [{f.cvss_score}] {f.title}\n",
-                      f"**MITRE:** {f.mitre_id} | **Status:** {f.status} | **CVSS:** {f.cvss_vector}\n\n",
-                      f"{f.description}\n\n"]
-            if f.evidence:
-                lines.append(f"**Evidence:**\n```\n{f.evidence}\n```\n\n")
-            if f.remediation:
-                lines.append(f"**Remediation:** {f.remediation}\n\n")
-            lines.append("---\n\n")
-        actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "EXPORT_MARKDOWN", "project", project_id)
-        return "".join(lines)
-
-    def export_json(self, project_id: str) -> str:
-        import json as _json
-        findings = self.get_findings(project_id)
-        data = [{"id": f.id, "title": f.title, "cvss_score": f.cvss_score,
-                 "mitre_id": f.mitre_id, "status": f.status,
-                 "description": f.description, "remediation": f.remediation,
-                 "tags": f.tags, "visibility": f.visibility} for f in findings]
-        actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "EXPORT_JSON", "project", project_id)
-        return _json.dumps({"project": project_id, "findings": data}, indent=2)
-
-    def export_csv(self, project_id: str) -> str:
-        """Plextrac-compatible CSV export."""
-        findings = self.get_findings(project_id)
-        buf = io.StringIO()
-        writer = csv.writer(buf)
-        writer.writerow(["Title", "CVSS Score", "CVSS Vector", "MITRE ID",
-                         "Status", "Description", "Remediation", "Tags"])
-        for f in findings:
-            writer.writerow([f.title, f.cvss_score, f.cvss_vector, f.mitre_id,
-                              f.status, f.description, f.remediation, f.tags])
-        actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "EXPORT_CSV", "project", project_id)
-        return buf.getvalue()
-
-    def export_mitre_navigator(self, project_id: str) -> str:
-        """MITRE ATT&CK Navigator layer v4.5."""
-        import json as _json
-        findings = self.get_findings(project_id)
-        seen, techniques = set(), []
-        for f in findings:
-            if f.mitre_id and f.mitre_id not in seen:
-                seen.add(f.mitre_id)
-                score = int(f.cvss_score)
-                color = "#ff0000" if score >= 9 else "#ff8c00" if score >= 7 else "#00ffff"
-                techniques.append({"techniqueID": f.mitre_id, "score": score,
-                                   "color": color, "comment": f.title, "enabled": True})
-        layer = {"name": f"VectorVue — {project_id}",
-                 "versions": {"attack": "14", "navigator": "4.9", "layer": "4.5"},
-                 "domain": "enterprise-attack",
-                 "description": f"Auto-generated from VectorVue project {project_id}",
-                 "techniques": techniques}
-        actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "EXPORT_NAVIGATOR", "project", project_id)
-        return _json.dumps(layer, indent=2)
-
-    # -------------------------------------------------------------------------
     # PERMISSION HELPERS
     # -------------------------------------------------------------------------
 
     def _require_role(self, minimum: str):
-        if not self.current_user:
-            raise PermissionError("Not authenticated.")
+        if not self.current_user: raise PermissionError("Not authenticated.")
         if not role_gte(self.current_user.role, minimum):
-            raise PermissionError(
-                f"Role '{self.current_user.role}' insufficient. Requires '{minimum}'.")
+            raise PermissionError(f"Role '{self.current_user.role}' insufficient. Requires '{minimum}'.")
 
     def _check_write_permission(self, finding_id: int):
-        if not self.current_user:
-            raise PermissionError("Not authenticated.")
-        if role_gte(self.current_user.role, Role.ADMIN):
-            return
+        if not self.current_user: raise PermissionError("Not authenticated.")
+        if role_gte(self.current_user.role, Role.ADMIN): return
         c = self.conn.cursor()
         c.execute("SELECT created_by FROM findings WHERE id=?", (finding_id,))
         row = c.fetchone()
-        if not row:
-            raise ValueError("Finding not found.")
-        if role_gte(self.current_user.role, Role.LEAD):
-            return
+        if not row: raise ValueError("Finding not found.")
+        if role_gte(self.current_user.role, Role.LEAD): return
         if row["created_by"] != self.current_user.id:
             raise PermissionError("You can only edit your own findings.")
 
