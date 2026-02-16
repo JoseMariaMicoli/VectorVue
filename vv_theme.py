@@ -1,7 +1,5 @@
-# --- START OF FILE vv_theme.py ---
-
 """
-VectorVue v2.3 - Phosphor Cyberpunk Design System
+VectorVue v2.5 - Phosphor Cyberpunk Design System
 Centralized Theme & Layout Configuration
 """
 
@@ -38,6 +36,95 @@ Screen {{
     grid-size: 2 3;
     grid-columns: 1fr 42; 
     grid-rows: 3 1fr 1;
+}}
+
+/* --- LOGIN SCREEN --- */
+LoginView {{
+    align: center middle;
+    background: $bg-void;
+    height: 100%;
+}}
+
+#login-container {{
+    width: 60;
+    height: auto;
+    border: heavy $p-green;
+    background: #000;
+    padding: 2;
+    align: center middle;
+}}
+
+.login-title {{
+    color: $p-green;
+    text-style: bold;
+    margin-bottom: 2;
+    width: 100%;
+    content-align: center middle;
+}}
+
+#login-username {{
+    width: 100%;
+    margin-bottom: 1;
+    border: solid $steel;
+    background: #111;
+    color: white;
+}}
+
+#login-input {{
+    width: 100%;
+    margin-bottom: 2;
+    border: solid $steel;
+    background: #111;
+    color: white;
+}}
+
+#login-btn {{
+    width: 100%;
+    border: solid $p-green;
+    color: $p-green;
+}}
+
+#login-status {{
+    color: $r-alert;
+    margin-top: 1;
+    text-align: center;
+}}
+
+/* --- REGISTER SCREEN --- */
+RegisterView {{
+    align: center middle;
+    background: $bg-void;
+    height: 100%;
+}}
+
+#register-container {{
+    width: 64;
+    height: auto;
+    border: heavy $p-green;
+    background: #000;
+    padding: 2;
+    align: center middle;
+}}
+
+.reg-title {{
+    color: $p-green;
+    text-style: bold;
+    margin-bottom: 1;
+    width: 100%;
+    content-align: center middle;
+}}
+
+#reg-btn {{
+    width: 100%;
+    border: solid $p-green;
+    color: $p-green;
+    margin-top: 1;
+}}
+
+#reg-status {{
+    color: $r-alert;
+    margin-top: 1;
+    text-align: center;
 }}
 
 /* --- HEADER HUD --- */
@@ -178,12 +265,12 @@ ListItem:hover {{ background: #1a1a1a; color: $e-cyan; }}
 ShutdownScreen {{
     align: center middle;
     background: $bg-void;
-    layout: vertical; /* Explicitly vertical layout for screen */
+    layout: vertical;
 }}
 
 #shutdown-container {{
     width: 60;
-    height: 20; /* Fixed height to prevent collapse */
+    height: 20;
     border: heavy $p-green;
     background: #000;
     padding: 2;
@@ -205,11 +292,11 @@ ShutdownScreen {{
 
 .shutdown-label {{
     color: $e-cyan;
-    width: 80%; /* Explicit width */
+    width: 80%;
 }}
 
 .shutdown-status {{
-    width: 20%; /* Explicit width */
+    width: 20%;
     text-align: right;
     text-style: bold;
 }}
@@ -222,6 +309,4 @@ ShutdownScreen {{
 
 .status-pending {{ color: $steel; }}
 .status-done {{ color: $p-green; }}
-
-
 """
