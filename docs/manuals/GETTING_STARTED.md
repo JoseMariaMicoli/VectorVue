@@ -1,103 +1,229 @@
-# Getting Started with VectorVue v3.0
+# Getting Started with VectorVue v3.4
 
-![Setup](https://img.shields.io/badge/Setup-v3.0_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Production_Ready-00FFFF?style=flat-square)
+![Setup](https://img.shields.io/badge/Setup-v3.4_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_2/8-00FFFF?style=flat-square) ![Phase](https://img.shields.io/badge/Phase-Complete-39FF14)
 
-This document outlines the procedure for deploying VectorVue v3.0 and setting up your first Red Team campaign. Follow these steps carefully to ensure system stability and data integrity.
+This guide covers deployment of VectorVue v3.4 Red Team Campaign Management Platform, which includes phases 0-2 complete with 41 database tables, 16 UI views, background task execution, and enterprise-ready security features. Follow these steps to get operationally ready.
 
 ## 1. System Requirements
 
-Before deploying VectorVue v3.0, verify your system meets these specifications:
-
 ### Operating System
 - **Linux:** Debian 11+, Ubuntu 20.04+, Fedora 36+, Kali Linux, ParrotOS
-- **macOS:** Monterey 12.0+
-- **Windows:** PowerShell 7+ or WSL2 (Windows 10/11)
+- **macOS:** Monterey 12.0+ (Intel and Apple Silicon)
+- **Windows:** WSL2 (Windows 10/11) with native terminal support
 
 ### Python & Runtime
 - **Python:** 3.10+ (tested on 3.10, 3.11, 3.12)
-- **Terminal:** Must support 24-bit TrueColor and UTF-8 rendering
-  - ✅ **Recommended:** Kitty, Alacritty, WezTerm, iTerm2, Windows Terminal
-  - ❌ **Not Supported:** Legacy Windows CMD
+- **Terminal:** 24-bit TrueColor (UTF-8 rendering required)
+  - ✅ **Recommended:** Kitty, Alacritty, WezTerm, iTerm2, Windows Terminal v1.5+
+  - ❌ **Not Supported:** Legacy Windows CMD, basic xterm
 
 ### Hardware
-- **Memory:** 256MB minimum (1GB recommended for large campaigns)
-- **Storage:** 100MB free (SQLite database grows with data)
-- **Network:** Internet connection for initial setup (optional after)
+- **Memory:** 256MB minimum, 1GB+ recommended (for background tasks)
+- **Storage:** 100MB+ free (SQLite grows ~10MB per 1000 findings)
+- **Network:** Not required after initial setup (air-gap capable)
 
 ## 2. Installation & Setup
 
 ### Step 1: Clone Repository
-Retrieve VectorVue v3.0 from the internal repository:
-
 ```bash
 git clone https://internal.repo/vectorvue.git
 cd vectorvue
 ```
 
 ### Step 2: Create Virtual Environment
-Always use a virtual environment to isolate dependencies:
-
-**Linux / macOS:**
 ```bash
+# Linux / macOS
 python3 -m venv venv
 source venv/bin/activate
-```
 
-**Windows (PowerShell):**
-```powershell
+# Windows (PowerShell)
 python -m venv venv
 .\venv\Scripts\activate
 ```
 
 ### Step 3: Install Dependencies
-VectorVue v3.0 requires cryptography libraries and the Textual TUI framework:
-
 ```bash
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
 
-**Key Dependencies:**
-- `textual` (0.90+) - Terminal UI framework
-- `cryptography` - AES-256 encryption (Fernet)
+**Required Packages:**
+- `textual` (0.90+) - TUI framework
+- `cryptography` - AES-256-GCM encryption
 - `argon2-cffi` - Password hashing
 - `pydantic` - Data validation
 
-### Step 4: Verify MITRE Data
-VectorVue uses MITRE ATT&CK® mappings for technique coverage:
-
+### Step 4: Verify MITRE Reference Data
 ```bash
-# Verify mitre_reference.txt exists in root directory
-ls -la mitre_reference.txt
+# Check if MITRE ATT&CK lookup table exists
+ls -lh mitre_reference.txt
 
-# Expected format: T-Code | Technique | Tactic | Description
-# Example: T1566 | Phishing | Initial Access | ...
+# Expected content: CSV with Technique ID, Name, Tactic, Description
+# Example: T1566,Phishing,Initial Access,Adversaries may send phishing messages...
 ```
 
-If the file is missing, the application will still work but MITRE lookups will be unavailable.
+## 3. First Launch & Configuration
 
-## 3. First Launch & Initial Setup
-
-### Launch VectorVue v3.0
+### Initial Startup
 ```bash
 python3 vv.py
 ```
 
-**You should see:**
-1. ✅ Application loads without errors
-2. ✅ Login screen appears (blue header with "VectorVue v3.0")
-3. ✅ Terminal renders colors correctly (Phosphor green #39FF14, cyan #00FFFF)
-4. ✅ Status bar shows "READY"
+**Expected behavior on first launch:**
+1. ✅ Application initializes without errors
+2. ✅ Registration screen appears (no users yet)
+3. ✅ Terminal displays colors correctly (green #39FF14, cyan #00FFFF)
+4. ✅ Status bar shows operational status
 
-### First-Time Initialization
-On first launch, VectorVue v3.0 will:
-1. Create `vectorvue.db` (operational database)
-2. Create `adversary.db` (intelligence database)
-3. Generate `vectorvue.salt` (encryption salt for session key derivation)
-4. Prompt you to create an **admin user**
+### Create Admin User
+The first user created automatically becomes ADMIN:
 
-**Create Admin Account:**
+1. Fill registration form:
+   - **Username:** Your operator identifier
+   - **Password:** Strong passphrase (min 12 chars recommended)
+   - **Confirm:** Re-enter password
+2. Press **REGISTER**
+3. Auto-redirected to login screen
+4. Log in with new credentials
+5. **Congratulations!** You're now authenticated as ADMIN
+
+### Create First Campaign
+After login:
+
+1. Click **INIT CAMPAIGN** (or press `Ctrl+K`)
+2. Fill campaign details:
+   - **Campaign Name:** e.g., "ACME Corp Red Team Q1 2026"
+   - **Client:** "ACME Corporation"
+   - **Operator Team:** Your team identifier
+   - **Start Date:** YYYY-MM-DD format
+   - **Objective:** "Comprehensive security assessment of..."
+   - **Rules of Engagement:** Operating hours, restrictions, sensitive systems
+   - **Classification:** CONFIDENTIAL or SECRET
+3. Press **CREATE CAMPAIGN**
+4. Campaign initializes with status **PLANNING**
+
+## 4. Database Initialization
+
+On first launch, VectorVue v3.4 automatically creates:
+
+| File | Purpose | Size | Notes |
+|------|---------|------|-------|
+| `vectorvue.db` | Operational data (41 tables) | ~100KB empty | SQLite3, encrypted |
+| `adversary.db` | Intelligence store | ~50KB empty | Secondary database |
+| `vectorvue.salt` | Encryption salt | 16 bytes | PBKDF2 salt, keep secure |
+
+**Important:** Back up `vectorvue.salt` immediately! Losing this file makes all encrypted data unrecoverable.
+
+## 5. Post-Installation Verification
+
+### Test Compilation
+```bash
+python3 -m py_compile vv.py vv_core.py vv_theme.py vv_fs.py
+# Clean output = success
 ```
+
+### Verify Database Schema
+```bash
+sqlite3 vectorvue.db ".tables"
+# Should list 41 tables: campaigns, findings, assets, credentials, actions, evidence_items, activity_log, users, ...
+```
+
+### Test Background Executor
+The RuntimeExecutor automatically starts on login and executes:
+- Scheduled tasks (every 30 seconds)
+- Webhook deliveries
+- Session timeout enforcement (120 min inactivity)
+- Data retention policies
+- Anomaly detection
+
+Monitor in status bar: `[Scheduler] 5 pending tasks executed`
+
+## 6. Data Storage & Backups
+
+### Backup Strategy
+```bash
+# Daily backup (before login)
+tar czf vectorvue-backup-$(date +%Y%m%d).tar.gz vectorvue.db adversary.db vectorvue.salt requirements.txt
+
+# Store securely (encrypted USB, cloud vault, etc.)
+```
+
+### Restore from Backup
+```bash
+# Stop VectorVue (logout)
+# Restore files
+tar xzf vectorvue-backup-YYYYMMDD.tar.gz
+
+# Restart VectorVue
+python3 vv.py
+```
+
+### Database Maintenance
+Clean up old data using retention policies:
+1. Press **Alt+6** (SecurityHardeningView)
+2. Configure retention policies:
+   - Findings: 90 days (archive)
+   - Credentials: 180 days (secure delete)
+   - Audit logs: 365 days (archive)
+   - Detection events: 30 days (secure delete)
+3. Runtime scheduler auto-executes nightly
+
+## 7. Security Hardening (Day 1)
+
+### Change Admin Password
+```
+1. Login as admin
+2. Press Ctrl+L (Logout)
+3. Login again with new password (prompted on next session)
+```
+
+### Create Team Users
+As ADMIN, invite operators:
+1. Press **Ctrl+K** → **Team Management**
+2. Click **ADD OPERATOR**
+3. Assign role: VIEWER, OPERATOR, or LEAD
+4. Operator receives credentials
+5. All actions attributed to their username in activity log
+
+### Enable Campaign Isolation
+Enforce that operators only see their assigned campaigns:
+1. Campaign settings → **Visibility Mode: TEAM_SCOPED**
+2. Teams only access findings/assets they create or are assigned
+3. ADMIN can override for audits
+
+### Review Audit Trail
+Check all activity:
+1. Press **Ctrl+1** (SituationalAwarenessView)
+2. Review **Activity Timeline**
+3. Verify operator attribution and timestamps
+
+## 8. Troubleshooting First Launch
+
+| Issue | Symptom | Solution |
+|-------|---------|----------|
+| Terminal colors wrong | Pink/brown instead of green/cyan | Update terminal (Alacritty recommended) |
+| Database errors | "Cannot open database file" | Check write permissions in current directory |
+| Import errors | ModuleNotFoundError: cryptography | Run `pip install -r requirements.txt` |
+| Encryption fails | "CRYPTO_AVAILABLE = False" | Install `cryptography` package |
+| MITRE missing | No tactic/technique suggestions | Place mitre_reference.txt in root directory |
+| Background tasks fail | Status: "Scheduler error" | Check logs in status bar, verify database connectivity |
+
+For more issues, see **TROUBLESHOOTING_GUIDE.md**.
+
+## 9. Next Steps
+
+### For Operators
+- [OPERATOR_MANUAL.md](./OPERATOR_MANUAL.md) - Daily workflows, keybindings, findings management
+
+### For Developers
+- [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md) - Database schema, design patterns, APIs
+
+### For Admins
+- [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md) - System diagnostics, recovery procedures
+
+---
+
+**VectorVue v3.4** | Production Ready | Phase 2/8 Complete
 Username: [your-username]
 Password: [strong-password-16+ chars recommended]
 Confirm Password: [re-enter]
