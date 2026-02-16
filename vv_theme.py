@@ -1,5 +1,5 @@
 """
-VectorVue v2.5 - Phosphor Cyberpunk Design System
+VectorVue v4.0 - Phosphor Cyberpunk Design System
 Centralized Theme & Layout Configuration
 """
 
@@ -9,6 +9,8 @@ class CyberColors:
     ELECTRIC_CYAN  = "#00FFFF"  # Accent: Selection, Info
     AMBER_WARNING  = "#FFBF00"  # Secondary: Warnings
     RED_ALERT      = "#FF0000"  # Critical: Errors, Delete
+    PURPLE_HAZE    = "#BD00FF"  # Campaign / Ops
+    CRIMSON_BLOOD  = "#DC143C"  # Attack Path / Critical Impact
     
     # Industrial Dark Mode Neutrals
     VOID_DARK      = "#050505"  # Deepest background
@@ -24,6 +26,8 @@ $p-green: {CyberColors.PHOSPHOR_GREEN};
 $e-cyan: {CyberColors.ELECTRIC_CYAN};
 $a-amber: {CyberColors.AMBER_WARNING};
 $r-alert: {CyberColors.RED_ALERT};
+$p-purple: {CyberColors.PURPLE_HAZE};
+$c-blood: {CyberColors.CRIMSON_BLOOD};
 $bg-void: {CyberColors.VOID_DARK};
 $bg-panel: {CyberColors.PANEL_GREY};
 $steel: {CyberColors.STEEL_BORDER};
@@ -232,6 +236,8 @@ Button:hover {{
 .btn-save:hover {{ background: $p-green; color: black; }}
 .btn-delete {{ border: solid $r-alert; color: $r-alert; }}
 .btn-delete:hover {{ background: $r-alert; color: black; }}
+.btn-purple {{ border: solid $p-purple; color: $p-purple; }}
+.btn-purple:hover {{ background: $p-purple; color: white; }}
 
 .info-box {{
     background: $bg-panel;
@@ -261,7 +267,58 @@ ListItem:hover {{ background: #1a1a1a; color: $e-cyan; }}
     margin-top: 1;
 }}
 
-/* --- SHUTDOWN SCREEN FIXED --- */
+/* --- CAMPAIGN VIEW --- */
+CampaignView {{
+    layout: vertical;
+    background: $bg-void;
+    height: 100%;
+    border-right: heavy $p-purple;
+}}
+
+#camp-header {{
+    height: auto;
+    background: #000;
+    border-bottom: solid $p-purple;
+    padding: 1;
+}}
+
+#camp-stats {{
+    layout: horizontal;
+    height: 3;
+    margin-bottom: 1;
+}}
+.stat-box {{ width: 1fr; content-align: center middle; border: solid $steel; color: $e-cyan; }}
+
+#camp-tabs {{
+    height: 3;
+    layout: horizontal;
+    border-bottom: solid $steel;
+}}
+
+.tab-btn {{
+    width: 1fr; border: none; background: #111; color: #666;
+}}
+.tab-btn:hover {{ color: white; }}
+.tab-active {{ color: $p-purple; text-style: bold; border-bottom: solid $p-purple; }}
+
+#camp-content {{
+    height: 1fr;
+    background: $bg-panel;
+}}
+
+.camp-table {{
+    height: 1fr;
+    width: 100%;
+}}
+
+#camp-form-container {{
+    height: auto;
+    border-top: solid $steel;
+    padding: 1;
+    background: #080808;
+}}
+
+/* --- SHUTDOWN SCREEN --- */
 ShutdownScreen {{
     align: center middle;
     background: $bg-void;

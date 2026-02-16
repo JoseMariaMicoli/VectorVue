@@ -9,7 +9,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import (
     ListView, ListItem, Label, Input,
-    TextArea, Button, Static, ContentSwitcher, DataTable
+    TextArea, Button, Static, ContentSwitcher, DataTable, TabbedContent, TabPane, Select
 )
 from textual.binding import Binding
 from textual.screen import Screen
@@ -18,7 +18,8 @@ from textual.message import Message
 
 try:
     from vv_core import (Database, Finding, IntelligenceEngine, CVSSCalculator,
-                         NIST_800_115_SKELETON, SessionCrypto, Role, role_gte)
+                         NIST_800_115_SKELETON, SessionCrypto, Role, role_gte,
+                         Campaign, Asset, Credential, Action)
     from vv_fs import FileSystemService
     from vv_file_manager import FileManagerView
     from vv_theme import CYBER_CSS, CyberColors
@@ -38,6 +39,101 @@ class VimDataTable(DataTable):
         Binding("G", "scroll_bottom", "Bottom", show=False),
         Binding("enter", "select_cursor", "Select"),
     ]
+
+# --- CAMPAIGN VIEW (New in v3.0) ---
+
+class CampaignView(Container):
+    CSS = """
+    #camp-controls Input, #camp-controls Select { margin-bottom: 1; }
+    """
+
+    class CampaignAction(Message):
+        def __init__(self, action_type: str):
+            self.action_type = action_type
+            super().__init__()
+
+    def compose(self) -> ComposeResult:
+        with Container(id="camp-header"):
+            yield Label("[bold purple]CAMPAIGN OPERATIONS[/]", classes="reg-title")
+            with Horizontal(id="camp-stats"):
+                yield Label("ASSETS: 0", id="stat-assets", classes="stat-box")
+                yield Label("CREDS: 0", id="stat-creds", classes="stat-box")
+                yield Label("ACTIONS: 0", id="stat-actions", classes="stat-box")
+        
+        with TabbedContent(initial="tab-assets"):
+            with TabPane("Assets", id="tab-assets"):
+                yield VimDataTable(id="table-assets", cursor_type="row")
+                with Container(id="camp-form-container"):
+                    with Horizontal():
+                        yield Input(id="inp-ast-name", placeholder="Asset Name (e.g., DC01)", classes="half-input")
+                        yield Select([("Host", "host"), ("User", "user"), ("Service", "service")], id="sel-ast-type", prompt="Type", classes="half-input")
+                    yield Input(id="inp-ast-ip", placeholder="IP / Address")
+                    yield Button("ADD ASSET", id="btn-add-asset", variant="primary")
+
+            with TabPane("Credentials", id="tab-creds"):
+                yield VimDataTable(id="table-creds", cursor_type="row")
+                with Container(id="camp-form-container"):
+                    with Horizontal():
+                        yield Input(id="inp-cred-id", placeholder="Username / ID", classes="half-input")
+                        yield Select([("Password", "password"), ("Hash", "hash"), ("Ticket", "ticket")], id="sel-cred-type", prompt="Type", classes="half-input")
+                    yield Input(id="inp-cred-secret", placeholder="Secret / Hash", password=True)
+                    yield Button("CAPTURE CREDENTIAL", id="btn-add-cred", variant="warning")
+
+            with TabPane("Timeline", id="tab-timeline"):
+                yield VimDataTable(id="table-actions", cursor_type="row")
+                with Container(id="camp-form-container"):
+                    with Horizontal():
+                        yield Input(id="inp-act-cmd", placeholder="Command Executed", classes="half-input")
+                        yield Input(id="inp-act-res", placeholder="Result / Outcome", classes="half-input")
+                    with Horizontal():
+                        yield Input(id="inp-act-mitre", placeholder="MITRE ID (T1059)", classes="half-input")
+                        yield Select([("Unknown", "unknown"), ("Detected", "detected"), ("Blocked", "blocked")], id="sel-act-detect", prompt="Detection", classes="half-input")
+                    yield Button("LOG ACTION", id="btn-add-action", classes="btn-purple")
+
+            with TabPane("Reports", id="tab-reports"):
+                yield Label("CAMPAIGN INTELLIGENCE", classes="cyber-label")
+                yield Button("GENERATE ATTACK PATH REPORT", id="btn-gen-report", variant="success")
+                yield TextArea(id="txt-report-preview", read_only=True)
+
+    def on_mount(self):
+        # Setup tables
+        dt_ast = self.query_one("#table-assets", DataTable)
+        dt_ast.add_columns("ID", "Name", "Type", "Address", "OS")
+        
+        dt_cred = self.query_one("#table-creds", DataTable)
+        dt_cred.add_columns("ID", "User", "Type", "Source")
+        
+        dt_act = self.query_one("#table-actions", DataTable)
+        dt_act.add_columns("Time", "Operator", "Technique", "Command", "Detection")
+
+    def refresh_data(self, app):
+        # Called by main app to reload tables
+        if not app.current_campaign_id: return
+        
+        # Assets
+        dt = self.query_one("#table-assets", DataTable)
+        dt.clear()
+        assets = app.db.list_assets(app.current_campaign_id)
+        for a in assets: dt.add_row(a.id, a.name, a.type, a.address, a.os)
+        self.query_one("#stat-assets").update(f"ASSETS: {len(assets)}")
+
+        # Creds
+        dt = self.query_one("#table-creds", DataTable)
+        dt.clear()
+        creds = app.db.list_credentials(app.current_campaign_id)
+        for c in creds: dt.add_row(c.id, c.identifier, c.cred_type, c.source)
+        self.query_one("#stat-creds").update(f"CREDS: {len(creds)}")
+
+        # Actions
+        dt = self.query_one("#table-actions", DataTable)
+        dt.clear()
+        actions = app.db.list_actions(app.current_campaign_id)
+        for a in actions: 
+            ts = a.timestamp.split("T")[1][:8]
+            dt.add_row(ts, a.operator, a.mitre_technique, a.command, a.detection)
+        self.query_one("#stat-actions").update(f"ACTIONS: {len(actions)}")
+
+# --- MITRE VIEW (Existing) ---
 
 class MitreIntelligenceView(Container):
     CSS = """
@@ -103,8 +199,7 @@ class MitreIntelligenceView(Container):
 
     @on(DataTable.RowHighlighted, "#mitre-table")
     def on_row_highlighted(self, event):
-        if not event.row_key.value:
-            return
+        if not event.row_key.value: return
         intel_engine = getattr(self.app, "intel", None)
         if intel_engine:
             technique = intel_engine.lookup_mitre(event.row_key.value)
@@ -123,30 +218,16 @@ class MitreIntelligenceView(Container):
                 self.post_message(self.TechniqueSelected(technique.id, technique.name))
 
 # =============================================================================
-# REGISTER VIEW (shown when no users exist)
+# REGISTER VIEW
 # =============================================================================
 
 class RegisterView(Container):
-    """First-run registration screen. First user becomes ADMIN automatically."""
-
-    class RegisterSuccess(Message):
-        pass
+    class RegisterSuccess(Message): pass
 
     CSS = """
-    RegisterView {
-        align: center middle;
-        background: $bg-void;
-        height: 100%;
-    }
-    #register-container {
-        width: 64; height: auto;
-        border: heavy $p-green; background: #000; padding: 2;
-        align: center middle;
-    }
-    .reg-title {
-        color: $p-green; text-style: bold;
-        margin-bottom: 2; width: 100%; content-align: center middle;
-    }
+    RegisterView { align: center middle; background: $bg-void; height: 100%; }
+    #register-container { width: 64; height: auto; border: heavy $p-green; background: #000; padding: 2; align: center middle; }
+    .reg-title { color: $p-green; text-style: bold; margin-bottom: 2; width: 100%; content-align: center middle; }
     #reg-status { color: $r-alert; margin-top: 1; text-align: center; }
     """
 
@@ -161,8 +242,7 @@ class RegisterView(Container):
             yield Button("REGISTER", id="reg-btn", variant="success")
             yield Label("", id="reg-status")
 
-    def on_mount(self):
-        self.query_one("#reg-username").focus()
+    def on_mount(self): self.query_one("#reg-username").focus()
 
     @on(Button.Pressed, "#reg-btn")
     def attempt_register(self):
@@ -171,26 +251,19 @@ class RegisterView(Container):
         confirm  = self.query_one("#reg-confirm").value
         group    = self.query_one("#reg-group").value.strip() or "default"
         status   = self.query_one("#reg-status")
-
         if password != confirm:
             status.update("PASSWORDS DO NOT MATCH")
             return
-
         ok, msg = self.app.db.register_user(username, password, group_name=group)
-        if ok:
-            self.post_message(self.RegisterSuccess())
-        else:
-            status.update(msg)
+        if ok: self.post_message(self.RegisterSuccess())
+        else: status.update(msg)
 
 # =============================================================================
 # LOGIN VIEW
 # =============================================================================
 
 class LoginView(Container):
-    """Standard login after users exist."""
-
-    class LoginSuccess(Message):
-        pass
+    class LoginSuccess(Message): pass
 
     def compose(self) -> ComposeResult:
         with Container(id="login-container"):
@@ -200,27 +273,21 @@ class LoginView(Container):
             yield Button("AUTHENTICATE", id="login-btn", variant="success")
             yield Label("", id="login-status")
 
-    def on_mount(self):
-        self.query_one("#login-username").focus()
+    def on_mount(self): self.query_one("#login-username").focus()
 
     @on(Button.Pressed, "#login-btn")
-    def attempt_login(self):
-        self.submit_login()
+    def attempt_login(self): self.submit_login()
 
     @on(Input.Submitted, "#login-input")
-    def on_submit(self):
-        self.submit_login()
+    def on_submit(self): self.submit_login()
 
     def submit_login(self):
         username = self.query_one("#login-username").value.strip()
         phrase   = self.query_one("#login-input").value
         status   = self.query_one("#login-status")
-
         if not username or not phrase:
             status.update("USERNAME AND PASSPHRASE REQUIRED")
             return
-
-        # Derive DB encryption key from passphrase (canary check)
         if self.app.crypto.derive_key(phrase):
             temp_db = Database(self.app.crypto)
             if not temp_db.verify_or_set_canary():
@@ -231,13 +298,9 @@ class LoginView(Container):
         else:
             status.update("KDF FAILURE")
             return
-
-        # Authenticate user against RBAC user table
         ok, msg = self.app.db.authenticate_user(username, phrase)
-        if ok:
-            self.post_message(self.LoginSuccess())
-        else:
-            status.update(f"AUTH FAILED: {msg}")
+        if ok: self.post_message(self.LoginSuccess())
+        else: status.update(f"AUTH FAILED: {msg}")
 
 # =============================================================================
 # SHUTDOWN VIEWS
@@ -245,20 +308,13 @@ class LoginView(Container):
 
 class ShutdownConfirmationView(Container):
     CSS = """
-    ShutdownConfirmationView {
-        align: center middle; background: $bg-void; height: 100%;
-        border-right: heavy $e-cyan;
-    }
-    #confirm-box {
-        width: 60; height: auto; background: #111;
-        border: heavy $r-alert; padding: 2; text-align: center;
-    }
+    ShutdownConfirmationView { align: center middle; background: $bg-void; height: 100%; border-right: heavy $e-cyan; }
+    #confirm-box { width: 60; height: auto; background: #111; border: heavy $r-alert; padding: 2; text-align: center; }
     .warn-title { color: $r-alert; text-style: bold; margin-bottom: 2; width: 100%; }
     .warn-text  { color: white; margin-bottom: 2; width: 100%; }
     #shutdown-btn-row { align: center middle; height: 5; }
     #shutdown-btn-row Button { width: 16; margin: 0 2; }
     """
-
     def compose(self) -> ComposeResult:
         with Container(id="confirm-box"):
             yield Label("⚠️ TERMINATION SEQUENCE INITIATED", classes="warn-title")
@@ -268,12 +324,10 @@ class ShutdownConfirmationView(Container):
                 yield Button("ABORT",   id="btn-conf-abort", variant="primary")
 
     @on(Button.Pressed, "#btn-conf-exec")
-    def execute_shutdown(self):
-        self.app.push_screen(ShutdownScreen())
+    def execute_shutdown(self): self.app.push_screen(ShutdownScreen())
 
     @on(Button.Pressed, "#btn-conf-abort")
-    def abort_shutdown(self):
-        self.app.action_return_to_editor()
+    def abort_shutdown(self): self.app.action_return_to_editor()
 
 class ShutdownScreen(Screen):
     def compose(self) -> ComposeResult:
@@ -295,8 +349,7 @@ class ShutdownScreen(Screen):
     async def run_shutdown_sequence(self):
         await asyncio.sleep(0.5)
         if hasattr(self.app, 'db') and self.app.db:
-            if self.app.db.current_user:
-                self.app.db.logout()
+            if self.app.db.current_user: self.app.db.logout()
             self.app.db.close()
         lbl_db = self.query_one("#st-db")
         lbl_db.update("[LOCKED]")
@@ -319,17 +372,15 @@ class HeaderHUD(Static):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield Label("VECTORVUE v2.5 [TACTICAL]", classes="hud-title")
+            yield Label("VECTORVUE v3.0 [RED TEAM]", classes="hud-title")
             yield Label(" PROJECT:", classes="hud-label-sm")
             yield Input(value="DEFAULT", id="hud-project-input", classes="hud-input", disabled=True)
             yield Label(f"// BUFFER: {self.current_file}", id="hud-file-lbl", classes="hud-file")
 
     def watch_current_file(self, val):
         if self.is_mounted:
-            try:
-                self.query_one("#hud-file-lbl").update(f"// BUFFER: {val}")
-            except Exception:
-                pass
+            try: self.query_one("#hud-file-lbl").update(f"// BUFFER: {val}")
+            except Exception: pass
 
 class FindingItem(ListItem):
     def __init__(self, finding: Finding) -> None:
@@ -337,10 +388,8 @@ class FindingItem(ListItem):
         self.finding = finding
 
     def compose(self) -> ComposeResult:
-        try:
-            score = float(self.finding.cvss_score)
-        except (ValueError, TypeError):
-            score = 0.0
+        try: score = float(self.finding.cvss_score)
+        except (ValueError, TypeError): score = 0.0
         icon  = "⚡" if score >= 9.0 else "●"
         color = "white"
         if score >= 9.0:   color = CyberColors.RED_ALERT
@@ -363,12 +412,14 @@ class CyberTUI(App):
         Binding("q",      "quit_app",             "Quit"),
         Binding("space",  "toggle_file_manager",  "Files"),
         Binding("ctrl+m", "toggle_mitre_view",    "MITRE DB"),
+        Binding("ctrl+k", "toggle_campaign",      "Campaign"),
         Binding("ctrl+s", "save_db",              "Save"),
         Binding("ctrl+l", "action_logout",        "Logout"),
         Binding("escape", "return_to_editor",     "Editor"),
     ]
 
     current_project_id = reactive("DEFAULT")
+    current_campaign_id = reactive(None)
 
     def compose(self) -> ComposeResult:
         yield HeaderHUD(id="hud-header")
@@ -376,12 +427,13 @@ class CyberTUI(App):
         with ContentSwitcher(initial="login-view", id="view-switcher"):
             yield LoginView(id="login-view")
             yield RegisterView(id="register-view")
-
+            
             with Container(id="editor-view"):
                 yield TextArea(language="markdown", theme="dracula", id="editor-main")
 
             yield FileManagerView(id="fm-view")
             yield MitreIntelligenceView(id="mitre-view")
+            yield CampaignView(id="campaign-view")
             yield ShutdownConfirmationView(id="shutdown-view")
 
         with Container(id="lateral-tools"):
@@ -395,18 +447,22 @@ class CyberTUI(App):
             yield Label("OPERATOR:", classes="cyber-label")
             yield Static("LOCKED", id="info-user", classes="info-box")
 
+            yield Label("CAMPAIGN ACTIVE:", classes="cyber-label")
+            yield Button("INIT CAMPAIGN", id="btn-init-camp", classes="btn-purple", disabled=True)
+            yield Label("", id="lbl-active-camp", classes="info-box")
+
             yield Label("VECTOR TITLE:", classes="cyber-label")
             yield Input(id="inp-title", placeholder="Vulnerability Title...", disabled=True)
             yield Label("CVSS VECTOR:", classes="cyber-label")
             yield Input(id="inp-vector", placeholder="CVSS:3.1/AV:N/AC:L...", disabled=True)
+            
             yield Label("SCORE / MITRE ID:", classes="cyber-label")
             with Horizontal(classes="input-row"):
-                yield Input(id="inp-score", type="number", placeholder="9.8",
-                            classes="half-input", disabled=True)
-                yield Input(id="inp-mitre", placeholder="T1548",
-                            classes="half-input", disabled=True)
+                yield Input(id="inp-score", type="number", placeholder="9.8", classes="half-input", disabled=True)
+                yield Input(id="inp-mitre", placeholder="T1548", classes="half-input", disabled=True)
 
             yield Button("MITRE INTEL", id="btn-mitre-menu", disabled=True)
+            yield Button("CAMPAIGN OPS", id="btn-camp-ops", classes="btn-purple", disabled=True)
 
             yield Label("FINDINGS QUEUE:", classes="cyber-label")
             yield ListView(id="findings-list")
@@ -419,8 +475,6 @@ class CyberTUI(App):
 
             yield Label("EXPORT:", classes="cyber-label")
             yield Button("EXPORT .MD",       id="btn-save-md",      disabled=True)
-            yield Button("EXPORT .JSON",     id="btn-export-json",  disabled=True)
-            yield Button("EXPORT .CSV",      id="btn-export-csv",   disabled=True)
             yield Button("MITRE NAVIGATOR",  id="btn-export-nav",   disabled=True)
 
             yield Label("SYSTEM:", classes="cyber-label")
@@ -436,17 +490,13 @@ class CyberTUI(App):
         self.intel       = None
         self.current_id  = None
 
-        # Route to register or login based on whether users exist
         sw = self.query_one("#view-switcher")
         if not self.db.has_users():
             sw.current = "register-view"
             self.update_status("FIRST RUN: REGISTER YOUR ADMIN ACCOUNT", CyberColors.AMBER_WARNING)
         else:
-            # Attempt session resume
-            if self.db.resume_session():
-                self._post_login_setup()
-            else:
-                sw.current = "login-view"
+            if self.db.resume_session(): self._post_login_setup()
+            else: sw.current = "login-view"
 
     # -------------------------------------------------------------------------
     # AUTH FLOW
@@ -465,8 +515,7 @@ class CyberTUI(App):
         user = self.db.current_user
         role_label = user.role.upper() if user else "UNKNOWN"
         uname = user.username if user else "?"
-        self.update_status(
-            f"ACCESS GRANTED [{role_label}] — {uname}", CyberColors.PHOSPHOR_GREEN)
+        self.update_status(f"ACCESS GRANTED [{role_label}] — {uname}", CyberColors.PHOSPHOR_GREEN)
         self.intel = IntelligenceEngine()
         self.query_one("#view-switcher").current = "editor-view"
         self.query_one("#hud-header").current_file = "NEW BUFFER"
@@ -475,16 +524,18 @@ class CyberTUI(App):
         self.unlock_ui()
         os.makedirs("05-Delivery", exist_ok=True)
         self.refresh_list()
+        
+        # Auto-load existing campaign for project if exists
+        camps = self.db.list_campaigns(self.current_project_id)
+        if camps:
+            self.current_campaign_id = camps[0].id
+            self.query_one("#lbl-active-camp").update(camps[0].name)
 
     def unlock_ui(self):
         user = self.db.current_user
-        for widget in self.query("#lateral-tools Input"):
-            widget.disabled = False
-        for widget in self.query("#lateral-tools Button"):
-            widget.disabled = False
+        for widget in self.query("#lateral-tools Input"): widget.disabled = False
+        for widget in self.query("#lateral-tools Button"): widget.disabled = False
         self.query_one("#hud-project-input").disabled = False
-
-        # Restrict delete to LEAD+
         if user and not role_gte(user.role, Role.LEAD):
             self.query_one("#btn-del").disabled = True
 
@@ -492,10 +543,8 @@ class CyberTUI(App):
         self.db.logout()
         self.current_id = None
         self.intel = None
-        for widget in self.query("#lateral-tools Input"):
-            widget.disabled = True
-        for widget in self.query("#lateral-tools Button"):
-            widget.disabled = True
+        for widget in self.query("#lateral-tools Input"): widget.disabled = True
+        for widget in self.query("#lateral-tools Button"): widget.disabled = True
         self.query_one("#btn-exit").disabled = False
         self.query_one("#info-user").update("LOCKED")
         self.query_one("#view-switcher").current = "login-view"
@@ -518,8 +567,7 @@ class CyberTUI(App):
     def action_toggle_file_manager(self):
         if not self.db.current_user: return
         sw = self.query_one("#view-switcher")
-        if sw.current == "fm-view":
-            self.action_return_to_editor()
+        if sw.current == "fm-view": self.action_return_to_editor()
         else:
             sw.current = "fm-view"
             self.query_one("FileManagerView")._focus_tree()
@@ -528,12 +576,23 @@ class CyberTUI(App):
     def action_toggle_mitre_view(self):
         if not self.db.current_user: return
         sw = self.query_one("#view-switcher")
-        if sw.current == "mitre-view":
-            self.action_return_to_editor()
+        if sw.current == "mitre-view": self.action_return_to_editor()
         else:
             sw.current = "mitre-view"
             self.query_one("MitreIntelligenceView").focus_search()
             self.update_status("MODE: INTELLIGENCE LOOKUP", CyberColors.ELECTRIC_CYAN)
+
+    def action_toggle_campaign(self):
+        if not self.db.current_user: return
+        if not self.current_campaign_id:
+            self.update_status("NO CAMPAIGN ACTIVE - INIT FIRST", CyberColors.AMBER_WARNING)
+            return
+        sw = self.query_one("#view-switcher")
+        if sw.current == "campaign-view": self.action_return_to_editor()
+        else:
+            sw.current = "campaign-view"
+            self.query_one("CampaignView").refresh_data(self)
+            self.update_status("MODE: RED TEAM OPS", CyberColors.PURPLE_HAZE)
 
     def action_return_to_editor(self):
         if not self.db.current_user: return
@@ -551,6 +610,16 @@ class CyberTUI(App):
         self.current_project_id = val
         self.new_entry()
         self.refresh_list()
+        
+        # Try load campaign
+        self.current_campaign_id = None
+        camps = self.db.list_campaigns(val)
+        if camps:
+            self.current_campaign_id = camps[0].id
+            self.query_one("#lbl-active-camp").update(camps[0].name)
+        else:
+            self.query_one("#lbl-active-camp").update("[NONE]")
+            
         self.update_status(f"PROJECT ACTIVE: {self.current_project_id}", CyberColors.ELECTRIC_CYAN)
 
     def refresh_list(self):
@@ -573,12 +642,18 @@ class CyberTUI(App):
         elif bid == "btn-new":          self.new_entry()
         elif bid == "btn-del":          self.delete_entry()
         elif bid == "btn-save-md":      self.export_md()
-        elif bid == "btn-export-json":  self.export_format("json")
-        elif bid == "btn-export-csv":   self.export_format("csv")
         elif bid == "btn-export-nav":   self.export_format("navigator")
         elif bid == "btn-file-mgr":     self.action_toggle_file_manager()
         elif bid == "btn-mitre-menu":   self.action_toggle_mitre_view()
+        elif bid == "btn-camp-ops":     self.action_toggle_campaign()
         elif bid == "btn-nist":         self.load_nist_template()
+        elif bid == "btn-init-camp":    self.init_campaign()
+        
+        # Campaign Actions
+        elif bid == "btn-add-asset":    self.camp_add_asset()
+        elif bid == "btn-add-cred":     self.camp_add_cred()
+        elif bid == "btn-add-action":   self.camp_add_action()
+        elif bid == "btn-gen-report":   self.camp_gen_report()
 
     def load_nist_template(self):
         self.new_entry()
@@ -586,6 +661,63 @@ class CyberTUI(App):
         self.query_one("#editor-main").load_text(template)
         self.query_one("#inp-title").value = f"NIST_Report_{self.current_project_id}"
         self.update_status("NIST TEMPLATE LOADED", CyberColors.PHOSPHOR_GREEN)
+
+    def init_campaign(self):
+        name = f"OP_{self.current_project_id}"
+        ok, msg = self.db.create_campaign(name, self.current_project_id)
+        if ok:
+            camp = self.db.get_campaign_by_name(name)
+            self.current_campaign_id = camp.id
+            self.query_one("#lbl-active-camp").update(name)
+            self.update_status(msg, CyberColors.PURPLE_HAZE)
+        else:
+            self.update_status(f"ERROR: {msg}", CyberColors.RED_ALERT)
+
+    # --- CAMPAIGN HANDLERS ---
+    
+    def camp_add_asset(self):
+        if not self.current_campaign_id: return
+        name = self.query_one("#inp-ast-name").value
+        atype = self.query_one("#sel-ast-type").value
+        addr = self.query_one("#inp-ast-ip").value
+        if name and atype:
+            self.db.add_asset(self.current_campaign_id, atype, name, address=addr)
+            self.query_one("CampaignView").refresh_data(self)
+            self.query_one("#inp-ast-name").value = ""
+            self.update_status(f"ASSET ADDED: {name}", CyberColors.PURPLE_HAZE)
+
+    def camp_add_cred(self):
+        if not self.current_campaign_id: return
+        ident = self.query_one("#inp-cred-id").value
+        ctype = self.query_one("#sel-cred-type").value
+        secret = self.query_one("#inp-cred-secret").value
+        if ident and ctype and secret:
+            # For demo, just linking to first asset or null
+            self.db.add_credential(self.current_campaign_id, None, ctype, ident, secret, "manual")
+            self.query_one("CampaignView").refresh_data(self)
+            self.query_one("#inp-cred-secret").value = ""
+            self.update_status(f"CREDENTIAL CAPTURED", CyberColors.PURPLE_HAZE)
+
+    def camp_add_action(self):
+        if not self.current_campaign_id: return
+        cmd = self.query_one("#inp-act-cmd").value
+        res = self.query_one("#inp-act-res").value
+        mitre = self.query_one("#inp-act-mitre").value
+        det = self.query_one("#sel-act-detect").value
+        if cmd:
+            self.db.log_action(self.current_campaign_id, None, mitre or "T1059", cmd, res, det or "unknown")
+            self.query_one("CampaignView").refresh_data(self)
+            self.query_one("#inp-act-cmd").value = ""
+            self.update_status(f"ACTION LOGGED", CyberColors.PURPLE_HAZE)
+
+    def camp_gen_report(self):
+        if not self.current_campaign_id: return
+        report = self.db.generate_campaign_report(self.current_campaign_id)
+        self.query_one("#txt-report-preview").load_text(report)
+        # Auto export
+        path = Path("05-Delivery") / f"Campaign_Report_{self.current_project_id}.md"
+        FileSystemService.atomic_write(path, report)
+        self.update_status("REPORT GENERATED & EXPORTED", CyberColors.PHOSPHOR_GREEN)
 
     # -------------------------------------------------------------------------
     # MITRE
@@ -611,10 +743,8 @@ class CyberTUI(App):
 
     @on(Input.Changed, "#inp-score")
     def on_score(self, event):
-        try:
-            self.update_risk(float(event.value))
-        except Exception:
-            pass
+        try: self.update_risk(float(event.value))
+        except Exception: pass
 
     def update_risk(self, score):
         sev = self.query_one("#info-severity")
@@ -650,11 +780,8 @@ class CyberTUI(App):
     # -------------------------------------------------------------------------
 
     def save_db(self):
-        try:
-            score = float(self.query_one("#inp-score").value)
-        except Exception:
-            score = 0.0
-
+        try: score = float(self.query_one("#inp-score").value)
+        except Exception: score = 0.0
         f = Finding(
             id=self.current_id,
             title=self.query_one("#inp-title").value or "Untitled",
@@ -666,10 +793,8 @@ class CyberTUI(App):
             cvss_vector=self.query_one("#inp-vector").value,
         )
         try:
-            if self.current_id:
-                self.db.update_finding(f)
-            else:
-                self.current_id = self.db.add_finding(f)
+            if self.current_id: self.db.update_finding(f)
+            else: self.current_id = self.db.add_finding(f)
             self.refresh_list()
             self.update_status("DATABASE SYNCED", CyberColors.PHOSPHOR_GREEN)
         except PermissionError as e:
@@ -725,17 +850,10 @@ class CyberTUI(App):
     def export_format(self, fmt: str):
         try:
             pid = self.current_project_id
-            if fmt == "json":
-                content = self.db.export_json(pid)
-                ext = ".json"
-            elif fmt == "csv":
-                content = self.db.export_csv(pid)
-                ext = ".csv"
-            elif fmt == "navigator":
+            if fmt == "navigator":
                 content = self.db.export_mitre_navigator(pid)
                 ext = "_navigator.json"
-            else:
-                return
+            else: return
             fname = pid.replace(" ", "_") + ext
             path  = Path("05-Delivery") / fname
             FileSystemService.atomic_write(path, content)
@@ -744,8 +862,6 @@ class CyberTUI(App):
             self.update_status(f"PERMISSION DENIED: {e}", CyberColors.RED_ALERT)
 
 if __name__ == '__main__':
-    if sys.platform == "win32":
-        os.system("cls")
-    else:
-        os.system("clear")
+    if sys.platform == "win32": os.system("cls")
+    else: os.system("clear")
     CyberTUI().run()
