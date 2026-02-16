@@ -15,6 +15,7 @@ from textual.widgets import (
 from textual.binding import Binding
 from textual.screen import Screen, ModalScreen
 from textual.reactive import reactive
+from textual.message import Message
 
 # Custom Modules
 try:
@@ -26,65 +27,141 @@ except ImportError as e:
     print(f"CRITICAL: Dependency missing. {e}")
     sys.exit(1)
 
-# --- CUSTOM SCREENS ---
+# --- CUSTOM WIDGETS & VIEWS ---
 
-class MitreLookupScreen(ModalScreen):
-    """Overlay to search and select MITRE techniques"""
+class VimDataTable(DataTable):
+    """DataTable with Vim-style navigation bindings"""
+    BINDINGS = [
+        Binding("j", "cursor_down", "Down", show=False),
+        Binding("k", "cursor_up", "Up", show=False),
+        Binding("g", "scroll_top", "Top", show=False),
+        Binding("G", "scroll_bottom", "Bottom", show=False),
+        Binding("enter", "select_cursor", "Select"),
+    ]
+
+class MitreIntelligenceView(Container):
+    """
+    Integrated View for MITRE ATT&CK Knowledge Base.
+    Replaces the modal lookup screen.
+    """
     CSS = """
-    MitreLookupScreen {
-        align: center middle;
-        background: rgba(0,0,0,0.8);
+    MitreIntelligenceView {
+        layout: vertical;
+        background: $bg-void;
+        height: 100%;
+        border-right: heavy $e-cyan;
     }
-    #mitre-container {
-        width: 80%;
-        height: 80%;
-        background: #111;
-        border: heavy #00FFFF;
+    
+    #mitre-search-bar {
+        height: auto;
         padding: 1;
+        background: $bg-panel;
+        border-bottom: solid $steel;
     }
-    #mitre-search { margin-bottom: 1; }
-    DataTable { height: 1fr; border: solid #444; }
+
+    #mitre-split-container {
+        layout: horizontal;
+        height: 1fr;
+    }
+
+    #mitre-table-pane {
+        width: 1fr;
+        height: 100%;
+        border-right: solid $p-green;
+        background: $bg-panel;
+    }
+
+    #mitre-preview-pane {
+        width: 1fr;
+        height: 100%;
+        padding: 1;
+        background: $bg-panel;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+    }
+
+    .mitre-header {
+        color: $e-cyan;
+        text-style: bold;
+        border-bottom: solid $steel;
+        margin-bottom: 1;
+    }
+
+    #mitre-preview-content {
+        color: #ddd;
+    }
     """
 
+    class TechniqueSelected(Message):
+        """Message sent when a technique is chosen."""
+        def __init__(self, technique_id: str, technique_name: str) -> None:
+            self.technique_id = technique_id
+            self.technique_name = technique_name
+            super().__init__()
+
     def compose(self) -> ComposeResult:
-        with Container(id="mitre-container"):
-            yield Label("[bold cyan]MITRE ATT&CK KNOWLEDGE BASE[/]")
-            yield Input(placeholder="Search ID or Name...", id="mitre-search")
-            yield DataTable(id="mitre-table", cursor_type="row")
-            yield Button("CLOSE", id="btn-close-mitre", variant="error")
+        # Search Bar
+        with Container(id="mitre-search-bar"):
+            yield Label("[bold cyan]MITRE ATT&CK SEARCH[/]")
+            yield Input(placeholder="Search ID (T1000) or Name...", id="mitre-search-input")
+
+        # Split View (Table + Preview)
+        with Container(id="mitre-split-container"):
+            with Vertical(id="mitre-table-pane"):
+                yield VimDataTable(id="mitre-table", cursor_type="row")
+            
+            with Vertical(id="mitre-preview-pane"):
+                yield Label("TECHNIQUE INTEL", classes="mitre-header")
+                yield Static("Select a technique to view details.", id="mitre-preview-content")
 
     def on_mount(self):
-        dt = self.query_one(DataTable)
-        dt.add_columns("ID", "Technique Name", "Description (Truncated)")
-        self.refresh_table("")
-        self.query_one("#mitre-search").focus()
+        dt = self.query_one("#mitre-table", VimDataTable)
+        dt.add_columns("ID", "Technique Name")
+        self.populate_table("")
 
-    @on(Input.Changed, "#mitre-search")
-    def on_search(self, event):
-        self.refresh_table(event.value)
+    def focus_search(self):
+        self.query_one("#mitre-search-input").focus()
 
-    def refresh_table(self, query):
-        dt = self.query_one(DataTable)
+    @on(Input.Changed, "#mitre-search-input")
+    def on_search_changed(self, event):
+        self.populate_table(event.value)
+
+    def populate_table(self, query):
+        dt = self.query_one("#mitre-table", VimDataTable)
         dt.clear()
-        results = self.app.intel.search_techniques(query)
-        for t in results:
-            desc_short = t.description[:60] + "..." if len(t.description) > 60 else t.description
-            dt.add_row(t.id, t.name, desc_short, key=t.id)
+        
+        # Access IntelligenceEngine from the main App
+        if hasattr(self.app, "intel"):
+            results = self.app.intel.search_techniques(query)
+            for t in results:
+                # Store full object in key for retrieval
+                dt.add_row(t.id, t.name, key=t.id)
 
-    @on(DataTable.RowSelected)
-    def on_row_selected(self, event):
-        row_key = event.row_key.value
-        technique = self.app.intel.lookup_mitre(row_key)
+    @on(DataTable.RowHighlighted, "#mitre-table")
+    def on_row_highlighted(self, event):
+        """Update preview pane when moving through the list"""
+        if not event.row_key.value:
+            return
+            
+        tech_id = event.row_key.value
+        technique = self.app.intel.lookup_mitre(tech_id)
+        
+        preview = self.query_one("#mitre-preview-content")
         if technique:
-            # Pass back to main app
-            self.app.query_one("#inp-mitre").value = technique.id
-            self.app.query_one("#inp-title").value = technique.name
-            self.app.update_status(f"IMPORTED: {technique.id}", CyberColors.ELECTRIC_CYAN)
-        self.dismiss()
+            content = (
+                f"[bold yellow]ID:[/] {technique.id}\n"
+                f"[bold yellow]NAME:[/] {technique.name}\n\n"
+                f"[bold white]DESCRIPTION:[/]\n{technique.description}"
+            )
+            preview.update(content)
 
-    @on(Button.Pressed, "#btn-close-mitre")
-    def close_screen(self):
-        self.dismiss()
+    @on(DataTable.RowSelected, "#mitre-table")
+    def on_row_selected(self, event):
+        """Handle selection (Enter/Click)"""
+        tech_id = event.row_key.value
+        technique = self.app.intel.lookup_mitre(tech_id)
+        if technique:
+            self.post_message(self.TechniqueSelected(technique.id, technique.name))
 
 class HeaderHUD(Static):
     """Top Banner with Project & File Info"""
@@ -172,7 +249,9 @@ class CyberTUI(App):
     BINDINGS = [
         Binding("q", "quit_app", "Quit"),
         Binding("space", "toggle_file_manager", "Files"),
+        Binding("ctrl+m", "toggle_mitre_view", "MITRE DB"),
         Binding("ctrl+s", "save_db", "Save"),
+        Binding("escape", "return_to_editor", "Editor"),
     ]
     
     current_project_id = reactive("DEFAULT")
@@ -180,11 +259,19 @@ class CyberTUI(App):
     def compose(self) -> ComposeResult:
         yield HeaderHUD(id="hud-header")
         
+        # Main Viewport Switcher
         with ContentSwitcher(initial="editor-view", id="view-switcher"):
+            # 1. Editor View
             with Container(id="editor-view"):
                 yield TextArea(language="markdown", theme="dracula", id="editor-main")
+            
+            # 2. File Manager View
             yield FileManagerView(id="fm-view")
 
+            # 3. MITRE Intelligence View (New)
+            yield MitreIntelligenceView(id="mitre-view")
+
+        # Sidebar / Tooling
         with Container(id="lateral-tools"):
             # Risk Info
             yield Label("RISK ASSESSMENT:", classes="cyber-label")
@@ -243,6 +330,50 @@ class CyberTUI(App):
         bar.update(f"[{ts}] {msg}")
         bar.styles.color = color
 
+    # --- VIEW NAVIGATION ---
+    
+    def action_toggle_file_manager(self):
+        sw = self.query_one("#view-switcher")
+        if sw.current == "fm-view":
+            self.action_return_to_editor()
+        else:
+            sw.current = "fm-view"
+            self.query_one("FileManagerView")._focus_tree()
+            self.update_status("MODE: FILESYSTEM", CyberColors.ELECTRIC_CYAN)
+
+    def action_toggle_mitre_view(self):
+        sw = self.query_one("#view-switcher")
+        if sw.current == "mitre-view":
+            self.action_return_to_editor()
+        else:
+            sw.current = "mitre-view"
+            self.query_one("MitreIntelligenceView").focus_search()
+            self.update_status("MODE: INTELLIGENCE LOOKUP", CyberColors.ELECTRIC_CYAN)
+
+    def action_return_to_editor(self):
+        self.query_one("#view-switcher").current = "editor-view"
+        self.query_one("#editor-main").focus()
+        self.update_status("MODE: EDITOR", CyberColors.PHOSPHOR_GREEN)
+
+    # --- MITRE EVENT HANDLING ---
+
+    @on(MitreIntelligenceView.TechniqueSelected)
+    def on_mitre_selected(self, message: MitreIntelligenceView.TechniqueSelected):
+        """Handler for when a user selects a technique from the integrated view"""
+        # 1. Update Inputs
+        self.query_one("#inp-mitre").value = message.technique_id
+        
+        # Only overwrite title if it's empty to avoid wiping user work
+        current_title = self.query_one("#inp-title").value
+        if not current_title:
+            self.query_one("#inp-title").value = message.technique_name
+        
+        # 2. Switch back to editor
+        self.action_return_to_editor()
+        
+        # 3. Notify
+        self.update_status(f"IMPORTED: {message.technique_id}", CyberColors.ELECTRIC_CYAN)
+
     # --- PROJECT LOGIC ---
     @on(Input.Changed, "#hud-project-input")
     def on_project_changed(self, event):
@@ -270,7 +401,7 @@ class CyberTUI(App):
         elif bid == "btn-del": self.delete_entry()
         elif bid == "btn-save-md": self.export_md()
         elif bid == "btn-file-mgr": self.action_toggle_file_manager()
-        elif bid == "btn-mitre-menu": self.app.push_screen(MitreLookupScreen())
+        elif bid == "btn-mitre-menu": self.action_toggle_mitre_view()
         elif bid == "btn-nist": self.load_nist_template()
 
     def load_nist_template(self):
@@ -307,7 +438,7 @@ class CyberTUI(App):
         
         sev.update(txt); sev.add_class(cls); sc.add_class(cls)
 
-    # MITRE Input Handler (Direct typing)
+    # MITRE Input Handler (Direct typing in Sidebar)
     @on(Input.Changed, "#inp-mitre")
     def on_mitre_text(self, event):
         val = event.value.strip().upper()
@@ -356,15 +487,6 @@ class CyberTUI(App):
             self.db.delete_finding(self.current_id)
             self.new_entry()
             self.refresh_list()
-
-    def action_toggle_file_manager(self):
-        sw = self.query_one("#view-switcher")
-        if sw.current == "editor-view":
-            sw.current = "fm-view"
-            self.query_one("FileManagerView")._focus_tree()
-        else:
-            sw.current = "editor-view"
-            self.query_one("#editor-main").focus()
 
     @on(FileManagerView.FileSelected)
     def on_file(self, event):
