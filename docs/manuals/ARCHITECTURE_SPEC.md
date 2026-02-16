@@ -1,8 +1,8 @@
-# Architecture Specification
+# VectorVue v3.0 Architecture Specification
 
-![Type](https://img.shields.io/badge/Type-Technical-purple?style=flat-square) ![Component](https://img.shields.io/badge/Component-Core-blue?style=flat-square)
+![Type](https://img.shields.io/badge/Type-Technical_Deep_Dive-9945FF?style=flat-square) ![Version](https://img.shields.io/badge/Version-3.0-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Production_Ready-00FFFF?style=flat-square)
 
-VectorVue v2.1 utilizes a "Split-Core" architecture, separating the UI Presentation Layer (Textual) from the Data Persistence Layer (SQLite/FS). This ensures that UI rendering lags do not corrupt data operations.
+Complete technical architecture for VectorVue v3.0 Red Team Campaign Management Platform. This document covers the Five Pillars design, database schema, RBAC implementation, cryptography, and system-level patterns.
 
 ## 1. Component Diagram
 
@@ -63,3 +63,111 @@ The UI is governed by a centralized theme file (`vv_theme.py`). It defines CSS v
 *   `$bg-void` (#050505): Application background (High Contrast).
 
 This palette is chosen to maximize readability in low-light environments typical of security operations centers.
+
+---
+
+## v3.0 New Architecture: Five Pillars
+
+VectorVue v3.0 is built on five foundational components:
+
+### 1. **SessionCrypto Layer** (vv_core.py)
+- **PBKDF2 Key Derivation:** 480,000 iterations
+- **Encryption Cipher:** Fernet AES-256 (symmetric)
+- **Salt Persistence:** Stored in `vectorvue.salt`
+- **Row-Level Integrity:** HMAC signing on all database records
+- **Function:** All sensitive data encrypted before disk write
+
+### 2. **Database Orchestration** (vv_core.py)
+- **Dual-Database Strategy:**
+  - `vectorvue.db`: Operational store
+  - `adversary.db`: Intelligence secondary store
+- **Schema Version:** v3.0 with migration support
+- **Transaction Manager:** Atomic via `_TransactionContext`
+- **Pattern:** Never plaintext to disk
+
+### 3. **UI Controller** (vv.py)
+- **Framework:** Textual 0.90+
+- **Architecture:** Hard view-switching
+- **RBAC:** Enforced at controller level
+- **Audit:** Every mutation logged
+
+### 4. **File System Abstraction** (vv_fs.py)
+- **Atomic Writes:** Temp + fsync + replace
+- **Secure Wipe:** Multi-pass overwrite
+- **Hash Integrity:** SHA256 for evidence
+- **C2 Ingestion:** Log parsing to markdown
+
+### 5. **Theme System** (vv_theme.py)
+- **Colors:** 22 Phosphor cyberpunk palette
+- **CSS:** 50+ semantic classes
+- **OPSEC:** Caution, evidence, audit, approval indicators
+
+---
+
+## RBAC & Access Control
+
+**Role Hierarchy:**
+- VIEWER (0) < OPERATOR (1) < LEAD (2) < ADMIN (3)
+
+**Permission Matrix:**
+- VIEWER: Read-only
+- OPERATOR: Create findings, collect evidence
+- LEAD: Approve findings, manage evidence
+- ADMIN: User management, campaign deletion
+
+---
+
+## Campaign Isolation
+
+**Pattern:** All data scoped to campaign_id. No global scope queries allowed.
+
+---
+
+## Evidence Chain of Custody
+
+- **Immutable:** Cannot edit after creation
+- **Hashed:** SHA256 verification
+- **Signed:** HMAC signatures on records
+- **Auditable:** Tracked in activity_log
+
+---
+
+## Approval Workflow
+
+Findings: `PENDING` → `APPROVED` (LEAD+) or `REJECTED` (LEAD+)
+
+---
+
+## Activity Timeline
+
+Complete audit log with:
+- Operator attribution
+- Timestamp (ISO 8601)
+- Action type
+- Target context
+- Severity classification
+
+---
+
+## Security Safeguards
+
+✅ No plaintext passwords (AES-256 encrypted)  
+✅ Campaign isolation enforced  
+✅ Immutable evidence items  
+✅ HMAC-signed records  
+✅ Approval required for reports  
+✅ Sensitive host warnings  
+✅ Session expiry (auto-logout)  
+✅ Dual-logging (activity_log + audit_log)  
+
+---
+
+## Related Documentation
+
+- [Getting Started](./GETTING_STARTED.md) - Deployment
+- [Operator Manual](./OPERATOR_MANUAL.md) - Daily workflows
+- [Troubleshooting](./TROUBLESHOOTING_GUIDE.md) - Error diagnosis
+
+---
+
+**VectorVue v3.0** | Red Team Campaign Management Platform | v3.0-RC1
