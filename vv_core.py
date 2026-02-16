@@ -590,6 +590,9 @@ class Finding:
     assigned_to: Optional[int] = None
     visibility: str = "group"
     tags: str = ""
+    approval_status: str = "pending"  # v3.0: pending, approved, rejected
+    approved_by: Optional[int] = None
+    approval_timestamp: str = ""
 
     def calculate_evidence_hash(self) -> str:
         if not self.evidence:
@@ -597,7 +600,9 @@ class Finding:
         return hashlib.sha256(self.evidence.encode('utf-8')).hexdigest()
 
 @dataclass
+@dataclass
 class MitreTechnique:
+    """MITRE ATT&CK technique reference."""
     id: str
     name: str
     description: str
@@ -777,6 +782,33 @@ class IntelligenceEngine:
         return results
 
 # =============================================================================
+# TRANSACTION CONTEXT (v3.0)
+# =============================================================================
+
+class _TransactionContext:
+    """Context manager for atomic database transactions.
+    
+    Usage:
+        with db.transaction():
+            db.add_asset(...)
+            db.add_credential(...)
+            # Commits on exit, rolls back on exception
+    """
+    def __init__(self, conn):
+        self.conn = conn
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.conn.rollback()
+            return False
+        else:
+            self.conn.commit()
+            return False
+
+# =============================================================================
 # DATABASE
 # =============================================================================
 
@@ -858,6 +890,17 @@ class Database:
             ("assigned_to",      "INTEGER DEFAULT NULL"),
             ("visibility",       "TEXT DEFAULT 'group'"),
             ("tags",             "TEXT DEFAULT ''"),
+        ]:
+            try:
+                c.execute(f"ALTER TABLE findings ADD COLUMN {col} {typedef}")
+            except Exception:
+                pass
+        
+        # v3.0 Approval Workflow
+        for col, typedef in [
+            ("approval_status", "TEXT DEFAULT 'pending'"),
+            ("approved_by", "INTEGER DEFAULT NULL"),
+            ("approval_timestamp", "TEXT DEFAULT ''"),
         ]:
             try:
                 c.execute(f"ALTER TABLE findings ADD COLUMN {col} {typedef}")
@@ -945,12 +988,60 @@ class Database:
             dst_id      INTEGER,
             integrity_hash TEXT DEFAULT '')''')
 
+        # v3.0 Evidence Chain of Custody
+        c.execute('''CREATE TABLE IF NOT EXISTS evidence_items (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id         INTEGER REFERENCES campaigns(id),
+            finding_id          INTEGER REFERENCES findings(id),
+            artifact_type       TEXT NOT NULL,
+            description         TEXT,
+            sha256_hash         TEXT UNIQUE NOT NULL,
+            collected_by        INTEGER REFERENCES users(id),
+            collection_method   TEXT,
+            collected_timestamp TEXT NOT NULL,
+            source_host         TEXT,
+            technique_id        TEXT,
+            approval_status     TEXT DEFAULT 'pending',
+            approved_by         INTEGER REFERENCES users(id),
+            approval_timestamp  TEXT DEFAULT '',
+            immutable           INTEGER DEFAULT 1)''')
+        
+        # v3.0 Activity Timeline (detailed audit)
+        c.execute('''CREATE TABLE IF NOT EXISTS activity_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER REFERENCES campaigns(id),
+            actor           TEXT NOT NULL,
+            action_type     TEXT NOT NULL,
+            target_type     TEXT,
+            target_id       TEXT,
+            timestamp       TEXT NOT NULL,
+            context_json    TEXT,
+            severity        TEXT DEFAULT 'info')''')
+
         # Seed defaults
         c.execute("INSERT OR IGNORE INTO groups (name, description) VALUES (?, ?)",
                   ("default", "Default operator group"))
         c.execute("INSERT OR IGNORE INTO projects (name, description) VALUES (?, ?)",
                   ("DEFAULT", "Default project"))
         self.conn.commit()
+
+    # -------------------------------------------------------------------------
+    # TRANSACTION SUPPORT (v3.0)
+    # -------------------------------------------------------------------------
+    
+    def transaction(self):
+        """Context manager for atomic database transactions.
+        
+        Usage:
+            with self.db.transaction():
+                self.db.add_asset(...)
+                self.db.log_action(...)
+                # Auto-commit on exit, auto-rollback on exception
+        
+        Returns:
+            _TransactionContext manager
+        """
+        return _TransactionContext(self.conn)
 
     # -------------------------------------------------------------------------
     # CANARY & AUTH (Existing v2.5 Logic)
@@ -1163,13 +1254,21 @@ class Database:
             return False, "Campaign name exists."
 
     def list_campaigns(self, project_id: str) -> List[Campaign]:
+        """List campaigns for a project (read-only, no auth required)."""
         c = self.conn.cursor()
-        c.execute("SELECT * FROM campaigns WHERE project_id=?", (project_id,))
+        c.execute("SELECT * FROM campaigns WHERE project_id=? ORDER BY created_at DESC", (project_id,))
         return [Campaign(r["id"], r["name"], r["project_id"], r["created_at"], r["created_by"], r["status"]) for r in c.fetchall()]
 
     def get_campaign_by_name(self, name: str) -> Optional[Campaign]:
         c = self.conn.cursor()
         c.execute("SELECT * FROM campaigns WHERE name=?", (name,))
+        r = c.fetchone()
+        return Campaign(r["id"], r["name"], r["project_id"], r["created_at"], r["created_by"], r["status"]) if r else None
+
+    def get_campaign_by_id(self, campaign_id: int) -> Optional[Campaign]:
+        """Get campaign by ID - validates existence for campaign isolation."""
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,))
         r = c.fetchone()
         return Campaign(r["id"], r["name"], r["project_id"], r["created_at"], r["created_by"], r["status"]) if r else None
 
@@ -1192,13 +1291,31 @@ class Database:
         return aid
 
     def list_assets(self, campaign_id: int) -> List[Asset]:
+        """List all assets in campaign (read-only, no auth required)."""
         c = self.conn.cursor()
-        c.execute("SELECT * FROM assets WHERE campaign_id=?", (campaign_id,))
+        c.execute("SELECT * FROM assets WHERE campaign_id=? ORDER BY first_seen ASC", (campaign_id,))
         return [Asset(r["id"], r["campaign_id"], r["type"], r["name"], r["address"], r["os"], r["tags"], r["first_seen"], r["last_seen"]) for r in c.fetchall()]
 
     # --- CREDENTIALS ---
 
-    def add_credential(self, campaign_id: int, asset_id: int, cred_type: str, identifier: str, secret: str, source: str) -> int:
+    def add_credential(self, campaign_id: int, asset_id: Optional[int], cred_type: str, identifier: str, secret: str, source: str) -> int:
+        """Capture credential with automatic encryption and immutability.
+        
+        Args:
+            campaign_id: Campaign this credential belongs to
+            asset_id: Associated asset ID (optional, can be None for network credentials)
+            cred_type: Type of credential (password, hash, ticket, key, token)
+            identifier: Username, account name, or ID
+            secret: Plaintext secret (will be encrypted at rest)
+            source: How credential was obtained (manual, dumped, captured, etc.)
+        
+        Returns:
+            ID of created credential record
+        
+        Note:
+            Credentials are immutable after creation. Once captured, they cannot be edited,
+            only viewed or deleted (with LEAD+ role).
+        """
         self._require_role(Role.OPERATOR)
         now = datetime.utcnow().isoformat()
         enc_secret = self.crypto.encrypt(secret)
@@ -1212,11 +1329,11 @@ class Database:
                   (campaign_id, asset_id, cred_type, identifier, enc_secret, source, self.current_user.id, now, h))
         self.conn.commit()
         cid = c.lastrowid
-        self._audit(self.current_user.username, "CAPTURE_CRED", "credential", str(cid))
+        self._audit(self.current_user.username, "CAPTURE_CRED", "credential", str(cid), new_value=f"{cred_type}:{identifier[:20]}")
         return cid
 
     def list_credentials(self, campaign_id: int) -> List[Credential]:
-        self._require_role(Role.OPERATOR)
+        """List credentials in campaign (read-only, no auth required)."""
         c = self.conn.cursor()
         c.execute("SELECT * FROM credentials WHERE campaign_id=?", (campaign_id,))
         res = []
@@ -1227,27 +1344,38 @@ class Database:
 
     # --- ACTIONS & TIMELINE ---
 
-    def log_action(self, campaign_id: int, asset_id: int, mitre_technique: str, command: str, result: str, detection: str) -> int:
+    def log_action(self, campaign_id: int, operator: str, mitre_technique: str, command: str, result: str, detection: str) -> int:
+        """Log operator action to campaign timeline with MITRE mapping.
+        
+        Args:
+            campaign_id: Campaign this action belongs to
+            operator: Username of operator (or None for current user)
+            mitre_technique: MITRE ID (e.g., T1059)
+            command: Command executed
+            result: Outcome of command
+            detection: Detection status (detected, missed, blocked, unknown)
+        
+        Returns:
+            ID of created action record
+        """
         self._require_role(Role.OPERATOR)
         now = datetime.utcnow().isoformat()
-        operator = self.current_user.username
+        # Use provided operator or current user
+        op_name = operator or (self.current_user.username if self.current_user else "unknown")
+        asset_id = None  # Asset ID determined at capture time; can be None for remote actions
         
-        row_data = [campaign_id, asset_id, mitre_technique, command, result, operator, now, detection]
+        row_data = [campaign_id, asset_id, mitre_technique, command, result, op_name, now, detection]
         h = self.crypto.calculate_row_hmac(row_data)
 
         c = self.conn.cursor()
         c.execute("""INSERT INTO actions (campaign_id, asset_id, mitre_technique, command, result, operator, timestamp, detection, integrity_hash)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                  (campaign_id, asset_id, mitre_technique, command, result, operator, now, detection, h))
+                  (campaign_id, asset_id, mitre_technique, command, result, op_name, now, detection, h))
         self.conn.commit()
         aid = c.lastrowid
         
-        # Auto-update asset last_seen
-        if asset_id:
-            c.execute("UPDATE assets SET last_seen=? WHERE id=?", (now, asset_id))
-            self.conn.commit()
-            
-        self._audit(self.current_user.username, "EXEC_ACTION", "action", str(aid), new_value=mitre_technique)
+        # Note: asset_id auto-update removed — actions may not be tied to specific assets
+        self._audit(self.current_user.username if self.current_user else "SYSTEM", "EXEC_ACTION", "action", str(aid), new_value=f"{mitre_technique}:{command[:30]}")
         return aid
 
     def list_actions(self, campaign_id: int) -> List[Action]:
@@ -1270,7 +1398,42 @@ class Database:
 
     # --- ATTACK PATH & REPORTING (v3.0) ---
 
-    def build_attack_path(self, campaign_id: int) -> str:
+    def verify_campaign_integrity(self, campaign_id: int) -> Tuple[bool, List[str]]:
+        """Verify campaign data integrity by checking HMAC values.
+        
+        Returns:
+            (is_valid, list_of_invalid_records)
+        """
+        if not self.crypto: return True, []
+        
+        c = self.conn.cursor()
+        issues = []
+        
+        # Check assets
+        c.execute("SELECT * FROM assets WHERE campaign_id=?", (campaign_id,))
+        for r in c.fetchall():
+            row_data = [r["campaign_id"], r["type"], r["name"], r["address"], r["os"], r["tags"], r["first_seen"], r["last_seen"]]
+            expected = self.crypto.calculate_row_hmac(row_data)
+            if expected != r["integrity_hash"]:
+                issues.append(f"Asset {r['id']} {r['name']}: integrity mismatch")
+        
+        # Check credentials
+        c.execute("SELECT * FROM credentials WHERE campaign_id=?", (campaign_id,))
+        for r in c.fetchall():
+            row_data = [r["campaign_id"], r["asset_id"], r["cred_type"], r["identifier"], r["secret"], r["source"], r["captured_by"], r["captured_at"]]
+            expected = self.crypto.calculate_row_hmac(row_data)
+            if expected != r["integrity_hash"]:
+                issues.append(f"Credential {r['id']}: integrity mismatch")
+        
+        # Check actions
+        c.execute("SELECT * FROM actions WHERE campaign_id=?", (campaign_id,))
+        for r in c.fetchall():
+            row_data = [r["campaign_id"], r["asset_id"], r["mitre_technique"], r["command"], r["result"], r["operator"], r["timestamp"], r["detection"]]
+            expected = self.crypto.calculate_row_hmac(row_data)
+            if expected != r["integrity_hash"]:
+                issues.append(f"Action {r['id']}: integrity mismatch")
+        
+        return len(issues) == 0, issues
         actions = self.list_actions(campaign_id)
         if not actions: return "No actions logged."
         
@@ -1324,8 +1487,72 @@ class Database:
             percentages[tac] = round((counts["detected"] / counts["total"]) * 100, 1)
         
         return percentages
+    
+    def build_attack_path(self, campaign_id: int) -> str:
+        """Build chronological attack path narrative with MITRE mapping (v3.0).
+        
+        Creates a markdown-formatted timeline of all actions in a campaign,
+        grouped by MITRE ATT&CK tactic, showing the progression of the attack.
+        
+        Args:
+            campaign_id: Campaign to narrate
+        
+        Returns:
+            Markdown-formatted attack narrative
+        """
+        actions = self.list_actions(campaign_id)
+        if not actions:
+            return "No actions recorded in this campaign."
+        
+        # Group by tactic
+        intel = IntelligenceEngine()
+        by_tactic = {}
+        for a in actions:
+            tactic = intel.get_tactic_from_id(a.mitre_technique)
+            if tactic not in by_tactic:
+                by_tactic[tactic] = []
+            by_tactic[tactic].append(a)
+        
+        # Build narrative
+        narrative = []
+        tactic_order = [
+            "Reconnaissance", "Resource Development", "Initial Access",
+            "Execution", "Persistence", "Privilege Escalation",
+            "Defense Evasion", "Credential Access", "Discovery",
+            "Lateral Movement", "Collection", "Command and Control",
+            "Exfiltration", "Impact"
+        ]
+        
+        for tactic in tactic_order:
+            if tactic in by_tactic:
+                narrative.append(f"\n### {tactic}")
+                for a in by_tactic[tactic]:
+                    asset_info = f" on {a.asset_id}" if a.asset_id else ""
+                    detection_badge = "🟢 missed" if a.detection == "missed" else \
+                                     "🔴 detected" if a.detection == "detected" else \
+                                     "⛔ blocked" if a.detection == "blocked" else \
+                                     "❓ unknown"
+                    narrative.append(f"- **{a.timestamp}**: `{a.mitre_technique}` {detection_badge}")
+                    narrative.append(f"  - Command: `{a.command[:80]}{'...' if len(a.command) > 80 else ''}`")
+                    if a.result:
+                        narrative.append(f"  - Result: {a.result[:120]}{'...' if len(a.result) > 120 else ''}")
+                    narrative.append(f"  - Operator: {a.operator}{asset_info}")
+        
+        return "\n".join(narrative)
 
     def generate_campaign_report(self, campaign_id: int) -> str:
+        """Generate comprehensive campaign report with attack path narrative.
+        
+        Includes:
+        - Executive summary
+        - Chronological attack path
+        - Detection coverage statistics
+        - Compromised credentials (crown jewels)
+        - Integrity verification status
+        
+        Note: v3.0+ should implement approval workflow before export.
+        """
+        self._require_role(Role.OPERATOR)
         c = self.conn.cursor()
         c.execute("SELECT name FROM campaigns WHERE id=?", (campaign_id,))
         camp = c.fetchone()
@@ -1335,25 +1562,38 @@ class Database:
         coverage = self.calculate_detection_coverage(campaign_id)
         creds = self.list_credentials(campaign_id)
         
+        # v3.0: Include integrity verification
+        valid, issues = self.verify_campaign_integrity(campaign_id)
+        integrity_note = "✓ All evidence verified" if valid else f"⚠ {len(issues)} integrity issues found"
+        
         report = [f"# RED TEAM CAMPAIGN REPORT: {name.upper()}",
-                  f"**Date:** {datetime.utcnow().strftime('%Y-%m-%d')}",
+                  f"**Date Generated:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+                  f"**Integrity Status:** {integrity_note}",
                   "\n## 1. Executive Summary",
-                  "This report details the adversarial simulation conducted...",
+                  "This report documents the red team campaign including attack timeline, techniques employed, and detection results.",
                   "\n## 2. Attack Path Narrative\n",
                   path,
-                  "\n## 3. Detection Coverage",
+                  "\n## 3. Detection Coverage by Tactic",
                   "| Tactic | Detection Rate |",
                   "|--------|----------------|"]
         
         for tac, rate in coverage.items():
             report.append(f"| {tac} | {rate}% |")
             
-        report.append("\n## 4. Crown Jewels / Credentials Accessed")
-        for cr in creds:
-            report.append(f"- {cr.cred_type.upper()}: `{cr.identifier}` ({cr.source})")
+        report.append("\n## 4. Compromised Assets & Credentials")
+        if creds:
+            for cr in creds:
+                report.append(f"- **{cr.cred_type.upper()}**: `{cr.identifier}` (via {cr.source})")
+        else:
+            report.append("- No credentials captured in this campaign")
+            
+        if issues:
+            report.append("\n## 5. Data Integrity Issues")
+            for issue in issues:
+                report.append(f"- {issue}")
             
         actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "GEN_REPORT", "campaign", str(campaign_id))
+        self._audit(actor, "GEN_REPORT", "campaign", str(campaign_id), new_value=f"Report: {name}")
         
         return "\n".join(report)
 
@@ -1402,6 +1642,7 @@ class Database:
         return results
 
     def add_finding(self, f: Finding) -> int:
+        """Create finding with approval_status='pending' (v3.0)."""
         self._require_role(Role.OPERATOR)
         f.evidence_hash = f.calculate_evidence_hash()
         if self.current_user:
@@ -1411,45 +1652,159 @@ class Database:
         evid = self.crypto.encrypt(f.evidence)    if self.crypto else f.evidence
         rem  = self.crypto.encrypt(f.remediation) if self.crypto else f.remediation
         c = self.conn.cursor()
-        c.execute("""INSERT INTO findings (title, description, cvss_score, mitre_id, tactic_id, status, evidence, remediation, project_id, cvss_vector, evidence_hash, created_by, last_modified_by, assigned_to, visibility, tags)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                  (f.title, desc, f.cvss_score, f.mitre_id, f.tactic_id, f.status, evid, rem, f.project_id, f.cvss_vector, f.evidence_hash, f.created_by, f.last_modified_by, f.assigned_to, f.visibility, f.tags))
+        c.execute("""INSERT INTO findings (title, description, cvss_score, mitre_id, tactic_id, status, evidence, remediation, project_id, cvss_vector, evidence_hash, created_by, last_modified_by, assigned_to, visibility, tags, approval_status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (f.title, desc, f.cvss_score, f.mitre_id, f.tactic_id, f.status, evid, rem, f.project_id, f.cvss_vector, f.evidence_hash, f.created_by, f.last_modified_by, f.assigned_to, f.visibility, f.tags, "pending"))
         self.conn.commit()
         fid = c.lastrowid
         actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "CREATE_FINDING", "finding", str(fid), new_value=f.title)
+        self.log_audit_event(actor, "CREATE_FINDING", {"finding_id": fid, "title": f.title, "project_id": f.project_id, "type": "finding"})
         return fid
 
     def update_finding(self, f: Finding):
+        """Update finding (not allowed if approval_status != 'pending')."""
         if not f.id: return
         self._check_write_permission(f.id)
+        
+        # Check if finding is locked for editing (approved or rejected)
+        c = self.conn.cursor()
+        c.execute("SELECT approval_status FROM findings WHERE id=?", (f.id,))
+        row = c.fetchone()
+        if row and row["approval_status"] != "pending":
+            raise PermissionError(f"Cannot edit finding with status '{row['approval_status']}'. Only pending findings can be edited.")
+        
         f.evidence_hash = f.calculate_evidence_hash()
         if self.current_user: f.last_modified_by = self.current_user.id
         desc = self.crypto.encrypt(f.description) if self.crypto else f.description
         evid = self.crypto.encrypt(f.evidence)    if self.crypto else f.evidence
         rem  = self.crypto.encrypt(f.remediation) if self.crypto else f.remediation
-        c = self.conn.cursor()
         c.execute("""UPDATE findings SET title=?, description=?, cvss_score=?, mitre_id=?, status=?, evidence=?, remediation=?, project_id=?, cvss_vector=?, evidence_hash=?, last_modified_by=?, assigned_to=?, visibility=?, tags=?
                      WHERE id=?""",
                   (f.title, desc, f.cvss_score, f.mitre_id, f.status, evid, rem, f.project_id, f.cvss_vector, f.evidence_hash, f.last_modified_by, f.assigned_to, f.visibility, f.tags, f.id))
         self.conn.commit()
         actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "EDIT_FINDING", "finding", str(f.id), new_value=f.title)
+        self.log_audit_event(actor, "EDIT_FINDING", {"finding_id": f.id, "title": f.title, "type": "finding"})
 
     def delete_finding(self, fid: int):
+        """Delete finding (LEAD+ role required, v3.0)."""
         self._require_role(Role.LEAD)
         self._check_write_permission(fid)
         actor = self.current_user.username if self.current_user else "SYSTEM"
-        self._audit(actor, "DELETE_FINDING", "finding", str(fid))
+        self.log_audit_event(actor, "DELETE_FINDING", {"finding_id": fid, "type": "finding"})
         c = self.conn.cursor()
         c.execute("DELETE FROM findings WHERE id=?", (fid,))
         self.conn.commit()
+    
+    def approve_finding(self, finding_id: int) -> Tuple[bool, str]:
+        """Approve finding for report generation (LEAD+ required, v3.0).
+        
+        Args:
+            finding_id: Finding to approve
+        
+        Returns:
+            (success, message)
+        """
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        c.execute("SELECT approval_status FROM findings WHERE id=?", (finding_id,))
+        row = c.fetchone()
+        if not row: 
+            return False, "Finding not found."
+        if row["approval_status"] == "approved": 
+            return False, "Finding already approved."
+        if row["approval_status"] == "rejected": 
+            return False, "Cannot approve rejected finding. Create new finding instead."
+        
+        now = datetime.utcnow().isoformat()
+        c.execute("""UPDATE findings SET approval_status='approved', approved_by=?, approval_timestamp=? WHERE id=?""",
+                  (self.current_user.id, now, finding_id))
+        self.conn.commit()
+        self.log_audit_event(self.current_user.username, "APPROVE_FINDING", {"finding_id": finding_id, "type": "finding"})
+        return True, "Finding approved for export."
+    
+    def reject_finding(self, finding_id: int) -> Tuple[bool, str]:
+        """Reject finding (LEAD+ required, v3.0).
+        
+        Sets approval_status='rejected'. Finding must be reworked or deleted.
+        """
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        c.execute("SELECT approval_status FROM findings WHERE id=?", (finding_id,))
+        row = c.fetchone()
+        if not row: 
+            return False, "Finding not found."
+        if row["approval_status"] == "approved": 
+            return False, "Cannot reject approved finding."
+        
+        now = datetime.utcnow().isoformat()
+        c.execute("""UPDATE findings SET approval_status='rejected', approved_by=?, approval_timestamp=? WHERE id=?""",
+                  (self.current_user.id, now, finding_id))
+        self.conn.commit()
+        self.log_audit_event(self.current_user.username, "REJECT_FINDING", {"finding_id": finding_id, "type": "finding"})
+        return True, "Finding rejected. Rework or delete before export."
 
     # -------------------------------------------------------------------------
-    # AUDIT LOG (v2.5)
+    # AUDIT LOG (v2.5 - Enhanced for v3.0)
     # -------------------------------------------------------------------------
+
+    def log_audit_event(self, actor: str, action: str, context: dict) -> str:
+        """Log an auditable event with structured context (v3.0 enhanced).
+        
+        Args:
+            actor: Username of the actor
+            action: Action type (FINDING_CREATED, ASSET_ADDED, CREDENTIAL_CAPTURED, etc.)
+            context: Dict with relevant context:
+                - campaign_id: (int) Campaign ID
+                - finding_id: (int) Finding ID  
+                - asset_id: (int) Asset ID
+                - asset: (str) Asset name
+                - title: (str) Finding/item title
+                - type: (str) Object type (finding, asset, credential, action, etc.)
+                - detail: (str) Additional details
+        
+        Returns:
+            Event ID for traceability
+        
+        Example:
+            db.log_audit_event("operator1", "ASSET_ADDED", {
+                "campaign_id": 42,
+                "asset": "DC01",
+                "type": "host"
+            })
+        """
+        ts = datetime.utcnow().isoformat()
+        context_str = json.dumps(context, sort_keys=True, default=str)
+        entry_id = hashlib.sha256(f"{ts}{actor}{action}{context_str}".encode()).hexdigest()[:32]
+        
+        # Determine severity from action type
+        severity = "info"
+        if action in ["DELETE_FINDING", "DELETE_CAMPAIGN", "LOGOUT"]:
+            severity = "warning"
+        elif action in ["AUTH_FAIL", "PERMISSION_DENIED"]:
+            severity = "warning"
+        
+        c = self.conn.cursor()
+        
+        # Log to activity_log table (v3.0 primary)
+        campaign_id = context.get("campaign_id")
+        target_type = context.get("type", "unknown")
+        target_id = str(context.get("id", context.get("asset", context.get("asset_id", ""))))
+        
+        c.execute("""INSERT INTO activity_log (campaign_id, actor, action_type, target_type, target_id, timestamp, context_json, severity)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (campaign_id, actor, action, target_type, target_id, ts, context_str, severity))
+        
+        # Also log to legacy audit_log for backward compatibility
+        context_hash = hashlib.sha256(context_str.encode()).hexdigest()
+        c.execute("""INSERT OR IGNORE INTO audit_log (id, timestamp, username, action, target_type, target_id, old_value_hash, new_value_hash)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (entry_id, ts, actor, action, target_type, target_id, "", context_hash))
+        
+        self.conn.commit()
+        return entry_id
 
     def _audit(self, actor: str, action: str, target_type: str, target_id: str = "", old_value: str = "", new_value: str = ""):
+        """Legacy audit method for backward compatibility."""
         ts = datetime.utcnow().isoformat()
         entry_id = hashlib.sha256(f"{ts}{actor}{action}{target_id}".encode()).hexdigest()[:32]
         old_hash = hashlib.sha256(old_value.encode()).hexdigest() if old_value else ""

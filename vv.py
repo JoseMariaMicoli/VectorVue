@@ -3,6 +3,7 @@ import sys
 import asyncio
 from datetime import datetime
 from pathlib import Path
+import logging
 
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -663,61 +664,121 @@ class CyberTUI(App):
         self.update_status("NIST TEMPLATE LOADED", CyberColors.PHOSPHOR_GREEN)
 
     def init_campaign(self):
+        """Initialize new campaign with audit log."""
+        user = self.db.current_user
         name = f"OP_{self.current_project_id}"
         ok, msg = self.db.create_campaign(name, self.current_project_id)
         if ok:
             camp = self.db.get_campaign_by_name(name)
-            self.current_campaign_id = camp.id
-            self.query_one("#lbl-active-camp").update(name)
-            self.update_status(msg, CyberColors.PURPLE_HAZE)
+            if camp:
+                self.current_campaign_id = camp.id
+                self.query_one("#lbl-active-camp").update(name)
+                self.db.log_audit_event(user.username, "CAMPAIGN_CREATED", {"campaign_id": camp.id, "name": name})
+                self.update_status(msg, CyberColors.PURPLE_HAZE)
+            else:
+                self.update_status("CAMPAIGN CREATED BUT NOT FOUND", CyberColors.AMBER_WARNING)
         else:
             self.update_status(f"ERROR: {msg}", CyberColors.RED_ALERT)
 
-    # --- CAMPAIGN HANDLERS ---
+    # --- CAMPAIGN HANDLERS (v3.0: Isolation, RBAC, Audit) ---
+    
+    def _validate_campaign_access(self) -> bool:
+        """Check campaign exists and user has operator+ permissions.
+        
+        Returns:
+            bool: True if valid, False otherwise (user gets status message).
+        """
+        if not self.current_campaign_id:
+            self.update_status("NO CAMPAIGN SELECTED", CyberColors.AMBER_WARNING)
+            return False
+        user = self.db.current_user
+        if not user or not role_gte(user.role, Role.OPERATOR):
+            self.update_status("CAMPAIGN OPS REQUIRE OPERATOR+ ROLE", CyberColors.RED_ALERT)
+            return False
+        camp = self.db.get_campaign_by_id(self.current_campaign_id)
+        if not camp:
+            self.update_status("CAMPAIGN NOT FOUND", CyberColors.RED_ALERT)
+            return False
+        return True
     
     def camp_add_asset(self):
-        if not self.current_campaign_id: return
-        name = self.query_one("#inp-ast-name").value
+        """Add asset to campaign with isolation and audit."""
+        if not self._validate_campaign_access(): return
+        user = self.db.current_user
+        name = self.query_one("#inp-ast-name").value.strip()
         atype = self.query_one("#sel-ast-type").value
-        addr = self.query_one("#inp-ast-ip").value
+        addr = self.query_one("#inp-ast-ip").value.strip()
         if name and atype:
-            self.db.add_asset(self.current_campaign_id, atype, name, address=addr)
-            self.query_one("CampaignView").refresh_data(self)
-            self.query_one("#inp-ast-name").value = ""
-            self.update_status(f"ASSET ADDED: {name}", CyberColors.PURPLE_HAZE)
+            try:
+                self.db.add_asset(self.current_campaign_id, atype, name, address=addr)
+                self.db.log_audit_event(user.username, "ASSET_ADDED", {"campaign_id": self.current_campaign_id, "asset": name})
+                self.query_one("CampaignView").refresh_data(self)
+                self.query_one("#inp-ast-name").value = ""
+                self.update_status(f"ASSET ADDED: {name}", CyberColors.PURPLE_HAZE)
+            except Exception as e:
+                self.update_status(f"ERROR: {e}", CyberColors.RED_ALERT)
+        else:
+            self.update_status("ASSET NAME AND TYPE REQUIRED", CyberColors.AMBER_WARNING)
 
     def camp_add_cred(self):
-        if not self.current_campaign_id: return
-        ident = self.query_one("#inp-cred-id").value
+        """Capture credential to campaign with encryption and audit."""
+        if not self._validate_campaign_access(): return
+        user = self.db.current_user
+        ident = self.query_one("#inp-cred-id").value.strip()
         ctype = self.query_one("#sel-cred-type").value
         secret = self.query_one("#inp-cred-secret").value
         if ident and ctype and secret:
-            # For demo, just linking to first asset or null
-            self.db.add_credential(self.current_campaign_id, None, ctype, ident, secret, "manual")
-            self.query_one("CampaignView").refresh_data(self)
-            self.query_one("#inp-cred-secret").value = ""
-            self.update_status(f"CREDENTIAL CAPTURED", CyberColors.PURPLE_HAZE)
+            try:
+                self.db.add_credential(self.current_campaign_id, None, ctype, ident, secret, "manual")
+                self.db.log_audit_event(user.username, "CREDENTIAL_CAPTURED", {"campaign_id": self.current_campaign_id, "identifier": ident})
+                self.query_one("CampaignView").refresh_data(self)
+                self.query_one("#inp-cred-secret").value = ""
+                self.update_status(f"CREDENTIAL CAPTURED [ENCRYPTED]", CyberColors.PURPLE_HAZE)
+            except Exception as e:
+                self.update_status(f"ERROR: {e}", CyberColors.RED_ALERT)
+        else:
+            self.update_status("CREDENTIALS AND TYPE REQUIRED", CyberColors.AMBER_WARNING)
 
     def camp_add_action(self):
-        if not self.current_campaign_id: return
-        cmd = self.query_one("#inp-act-cmd").value
-        res = self.query_one("#inp-act-res").value
-        mitre = self.query_one("#inp-act-mitre").value
-        det = self.query_one("#sel-act-detect").value
+        """Log operator action to campaign timeline with MITRE mapping and audit."""
+        if not self._validate_campaign_access(): return
+        user = self.db.current_user
+        cmd = self.query_one("#inp-act-cmd").value.strip()
+        res = self.query_one("#inp-act-res").value.strip()
+        mitre = self.query_one("#inp-act-mitre").value.strip() or "T1059"
+        det = self.query_one("#sel-act-detect").value or "unknown"
         if cmd:
-            self.db.log_action(self.current_campaign_id, None, mitre or "T1059", cmd, res, det or "unknown")
-            self.query_one("CampaignView").refresh_data(self)
-            self.query_one("#inp-act-cmd").value = ""
-            self.update_status(f"ACTION LOGGED", CyberColors.PURPLE_HAZE)
+            try:
+                self.db.log_action(self.current_campaign_id, user.username, mitre, cmd, res, det)
+                self.db.log_audit_event(user.username, "ACTION_LOGGED", {"campaign_id": self.current_campaign_id, "technique": mitre})
+                self.query_one("CampaignView").refresh_data(self)
+                self.query_one("#inp-act-cmd").value = ""
+                self.query_one("#inp-act-res").value = ""
+                self.update_status(f"ACTION LOGGED [{mitre}]", CyberColors.PURPLE_HAZE)
+            except Exception as e:
+                self.update_status(f"ERROR: {e}", CyberColors.RED_ALERT)
+        else:
+            self.update_status("COMMAND REQUIRED", CyberColors.AMBER_WARNING)
 
     def camp_gen_report(self):
-        if not self.current_campaign_id: return
-        report = self.db.generate_campaign_report(self.current_campaign_id)
-        self.query_one("#txt-report-preview").load_text(report)
-        # Auto export
-        path = Path("05-Delivery") / f"Campaign_Report_{self.current_project_id}.md"
-        FileSystemService.atomic_write(path, report)
-        self.update_status("REPORT GENERATED & EXPORTED", CyberColors.PHOSPHOR_GREEN)
+        """Generate campaign report with approval check (v3.0 roadmap)."""
+        if not self._validate_campaign_access(): return
+        user = self.db.current_user
+        try:
+            # TODO: v3.0 - Check approval_status of all campaign findings before export
+            # if not all approved: self.update_status(...); return
+            report = self.db.generate_campaign_report(self.current_campaign_id)
+            self.query_one("#txt-report-preview").load_text(report)
+            # Auto export to delivery folder
+            path = Path("05-Delivery") / f"Campaign_Report_{self.current_project_id}.md"
+            ok, msg = FileSystemService.atomic_write(path, report)
+            if ok:
+                self.db.log_audit_event(user.username, "REPORT_GENERATED", {"campaign_id": self.current_campaign_id, "path": str(path)})
+                self.update_status(f"REPORT GENERATED & EXPORTED: {msg}", CyberColors.PHOSPHOR_GREEN)
+            else:
+                self.update_status(f"EXPORT FAILED: {msg}", CyberColors.RED_ALERT)
+        except Exception as e:
+            self.update_status(f"REPORT ERROR: {e}", CyberColors.RED_ALERT)
 
     # -------------------------------------------------------------------------
     # MITRE
@@ -780,6 +841,8 @@ class CyberTUI(App):
     # -------------------------------------------------------------------------
 
     def save_db(self):
+        """Save finding with audit log."""
+        user = self.db.current_user
         try: score = float(self.query_one("#inp-score").value)
         except Exception: score = 0.0
         f = Finding(
@@ -793,12 +856,17 @@ class CyberTUI(App):
             cvss_vector=self.query_one("#inp-vector").value,
         )
         try:
-            if self.current_id: self.db.update_finding(f)
-            else: self.current_id = self.db.add_finding(f)
+            if self.current_id:
+                self.db.update_finding(f)
+                action = "FINDING_UPDATED"
+            else:
+                self.current_id = self.db.add_finding(f)
+                action = "FINDING_CREATED"
+            self.db.log_audit_event(user.username, action, {"finding_id": self.current_id, "title": f.title})
             self.refresh_list()
-            self.update_status("DATABASE SYNCED", CyberColors.PHOSPHOR_GREEN)
-        except PermissionError as e:
-            self.update_status(f"PERMISSION DENIED: {e}", CyberColors.RED_ALERT)
+            self.update_status("DATABASE SYNCED [AUDITED]", CyberColors.PHOSPHOR_GREEN)
+        except Exception as e:
+            self.update_status(f"SAVE FAILED: {e}", CyberColors.RED_ALERT)
 
     def new_entry(self):
         self.current_id = None
@@ -811,14 +879,21 @@ class CyberTUI(App):
         self.update_risk(0.0)
 
     def delete_entry(self):
+        """Destructive action: requires LEAD+ role and confirmation."""
         if not self.current_id: return
+        user = self.db.current_user
+        if not user or not role_gte(user.role, Role.LEAD):
+            self.update_status("PERMISSION DENIED: LEAD+ REQUIRED FOR DELETE", CyberColors.RED_ALERT)
+            return
         try:
+            # Log destructive action
+            self.db.log_audit_event(user.username, "FINDING_DELETED", {"finding_id": self.current_id})
             self.db.delete_finding(self.current_id)
             self.new_entry()
             self.refresh_list()
-            self.update_status("FINDING DELETED", CyberColors.AMBER_WARNING)
-        except PermissionError as e:
-            self.update_status(f"PERMISSION DENIED: {e}", CyberColors.RED_ALERT)
+            self.update_status("FINDING DELETED [AUDITED]", CyberColors.AMBER_WARNING)
+        except Exception as e:
+            self.update_status(f"DELETE FAILED: {e}", CyberColors.RED_ALERT)
 
     # -------------------------------------------------------------------------
     # FILE MANAGER
@@ -838,28 +913,42 @@ class CyberTUI(App):
     # -------------------------------------------------------------------------
 
     def export_md(self):
+        """Export findings as markdown with audit log."""
+        user = self.db.current_user
         try:
             content = self.db.export_markdown(self.current_project_id)
             title = self.current_project_id.replace(" ", "_") + ".md"
             path  = Path("05-Delivery") / title
-            FileSystemService.atomic_write(path, content)
-            self.update_status(f"EXPORTED MD: {title}", CyberColors.PHOSPHOR_GREEN)
-        except PermissionError as e:
-            self.update_status(f"PERMISSION DENIED: {e}", CyberColors.RED_ALERT)
+            ok, msg = FileSystemService.atomic_write(path, content)
+            if ok:
+                self.db.log_audit_event(user.username, "EXPORT_MARKDOWN", {"project_id": self.current_project_id, "path": str(path)})
+                self.update_status(f"EXPORTED MD: {title}", CyberColors.PHOSPHOR_GREEN)
+            else:
+                self.update_status(f"EXPORT FAILED: {msg}", CyberColors.RED_ALERT)
+        except Exception as e:
+            self.update_status(f"EXPORT ERROR: {e}", CyberColors.RED_ALERT)
 
     def export_format(self, fmt: str):
+        """Export findings in specified format with audit log."""
+        user = self.db.current_user
         try:
             pid = self.current_project_id
             if fmt == "navigator":
                 content = self.db.export_mitre_navigator(pid)
                 ext = "_navigator.json"
-            else: return
+            else:
+                self.update_status(f"UNKNOWN FORMAT: {fmt}", CyberColors.AMBER_WARNING)
+                return
             fname = pid.replace(" ", "_") + ext
             path  = Path("05-Delivery") / fname
-            FileSystemService.atomic_write(path, content)
-            self.update_status(f"EXPORTED: {fname}", CyberColors.PHOSPHOR_GREEN)
-        except PermissionError as e:
-            self.update_status(f"PERMISSION DENIED: {e}", CyberColors.RED_ALERT)
+            ok, msg = FileSystemService.atomic_write(path, content)
+            if ok:
+                self.db.log_audit_event(user.username, "EXPORT_FORMAT", {"project_id": pid, "format": fmt, "path": str(path)})
+                self.update_status(f"EXPORTED: {fname}", CyberColors.PHOSPHOR_GREEN)
+            else:
+                self.update_status(f"EXPORT FAILED: {msg}", CyberColors.RED_ALERT)
+        except Exception as e:
+            self.update_status(f"EXPORT ERROR: {e}", CyberColors.RED_ALERT)
 
 if __name__ == '__main__':
     if sys.platform == "win32": os.system("cls")
