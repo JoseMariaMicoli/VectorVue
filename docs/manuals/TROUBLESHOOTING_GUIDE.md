@@ -12,11 +12,11 @@ You may NOT:
 ✘ Remove copyright notices
 */
 
-# VectorVue v3.7 Troubleshooting Guide
+# VectorVue v3.8 Troubleshooting Guide
 
-![Version](https://img.shields.io/badge/Version-v3.7-39FF14) ![Phase](https://img.shields.io/badge/Phase-5/8_Complete-00FFFF)
+![Version](https://img.shields.io/badge/Version-v3.8-39FF14) ![Phase](https://img.shields.io/badge/Phase-5.5_Complete-39FF14)
 
-Common issues and solutions for VectorVue v3.7 red team campaign management platform.
+Common issues and solutions for VectorVue v3.8 red team campaign management platform with Operational Cognition support.
 
 ---
 
@@ -30,9 +30,10 @@ Common issues and solutions for VectorVue v3.7 red team campaign management plat
 6. [Evidence & Reporting (Phase 3)](#phase3)
 7. [Team Management (Phase 4)](#phase4)
 8. [Threat Intelligence (Phase 5)](#phase5)
-9. [Background Tasks & Performance](#background)
-10. [Cryptography & Security](#crypto)
-11. [Advanced Troubleshooting](#advanced)
+9. [Operational Cognition (Phase 5.5)](#phase5.5)
+10. [Background Tasks & Performance](#background)
+11. [Cryptography & Security](#crypto)
+12. [Advanced Troubleshooting](#advanced)
 
 ---
 
@@ -685,6 +686,244 @@ curl -H "x-apikey: YOUR_API_KEY" "https://api.virustotal.com/api/v3/feeds"
    - Press **Alt+3** (Analytics)
    - View operator metrics
    - Check if behavior is actually unusual
+
+---
+
+## <a name="phase5.5"></a>Operational Cognition (Phase 5.5)
+
+### Issue: "Cognition recommendations not appearing"
+
+**Cause:** Cognition modules not initialized or insufficient data for confidence threshold.
+
+**Solution:**
+
+1. **Verify cognition initialization:**
+   - Open campaign
+   - Press **Ctrl+Shift+C** (Cognition panel)
+   - Check status message
+
+2. **Check confidence level:**
+   - Confidence must be ≥ 0.3 for recommendations
+   - View current confidence: **Ctrl+Shift+O** (Objective view)
+   - If low, you need more campaign data (assets, credentials)
+
+3. **Force cognition refresh:**
+   ```python
+   # In Python shell
+   from vv_cognition_integration import CognitionOrchestrator
+   co = CognitionOrchestrator(campaign_id=1)
+   co.refresh_full_state()
+   ```
+
+### Issue: "Attack graph shows no paths to objective"
+
+**Cause:** Disconnected assets (no compromise relationships found) or objective unreachable from controlled assets.
+
+**Solution:**
+
+1. **Verify controlled assets:**
+   - Add assets you actually control to campaign
+   - Ensure relationships are established between assets
+   - Press **Ctrl+Shift+G** to view attack graph
+
+2. **Check asset relationships:**
+   ```sql
+   sqlite3 vectorvue.db
+   SELECT * FROM asset_relationships 
+   WHERE campaign_id = [your_campaign_id];
+   ```
+
+3. **Manually establish relationships:**
+   - In Campaign view, link assets with exploit/credential requirements
+   - Specify technique used (T-number if possible)
+
+### Issue: "Detection pressure stuck at low value"
+
+**Cause:** Activity log not recording detections, or pressure calculation disabled.
+
+**Solution:**
+
+1. **Verify activity log entries:**
+   ```sql
+   sqlite3 vectorvue.db
+   SELECT COUNT(*), action_type 
+   FROM activity_log 
+   WHERE campaign_id = [your_campaign_id] 
+   GROUP BY action_type;
+   ```
+
+2. **Check for detection events:**
+   - Log detections explicitly in detection log
+   - Press **Ctrl+D** → Add Detection
+
+3. **Force pressure recalculation:**
+   ```python
+   from vv_detection_pressure import DetectionPressureEngine
+   dpe = DetectionPressureEngine(campaign_id=1)
+   state = dpe.calculate_pressure()
+   print(f"Pressure: {state.value}")
+   ```
+
+### Issue: "Operator tempo recommendations seem off"
+
+**Cause:** Insufficient action history or tempo tracking disabled.
+
+**Solution:**
+
+1. **Check action history:**
+   ```sql
+   sqlite3 vectorvue.db
+   SELECT COUNT(*) as action_count, 
+          strftime('%Y-%m-%d %H:%M', created_at) as hour
+   FROM activity_log 
+   WHERE campaign_id = [your_campaign_id]
+   GROUP BY hour;
+   ```
+
+2. **Verify tempo metrics:**
+   - Press **Ctrl+Shift+O** → View Metrics
+   - Check "Last 6 Hours" action count
+
+3. **Reset tempo baseline (if needed):**
+   ```python
+   from vv_tempo import TempoEngine
+   te = TempoEngine(campaign_id=1)
+   analysis = te.analyze_tempo()
+   print(f"Intensity: {analysis.action_intensity}")
+   ```
+
+### Issue: "OpSec simulation shows unrealistic probabilities"
+
+**Cause:** Missing asset metadata or outdated technique profiles.
+
+**Solution:**
+
+1. **Verify asset properties:**
+   - Each asset needs: type (Windows/Linux), criticality (critical/high/medium/low), environment (prod/staging/dev)
+   - Update in Campaign view → Assets
+
+2. **Check technique profile data:**
+   ```python
+   from vv_opsec import OpSecSimulator
+   opsec = OpSecSimulator()
+   # Profiles built-in for 10 MITRE techniques:
+   # T1566, T1071, T1570, T1059, T1548, T1098, T1547, T1134, T1197, T1110
+   ```
+
+3. **Simulate specific action manually:**
+   ```python
+   from vv_cognition import OperatorAction
+   from vv_opsec import OpSecSimulator
+   
+   action = OperatorAction(
+       technique_id="T1566",
+       target_asset_id=5,
+       description="Phishing email"
+   )
+   opsec = OpSecSimulator()
+   result = opsec.simulate(action)
+   print(result)
+   ```
+
+### Issue: "Confidence score always low (<0.3)"
+
+**Cause:** Insufficient environment mapping or incomplete observations.
+
+**Solution:**
+
+1. **Check data completeness:**
+   - Press **Ctrl+Shift+O** → Confidence Analysis
+   - View "Data Gaps" section
+
+2. **Add missing information:**
+   - Discover more assets (increase asset count)
+   - Harvest more credentials
+   - Log detections observed during campaign
+
+3. **View confidence factors:**
+   ```python
+   from vv_confidence import ConfidenceEngine
+   ce = ConfidenceEngine(campaign_id=1)
+   conf = ce.calculate_confidence()
+   print(f"Data: {conf.data_completeness}")
+   print(f"Observations: {conf.observation_count}")
+   print(f"Path Stability: {conf.path_stability}")
+   print(f"Overall: {conf.overall_confidence}")
+   ```
+
+### Issue: "C2 infrastructure burn level marked as 'burned' incorrectly"
+
+**Cause:** False positive in detection correlation, or manual entry error.
+
+**Solution:**
+
+1. **Review burn detections:**
+   - Press **Ctrl+Shift+C** → Infrastructure Burn
+   - Click to view detections attributed to this C2
+
+2. **Verify detection log entries:**
+   ```sql
+   sqlite3 vectorvue.db
+   SELECT detection_log.*, detection_events.description
+   FROM detection_log
+   JOIN detection_events ON ...
+   WHERE campaign_id = [your_campaign_id]
+   AND detection_description LIKE '%C2%' OR '%192.168.1.50%';
+   ```
+
+3. **Manually adjust burn probability:**
+   ```python
+   from vv_infra_burn import InfraBurnEngine
+   ibe = InfraBurnEngine(campaign_id=1)
+   # Reset specific C2
+   ibe.update_burn(c2_id=123, manual_override=True, burn_level="warm")
+   ```
+
+### Issue: "Event replay log seems incomplete"
+
+**Cause:** Events not being recorded, or replay initialization failed.
+
+**Solution:**
+
+1. **Verify replay events exist:**
+   ```sql
+   sqlite3 vectorvue.db
+   SELECT COUNT(*) FROM replay_events 
+   WHERE campaign_id = [your_campaign_id];
+   ```
+
+2. **Force event recording on next action:**
+   - Perform any operator action (e.g., add finding)
+   - Event should be recorded automatically
+
+3. **Generate campaign narrative:**
+   - Press **Ctrl+Shift+C** → Campaign Narrative
+   - Should show event timeline
+
+### Issue: "Recommendation scores all zero"
+
+**Cause:** Recommendation engine not loaded, or no valid actions to score.
+
+**Solution:**
+
+1. **Verify recommendation engine:**
+   ```python
+   from vv_recommend import RecommendationEngine
+   re = RecommendationEngine(campaign_id=1)
+   recommendations = re.score_recommendations(available_actions=[
+       {"technique_id": "T1566", "asset_id": 1}
+   ])
+   print(recommendations)
+   ```
+
+2. **Ensure valid actions specified:**
+   - Actions need: technique_id (MITRE T-number), asset_id (target)
+   - Asset must exist in campaign
+
+3. **Check scoring formula:**
+   - Scores are 0.0-1.0 range
+   - Low scores indicate high risk
+   - High scores indicate safe/valuable recommendations
 
 ---
 
