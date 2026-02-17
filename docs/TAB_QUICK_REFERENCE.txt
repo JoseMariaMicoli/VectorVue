@@ -1,0 +1,136 @@
+"""
+VectorVue Tab Navigation - Quick Reference Card
+
+PRINT THIS & POST IN YOUR SOC/NOC!
+
+════════════════════════════════════════════════════════════════════════════
+ CORE UI NAVIGATION - 8 Views
+════════════════════════════════════════════════════════════════════════════
+
+ Space          Files            Browse files, upload evidence
+ Ctrl+M         MITRE DB         ATT&CK technique search & linking
+ Ctrl+K         Campaign         Campaign selection & config
+ Ctrl+E         Cmd Log          Command execution logging
+ Ctrl+J         Sessions         Active shells & C2 callbacks
+ Ctrl+D         Detections       Defender alerts & timeline
+ Ctrl+O         Objectives       Campaign goal progress
+ Ctrl+P         Persistence      Backdoors & persistence mechanisms
+
+════════════════════════════════════════════════════════════════════════════
+ ANALYTICS VIEWS - 5 Views
+════════════════════════════════════════════════════════════════════════════
+
+ Ctrl+1         Dashboard        Real-time metrics & risk heat map
+ Ctrl+2         Analysis         Post-engagement TTP analysis
+ Ctrl+3         Intel (Legacy)   Threat intelligence (old)
+ Ctrl+4         Remediation      Client remediation tracking
+ Ctrl+5         Capability       Team capability assessment
+
+════════════════════════════════════════════════════════════════════════════
+ ADVANCED VIEWS - 6 Views
+════════════════════════════════════════════════════════════════════════════
+
+ Alt+1          Collaboration    Multi-operator session management
+ Alt+2          Tasks            Background task scheduling
+ Alt+3          Analytics        Behavioral anomaly detection
+ Alt+4          Integration      Webhook & API management
+ Alt+5          Compliance       Compliance attestation & TLP
+ Alt+6          Security         Audit logs & access control
+
+════════════════════════════════════════════════════════════════════════════
+ PHASE 3-5 SPECIALIZED - 3 Views
+════════════════════════════════════════════════════════════════════════════
+
+ Ctrl+R         Reporting        PDF/HTML reports & evidence manifests
+ Ctrl+T         Teams            Team management & coordination
+ Ctrl+Shift+I   Threat Intel     IoC management, threat actors, risk scoring
+
+════════════════════════════════════════════════════════════════════════════
+ PHASE 5.5 COGNITION LAYER - 10 Modules ⭐ DECISION SUPPORT
+════════════════════════════════════════════════════════════════════════════
+
+ Ctrl+Shift+1   Opportunities    Recommendation scoring (value vs risk)
+ Ctrl+Shift+2   Paths            Attack graph & shortest path to objective
+ Ctrl+Shift+3   State            Campaign state & asset relationships
+ Ctrl+Shift+4   Pressure         Detection pressure (0-100 scale)
+ Ctrl+Shift+5   Confidence       Decision confidence & data completeness
+ Ctrl+Shift+6   Knowledge        Environment mapping progress
+ Ctrl+Shift+7   Techniques       Technique effectiveness & success rates
+ Ctrl+Shift+8   Validation       Finding approval queue & evidence chain
+ Ctrl+Shift+9   Explain          Reasoning chain & explanation
+ Ctrl+Shift+0   Dashboard        Unified cognition view
+
+════════════════════════════════════════════════════════════════════════════
+ COMMON WORKFLOWS
+════════════════════════════════════════════════════════════════════════════
+
+INITIAL CAMPAIGN SETUP
+  Ctrl+K → Select campaign
+  Ctrl+M → Link MITRE techniques
+  Ctrl+E → Log first command
+
+EXECUTION PHASE
+  Ctrl+E → Log commands
+  Ctrl+J → Track sessions
+  Ctrl+D → Log detections
+  Ctrl+Shift+4 → Check pressure
+
+PLANNING NEXT ACTION
+  Ctrl+Shift+1 → See recommendations
+  Ctrl+Shift+2 → Check attack paths
+  Ctrl+Shift+4 → Monitor pressure
+  Ctrl+Shift+5 → Verify confidence
+
+REPORTING
+  Ctrl+1 → Dashboard
+  Ctrl+R → Generate report
+  Ctrl+T → Get approval
+  Ctrl+Shift+I → Enrich with intel
+
+════════════════════════════════════════════════════════════════════════════
+ KEYBOARD NAVIGATION (Within Tabs)
+════════════════════════════════════════════════════════════════════════════
+
+ Tab Bar:
+   ← / →       Previous/next tab
+   ↑ / ↓       Previous/next tab group
+   Enter       Activate selected tab
+
+ Within View:
+   j / k       Down/up (vim-style)
+   g / G       Top/bottom
+   Enter       Select row
+   Escape      Return to editor
+
+════════════════════════════════════════════════════════════════════════════
+ MOUSE NAVIGATION
+════════════════════════════════════════════════════════════════════════════
+
+ Click on tab name at top of screen to switch views instantly
+ Hover for tooltips showing keybinding
+
+════════════════════════════════════════════════════════════════════════════
+ TAB APPEARANCE
+════════════════════════════════════════════════════════════════════════════
+
+ Active Tab:   GREEN background (#39FF14) + keybinding shown
+ Hover:        PURPLE background (#BD00FF)
+ Inactive:     GRAY background
+ Alert:        RED/AMBER indicators
+
+════════════════════════════════════════════════════════════════════════════
+ QUICK TIPS
+════════════════════════════════════════════════════════════════════════════
+
+✓ Keybindings are fastest - use them!
+✓ All views require authentication first (unless at login screen)
+✓ Campaign views require campaign selection (Ctrl+K)
+✓ Cognition tabs provide decision support - check before major actions
+✓ Status bar shows current view name + any errors
+✓ Use Ctrl+R to generate final reports
+✓ Check Ctrl+Shift+4 (Pressure) before high-risk actions
+
+════════════════════════════════════════════════════════════════════════════
+
+Version: v3.8+ | Phases 0-5.5 Complete | 26 Views Total
+"""

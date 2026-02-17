@@ -39,6 +39,34 @@ Unlike pentest note tools, VectorVue models the **state of an operation** and he
 
 ---
 
+## UI Navigation: Three Ways to Navigate
+
+**New in v3.8+:** Visual tab system for all 26 views. Operators can navigate using:
+
+### 1. Keybindings (Fastest)
+- **Space** → Files | **Ctrl+M** → MITRE | **Ctrl+K** → Campaign | **Ctrl+E** → Cmd Log
+- **Ctrl+Shift+1** → Opportunities | **Ctrl+Shift+2** → Attack Paths | **Ctrl+Shift+4** → Pressure
+- [Full keybinding reference](docs/TAB_QUICK_REFERENCE.txt)
+
+### 2. Visual Tab Clicks
+- Click tab names at top of screen to switch views instantly
+- Color-coded: GREEN = active, PURPLE = hover, GRAY = inactive
+- Keybinding shown on each tab
+
+### 3. Arrow Keys + Enter
+- **←** / **→** = Previous/next tab
+- **↑** / **↓** = Previous/next tab group
+- **Enter** = Select & activate tab
+
+**All 26 views organized in 5 tab groups:**
+- Core UI Navigation (8 views): Campaign, Cmd Log, Sessions, Detections, etc.
+- Analytics Views (5 views): Dashboard, Analysis, Threat Intel, etc.
+- Advanced Views (6 views): Collaboration, Tasks, Security, Compliance, etc.
+- Phase 3-5 Views (3 views): Reporting, Teams, Threat Intelligence
+- Phase 5.5 Cognition (10 modules): Opportunities, Paths, Pressure, Confidence, etc.
+
+See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentation.
+
 ## Maturity Model
 
 | Stage     | Purpose              | Status |
@@ -48,6 +76,7 @@ Unlike pentest note tools, VectorVue models the **state of an operation** and he
 | Platform  | Enforce workflow     | ✅ Complete (v3.0+) |
 | Cognition | Guide decisions      | ✅ Complete (v3.8) |
 | Autonomy  | Supervised execution | 🔮 Phase 6+ |
+| **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v3.8+)** |
 
 Current state:
 
