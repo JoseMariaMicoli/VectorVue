@@ -17,7 +17,7 @@
 ![Maturity](https://img.shields.io/badge/Maturity-Phase_5.5-orange)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
 ![Evidence](https://img.shields.io/badge/Evidence-Defensible-blue)
-![License](https://img.shields.io/badge/License-Proprietary-red)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
@@ -192,13 +192,11 @@ Operators must ensure:
 
 VectorVue does not validate legality — the operator must.
 
-### Organizational Responsibility
-
-Organizations deploying VectorVue must provide supervision, training, and lawful engagement approval.
-
 ### No Warranty
 
-Provided **as-is** without liability for damages, misuse, or legal consequences.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
 
 ---
 
@@ -240,5 +238,6 @@ Great tools help defenders.
 
 VectorVue aims to improve security — not bypass it.
 
-```
-```
+---
+---
+
