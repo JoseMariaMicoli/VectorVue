@@ -591,6 +591,253 @@ VectorVue is evolving from a single-operator red team notebook into an enterpris
 
 ---
 
+# Phase 5.5 — Operational Cognition & Decision Layer (FINAL)
+
+Purpose: Convert VectorVue from recorder → adversary thinking assistant
+
+This phase introduces deterministic operational intelligence.
+
+The system NEVER autonomously acts.
+It only advises, scores, predicts, and explains.
+
+Operator remains in control.
+
+---
+
+# Core Philosophy
+
+VectorVue must behave like a senior operator sitting next to you.
+
+It answers:
+
+* What should I do next?
+* How risky is this?
+* Why?
+* What happens if I do it?
+* What will the defender see?
+
+NOT:
+
+* automatic exploitation
+* random suggestions
+* ML guesses
+
+Everything must be explainable.
+
+---
+
+# Canonical Entities
+
+Asset(id, hostname, domain, os, criticality, tags[])
+Credential(id, username, domain, privilege_level, source)
+Session(id, asset_id, user, integrity, access_type)
+DetectionEvent(id, asset, severity, source, type, raw)
+OperatorAction(id, action, target, technique, operator, timestamp, metadata)
+
+---
+
+# 5.5.1 Attack Graph Engine
+
+Maintains compromise relationships.
+
+Nodes:
+assets, identities, credentials, sessions
+
+Edges:
+authenticates_to
+admin_to
+controls
+can_rdp
+can_psremote
+trusts
+delegates
+
+Provides:
+
+* shortest path to objective
+* privilege escalation chains
+* choke points
+* credential blast radius
+* domain dominance estimation
+
+---
+
+# 5.5.2 Objective Distance Engine
+
+Calculates operational effort:
+
+distance_score =
+required_privilege_steps +
+lateral_moves +
+unknown_edges_penalty +
+detection_pressure_penalty
+
+Output:
+steps_remaining
+confidence_level
+blocking_constraints
+
+---
+
+# 5.5.3 Action Recommendation Engine
+
+Every action scored using deterministic math.
+
+value_score =
+privilege_gain_weight +
+objective_proximity_weight +
+intel_gain_weight
+
+noise_score =
+expected_log_artifacts +
+command_entropy +
+tool_signature_presence
+
+risk_score =
+noise_score * detection_pressure_modifier * asset_criticality
+
+stealth_score =
+(1 - risk_score) * familiarity_bonus * low_variance_bonus
+
+novelty_score =
+inverse_frequency_of_technique_in_environment
+
+final_score =
+value_score * stealth_score * novelty_score
+
+All recommendations must include explanation text.
+
+---
+
+# 5.5.4 Detection Pressure Engine
+
+Maintains continuous campaign heat level.
+
+pressure =
+recent_alerts_weight +
+edr_hits +
+failed_actions +
+repeated_techniques_penalty
+
+health_score = 100 - pressure
+
+States:
+80-100 = quiet
+60-79 = caution
+40-59 = watched
+20-39 = hunting
+0-19 = compromised
+
+---
+
+# 5.5.5 OPSEC Simulation Engine
+
+Predicts defender visibility BEFORE execution.
+
+simulate(action):
+
+predict_logs()
+predict_edr_rules()
+predict_behavioral_flags()
+
+Returns:
+detection_probability
+likely_sensor
+recommended_safer_variant
+
+---
+
+# 5.5.6 Engagement Replay
+
+Append-only operation stream.
+
+Allows:
+timeline reconstruction
+automatic report narrative
+purple-team replay
+training dataset export
+
+---
+
+# 5.5.7 Cross Campaign Memory
+
+Stores defender behavior patterns.
+
+Learns:
+alert thresholds
+noisy techniques
+allowed protocols
+escalation patterns
+
+Produces:
+environment familiarity bonus
+
+---
+
+# 5.5.8 Confidence System (NEW)
+
+Every system output includes confidence:
+
+confidence =
+data_completeness *
+observation_count *
+path_stability
+
+Prevents hallucinated strategy suggestions.
+
+---
+
+# 5.5.9 Campaign Tempo Model (NEW)
+
+Detects operator speed anomalies.
+
+If operator moves too fast:
+increase predicted detection risk
+
+Suggests:
+slow mode
+sleep windows
+pivot staging
+
+---
+
+# 5.5.10 Infrastructure Burn Tracker (NEW)
+
+Tracks exposure probability of:
+
+C2
+redirectors
+domains
+payload hashes
+
+Burn score increases when:
+detections occur near infra
+beacon killed
+hash flagged
+
+Warns operator before total burn.
+
+---
+
+# Operator UX Flow
+
+1 Operator lands shell
+2 Attack Map updates
+3 Objective Distance recalculated
+4 Suggested Actions appear
+5 Operator selects action
+6 OPSEC simulation runs
+7 Risk shown BEFORE execution
+8 Operator executes
+9 Detection Pressure updates
+10 Health Score changes
+11 Recommendations adapt
+
+Cycle:
+Observe → Simulate → Execute → Evaluate → A
+
+---
+
 ## PHASE 6: Deployment & Hardening ⏳ NOT STARTED
 
 **ETA:** Q4 2026 | **Estimated Lines:** 300-400 | **Tables:** 0 | **Status:** `Planned`
