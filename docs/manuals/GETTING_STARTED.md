@@ -1,3 +1,17 @@
+
+/*
+Copyright (c) 2026 José María Micoli
+Licensed under Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Remove copyright notices
+*/
+
 # Getting Started with VectorVue v3.7 
 
 ![Setup](https://img.shields.io/badge/Setup-v3.7_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_5/8_Complete-00FFFF?style=flat-square) ![Features](https://img.shields.io/badge/Features-72_Tables_200%2B_Methods-39FF14)

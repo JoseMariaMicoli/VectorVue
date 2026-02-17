@@ -1,3 +1,17 @@
+
+/*
+Copyright (c) 2026 José María Micoli
+Licensed under Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Remove copyright notices
+*/
+
 import sys
 import os
 from pathlib import Path
