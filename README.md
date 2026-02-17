@@ -1,3 +1,12 @@
+## License Update Notice
+
+Starting from version 3.7.1 this project will transition to Apache-2.0.
+
+Reason:
+To allow sustainable development, support, and long-term maintenance while keeping the project open and transparent.
+
+Previous versions remain under the original license.
+
 ```
 ██▒   █▓▓█████  ▄████▄  ▄▄▄█████▓ ▒█████   ██▀███      ██▒   █▓ ██▓  ██▓ ▓█████
 ▓██░   █▒▓█   ▀ ▒██▀ ▀█  ▓  ██▒ ▓▒▒██▒  ██▒▓██ ▒ ██▒    ▓██░   █▒▓██▒  ██▒ ▓█   ▀
