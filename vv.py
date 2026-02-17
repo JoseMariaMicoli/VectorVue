@@ -801,6 +801,332 @@ class SecurityHardeningView(Container):
         table.clear()
 
 # =============================================================================
+# v3.5 REPORTING & EXPORT VIEWS
+# =============================================================================
+
+class ReportingView(Container):
+    """Phase 3: Reporting & Export Engine UI for PDF/HTML report generation, evidence manifests, compliance mapping, and report scheduling."""
+    
+    CSS = """
+    ReportingView { layout: vertical; background: $bg-void; height: 100%; }
+    #report-header { height: auto; padding: 1; background: $bg-panel; border-bottom: heavy $p-green; }
+    #report-split { layout: horizontal; height: 1fr; }
+    #report-controls { width: 35%; height: 100%; background: $bg-panel; border-right: solid $e-cyan; padding: 1; overflow-y: auto; }
+    #report-preview { width: 1fr; height: 100%; padding: 1; background: $bg-void; overflow-y: auto; }
+    .report-section { margin-bottom: 2; border-left: solid $p-green; padding-left: 1; }
+    .report-label { color: $p-green; text-style: bold; margin-top: 1; margin-bottom: 1; }
+    #report-status { color: white; height: auto; padding: 1; background: $bg-panel; border-top: solid $steel; }
+    #txt-exec-summary { height: 8; border: solid $e-cyan; }
+    #txt-report-content { height: 1fr; border: solid $p-green; }
+    """
+    
+    def compose(self) -> ComposeResult:
+        yield Label("[bold cyan]PHASE 3: REPORTING & EXPORT ENGINE[/]", id="report-header", classes="reg-title")
+        
+        with Container(id="report-split"):
+            # Left Panel: Report Controls
+            with Vertical(id="report-controls"):
+                # 1. Campaign Report Generation
+                yield Label("CAMPAIGN REPORTS", classes="report-label")
+                with Vertical(classes="report-section"):
+                    yield Select([("Executive Summary", "executive"), ("Technical", "technical"), ("Comprehensive", "comprehensive")], 
+                               id="sel-report-type", prompt="Report Type")
+                    yield Select([("PDF", "pdf"), ("HTML", "html")], 
+                               id="sel-report-format", prompt="Format")
+                    yield Input(id="inp-report-title", placeholder="Report Title")
+                    yield TextArea(id="txt-exec-summary")
+                    yield Button("GENERATE REPORT", id="btn-gen-report", variant="success")
+                
+                # 2. Evidence Manifests
+                yield Label("EVIDENCE CHAIN", classes="report-label")
+                with Vertical(classes="report-section"):
+                    yield Input(id="inp-manifest-name", placeholder="Manifest Name")
+                    yield Button("CREATE MANIFEST", id="btn-create-manifest", variant="primary")
+                    yield Button("VERIFY MANIFEST", id="btn-verify-manifest", variant="warning")
+                
+                # 3. Finding Summaries
+                yield Label("FINDING ANALYSIS", classes="report-label")
+                with Vertical(classes="report-section"):
+                    yield Static("Select a finding from campaign view to add summary", id="lbl-finding-status")
+                    yield Input(id="inp-cvss-vector", placeholder="CVSS:3.1/AV:N/AC:L/...")
+                    yield Button("CREATE SUMMARY", id="btn-create-summary", variant="primary")
+                
+                # 4. Compliance Mapping
+                yield Label("COMPLIANCE REPORTS", classes="report-label")
+                with Vertical(classes="report-section"):
+                    yield Select([("NIST SP 800-171", "nist"), ("FedRAMP", "fedramp"), 
+                                ("ISO 27001", "iso27001"), ("SOC 2", "soc2")], 
+                               id="sel-compliance-framework", prompt="Framework")
+                    yield Button("GENERATE COMPLIANCE REPORT", id="btn-gen-compliance", variant="success")
+                
+                # 5. Report Scheduling
+                yield Label("AUTOMATED REPORTING", classes="report-label")
+                with Vertical(classes="report-section"):
+                    yield Input(id="inp-schedule-name", placeholder="Schedule Name")
+                    yield Select([("Daily", "daily"), ("Weekly", "weekly"), ("Monthly", "monthly")], 
+                               id="sel-schedule-freq", prompt="Frequency")
+                    yield Button("SCHEDULE REPORTS", id="btn-schedule-reports", variant="primary")
+            
+            # Right Panel: Report Preview/Status
+            with Vertical(id="report-preview"):
+                yield Label("REPORT PREVIEW", classes="cyber-label")
+                yield TextArea(id="txt-report-content", read_only=True)
+        
+        yield Label("REPORTING ENGINE READY", id="report-status", classes="info-box")
+
+    def on_mount(self):
+        pass
+
+    # =========================================================================
+    # CAMPAIGN REPORT GENERATION
+    # =========================================================================
+    
+    @on(Button.Pressed, "#btn-gen-report")
+    def on_gen_report(self):
+        """Generate PDF or HTML campaign report."""
+        app = self.app
+        if not app.current_campaign_id:
+            self.update_report_status("NO CAMPAIGN ACTIVE", CyberColors.AMBER_WARNING)
+            return
+        
+        user = app.db.current_user
+        report_title = self.query_one("#inp-report-title").value.strip() or f"Campaign_{app.current_campaign_id}"
+        report_type = self.query_one("#sel-report-type").value or "technical"
+        report_format = self.query_one("#sel-report-format").value or "pdf"
+        exec_summary = self.query_one("#txt-exec-summary").text.strip()
+        
+        try:
+            # Create campaign report record
+            report_id = app.db.create_campaign_report(
+                app.current_campaign_id,
+                report_title,
+                report_type,
+                exec_summary,
+                ""
+            )
+            
+            if not report_id:
+                self.update_report_status("FAILED TO CREATE REPORT RECORD", CyberColors.RED_ALERT)
+                return
+            
+            # Generate report in requested format
+            if report_format == "pdf":
+                success, result = app.db.generate_pdf_report(report_id)
+            else:  # html
+                success, result = app.db.generate_html_report(report_id)
+            
+            if success:
+                app.db.log_audit_event(user.username, "REPORT_GENERATED", 
+                                      {"campaign_id": app.current_campaign_id, "report_id": report_id, 
+                                       "format": report_format, "path": result})
+                self.update_report_status(f"✓ {report_format.upper()} REPORT GENERATED: {result}", CyberColors.PHOSPHOR_GREEN)
+                self.query_one("#inp-report-title").value = ""
+                self.query_one("#txt-exec-summary").text = ""
+            else:
+                self.update_report_status(f"REPORT GENERATION FAILED: {result}", CyberColors.RED_ALERT)
+        
+        except Exception as e:
+            self.update_report_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+    
+    # =========================================================================
+    # EVIDENCE MANIFESTS
+    # =========================================================================
+    
+    @on(Button.Pressed, "#btn-create-manifest")
+    def on_create_manifest(self):
+        """Create evidence chain of custody manifest."""
+        app = self.app
+        if not app.current_campaign_id:
+            self.update_report_status("NO CAMPAIGN ACTIVE", CyberColors.AMBER_WARNING)
+            return
+        
+        user = app.db.current_user
+        manifest_name = self.query_one("#inp-manifest-name").value.strip() or f"Manifest_{app.current_campaign_id}"
+        
+        try:
+            manifest_id = app.db.create_evidence_manifest(app.current_campaign_id, manifest_name)
+            
+            if manifest_id:
+                app.db.log_audit_event(user.username, "EVIDENCE_MANIFEST_CREATED",
+                                      {"campaign_id": app.current_campaign_id, "manifest_id": manifest_id})
+                self.update_report_status(f"✓ MANIFEST CREATED (ID: {manifest_id})", CyberColors.PHOSPHOR_GREEN)
+                self.query_one("#inp-manifest-name").value = ""
+            else:
+                self.update_report_status("FAILED TO CREATE MANIFEST", CyberColors.RED_ALERT)
+        
+        except Exception as e:
+            self.update_report_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+    
+    @on(Button.Pressed, "#btn-verify-manifest")
+    def on_verify_manifest(self):
+        """Verify evidence manifest integrity."""
+        app = self.app
+        if not app.current_campaign_id:
+            self.update_report_status("NO CAMPAIGN ACTIVE", CyberColors.AMBER_WARNING)
+            return
+        
+        user = app.db.current_user
+        
+        try:
+            # Get the most recent manifest for this campaign
+            manifests = app.db.query(
+                "SELECT id FROM evidence_manifests WHERE campaign_id=? ORDER BY created_at DESC LIMIT 1",
+                (app.current_campaign_id,)
+            )
+            
+            if not manifests:
+                self.update_report_status("NO MANIFEST FOUND FOR CAMPAIGN", CyberColors.AMBER_WARNING)
+                return
+            
+            manifest_id = manifests[0][0]
+            is_valid, issues = app.db.verify_evidence_manifest(manifest_id)
+            
+            if is_valid:
+                app.db.log_audit_event(user.username, "EVIDENCE_MANIFEST_VERIFIED",
+                                      {"manifest_id": manifest_id, "valid": True})
+                self.update_report_status(f"✓ MANIFEST VERIFIED (ID: {manifest_id})", CyberColors.PHOSPHOR_GREEN)
+            else:
+                issue_str = "; ".join(issues[:3])
+                self.update_report_status(f"✗ MANIFEST VERIFICATION FAILED: {issue_str}", CyberColors.RED_ALERT)
+        
+        except Exception as e:
+            self.update_report_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+    
+    # =========================================================================
+    # FINDING SUMMARIES
+    # =========================================================================
+    
+    @on(Button.Pressed, "#btn-create-summary")
+    def on_create_summary(self):
+        """Create finding summary with CVSS 3.1 scoring."""
+        app = self.app
+        if not app.current_id:
+            self.update_report_status("NO FINDING SELECTED", CyberColors.AMBER_WARNING)
+            return
+        
+        user = app.db.current_user
+        cvss_vector = self.query_one("#inp-cvss-vector").value.strip()
+        
+        try:
+            # Get current finding from editor
+            title = app.query_one("#inp-title").value or "Untitled"
+            description = app.query_one("#editor-main").text
+            
+            summary_created = app.db.create_finding_summary(
+                app.current_id,
+                description,
+                cvss_vector,
+                remediation_steps="See detailed findings for remediation guidance",
+                affected_assets=None
+            )
+            
+            if summary_created:
+                app.db.log_audit_event(user.username, "FINDING_SUMMARY_CREATED",
+                                      {"finding_id": app.current_id, "title": title})
+                self.update_report_status(f"✓ FINDING SUMMARY CREATED (ID: {app.current_id})", CyberColors.PHOSPHOR_GREEN)
+                self.query_one("#inp-cvss-vector").value = ""
+            else:
+                self.update_report_status("FAILED TO CREATE SUMMARY", CyberColors.RED_ALERT)
+        
+        except Exception as e:
+            self.update_report_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+    
+    # =========================================================================
+    # COMPLIANCE MAPPING
+    # =========================================================================
+    
+    @on(Button.Pressed, "#btn-gen-compliance")
+    def on_gen_compliance(self):
+        """Generate compliance attestation report."""
+        app = self.app
+        if not app.current_campaign_id:
+            self.update_report_status("NO CAMPAIGN ACTIVE", CyberColors.AMBER_WARNING)
+            return
+        
+        user = app.db.current_user
+        framework = self.query_one("#sel-compliance-framework").value
+        
+        if not framework:
+            self.update_report_status("SELECT COMPLIANCE FRAMEWORK", CyberColors.AMBER_WARNING)
+            return
+        
+        try:
+            compliance_report = app.db.generate_compliance_report(app.current_campaign_id, framework)
+            
+            if compliance_report:
+                app.db.log_audit_event(user.username, "COMPLIANCE_REPORT_GENERATED",
+                                      {"campaign_id": app.current_campaign_id, "framework": framework,
+                                       "satisfaction": compliance_report.get("satisfaction_percent", 0)})
+                
+                # Display report summary
+                report_text = f"""
+COMPLIANCE ATTESTATION REPORT
+Framework: {compliance_report.get('framework', 'UNKNOWN')}
+Total Requirements: {compliance_report.get('total_requirements', 0)}
+Satisfied: {compliance_report.get('satisfied_requirements', 0)}
+Satisfaction: {compliance_report.get('satisfaction_percent', 0):.1f}%
+Status: {compliance_report.get('status', 'UNKNOWN')}
+Attestor: {compliance_report.get('attestor', 'SYSTEM')}
+Attestation Date: {compliance_report.get('attestation_date', 'N/A')}
+"""
+                self.query_one("#txt-report-content").text = report_text
+                self.update_report_status(f"✓ {framework.upper()} COMPLIANCE REPORT GENERATED", CyberColors.PHOSPHOR_GREEN)
+            else:
+                self.update_report_status("FAILED TO GENERATE COMPLIANCE REPORT", CyberColors.RED_ALERT)
+        
+        except Exception as e:
+            self.update_report_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+    
+    # =========================================================================
+    # REPORT SCHEDULING
+    # =========================================================================
+    
+    @on(Button.Pressed, "#btn-schedule-reports")
+    def on_schedule_reports(self):
+        """Schedule recurring automated report generation."""
+        app = self.app
+        if not app.current_campaign_id:
+            self.update_report_status("NO CAMPAIGN ACTIVE", CyberColors.AMBER_WARNING)
+            return
+        
+        user = app.db.current_user
+        schedule_name = self.query_one("#inp-schedule-name").value.strip()
+        frequency = self.query_one("#sel-schedule-freq").value
+        
+        if not schedule_name or not frequency:
+            self.update_report_status("SCHEDULE NAME AND FREQUENCY REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        
+        try:
+            schedule_id = app.db.schedule_recurring_report(
+                app.current_campaign_id,
+                schedule_name,
+                "comprehensive",
+                frequency,
+                None
+            )
+            
+            if schedule_id:
+                app.db.log_audit_event(user.username, "REPORT_SCHEDULE_CREATED",
+                                      {"campaign_id": app.current_campaign_id, "schedule_id": schedule_id,
+                                       "frequency": frequency, "name": schedule_name})
+                self.update_report_status(f"✓ REPORT SCHEDULE CREATED (ID: {schedule_id}, Frequency: {frequency})", 
+                                        CyberColors.PHOSPHOR_GREEN)
+                self.query_one("#inp-schedule-name").value = ""
+            else:
+                self.update_report_status("FAILED TO CREATE SCHEDULE", CyberColors.RED_ALERT)
+        
+        except Exception as e:
+            self.update_report_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+    
+    def update_report_status(self, msg: str, color: str = "#ffffff"):
+        """Update reporting status bar."""
+        status = self.query_one("#report-status")
+        ts = datetime.now().strftime('%H:%M:%S')
+        status.update(f"[{ts}] {msg}")
+        status.styles.color = color
+
+# =============================================================================
 # SHUTDOWN VIEWS
 # =============================================================================
 
@@ -921,6 +1247,7 @@ class CyberTUI(App):
         Binding("ctrl+3", "toggle_intel",         "Intelligence"),
         Binding("ctrl+4", "toggle_remediation",   "Remediation"),
         Binding("ctrl+5", "toggle_capability",    "Capability"),
+        Binding("ctrl+r", "toggle_reporting",     "Reporting"),
         Binding("alt+1", "toggle_collaboration",  "Collab"),
         Binding("alt+2", "toggle_tasks",          "Tasks"),
         Binding("alt+3", "toggle_behavioral",     "Analytics"),
@@ -970,6 +1297,9 @@ class CyberTUI(App):
             yield IntegrationGatewayView(id="integration-view")
             yield ComplianceReportingView(id="compliance-view")
             yield SecurityHardeningView(id="security-view")
+            
+            # v3.5 Reporting & Export Views
+            yield ReportingView(id="reporting-view")
             
             yield ShutdownConfirmationView(id="shutdown-view")
 
@@ -1253,6 +1583,16 @@ class CyberTUI(App):
             sw.current = "capability-view"
             self.query_one("CapabilityAssessmentView").refresh_capabilities(self, self.current_campaign_id)
             self.update_status("MODE: CAPABILITY ASSESSMENT", CyberColors.PHOSPHOR_GREEN)
+
+    def action_toggle_reporting(self):
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        sw = self.query_one("#view-switcher")
+        if sw.current == "reporting-view": self.action_return_to_editor()
+        else:
+            sw.current = "reporting-view"
+            self.update_status("MODE: REPORTING & EXPORT ENGINE (Phase 3)", CyberColors.ELECTRIC_CYAN)
 
     # v3.4 View Toggles
     def action_toggle_collaboration(self):
