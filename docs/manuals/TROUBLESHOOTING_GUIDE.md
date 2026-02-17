@@ -467,10 +467,10 @@ sha256sum /path/to/evidence.file
 pip install reportlab>=4.0.0
 
 # Check write permissions
-ls -l 05-Delivery/  # Should be writable
+ls -l Reports/  # Should be writable
 
 # Chmod if needed
-chmod 755 05-Delivery/
+chmod 755 Reports/
 
 # Retry report generation
 ```

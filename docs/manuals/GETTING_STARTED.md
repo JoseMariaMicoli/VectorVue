@@ -357,7 +357,7 @@ VectorVue has **4 role levels** with increasing privileges:
 3. Select format: PDF or HTML
 4. Add executive summary
 5. Click **GENERATE REPORT**
-6. Report saved to `05-Delivery/` directory
+6. Report saved to `Reports/` directory
 
 ---
 

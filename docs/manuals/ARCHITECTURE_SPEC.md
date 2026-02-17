@@ -235,7 +235,7 @@ CREATE TABLE user_preferences (
     notifications_enabled BOOLEAN DEFAULT 1,
     color_scheme TEXT,                    -- json: {alert_color, ok_color}
     preferred_report_format TEXT,         -- pdf, html, markdown
-    preferred_export_dir TEXT,            -- /path/to/05-Delivery/
+    preferred_export_dir TEXT,            -- /path/to/Reports/
     timezone TEXT DEFAULT 'UTC',
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -817,7 +817,7 @@ CREATE TABLE evidence_items (
     approved_by INTEGER,
     approved_at DATETIME,
     is_immutable BOOLEAN DEFAULT 1,       -- Cannot be edited after creation
-    storage_location TEXT,                -- Where file stored (05-Delivery/)
+    storage_location TEXT,                -- Where file stored (Reports/)
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
     FOREIGN KEY (who_collected) REFERENCES users(id),
     FOREIGN KEY (source_host) REFERENCES assets(id),
