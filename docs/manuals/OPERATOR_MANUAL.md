@@ -12,11 +12,11 @@ You may NOT:
 ✘ Remove copyright notices
 */
 
-# VectorVue v3.7 Operator Manual
+# VectorVue v3.8 Operator Manual
 
-![Version](https://img.shields.io/badge/Version-v3.7_Production-39FF14) ![Phase](https://img.shields.io/badge/Phase-5/8_Complete-00FFFF) ![Tables](https://img.shields.io/badge/Database-72_Tables-FF00FF)
+![Version](https://img.shields.io/badge/Version-v3.8_Production-39FF14) ![Phase](https://img.shields.io/badge/Phase-5.5_Complete-39FF14) ![Tables](https://img.shields.io/badge/Database-78_Tables-FF00FF)
 
-Complete operational reference for VectorVue v3.7 red team campaign management platform. This manual covers all phases from campaign setup through advanced threat intelligence analysis and multi-team coordination.
+Complete operational reference for VectorVue v3.8 red team campaign management platform. This manual covers all phases from campaign setup through advanced threat intelligence analysis, operational cognition decision-support, and multi-team coordination.
 
 ---
 
@@ -28,9 +28,10 @@ Complete operational reference for VectorVue v3.7 red team campaign management p
 4. [Phase 3: Reporting & Evidence](#phase-3)
 5. [Phase 4: Team Federation & Coordination](#phase-4)
 6. [Phase 5: Advanced Threat Intelligence](#phase-5)
-7. [Cryptography & Security](#crypto)
-8. [Advanced Operations](#advanced)
-9. [Quick Reference](#reference)
+7. [Phase 5.5: Operational Cognition](#phase-5.5)
+8. [Cryptography & Security](#crypto)
+9. [Advanced Operations](#advanced)
+10. [Quick Reference](#reference)
 
 ---
 
@@ -896,6 +897,384 @@ System finds:
 - IoC correlation
 - Detection timeline (when defender detected each step)
 - Time-to-detect metric
+
+---
+
+## <a name="phase-5.5"></a>Phase 5.5: Operational Cognition & Decision Support
+
+**Objective:** Help operators make safe, explainable decisions during engagements.
+
+VectorVue now incorporates a deterministic cognition layer with **10 decision-support modules**. No autonomy — operator always decides via structured **Observe → Simulate → Execute → Evaluate → Adapt** workflow.
+
+### Core Principle
+
+*"Operator always decides. Every recommendation is explainable."*
+
+All cognition outputs include:
+- Confidence scores (0.0-1.0)
+- Reasoning chains (why this recommendation)
+- Risk assessments
+- Alternative suggestions
+- Safer approaches when risky
+
+### Module Overview
+
+#### 1. Attack Graph & Pathfinding
+
+**Purpose:** Model compromise relationships and find attack paths.
+
+**Capabilities:**
+- Directed graph of assets and exploitable relationships
+- Dijkstra's shortest path (multi-start from controlled assets)
+- Path confidence scoring (longer paths = lower confidence)
+- BFS reachability (which assets can we reach?)
+- Privilege escalation path enumeration
+
+**Access:** `Ctrl+Shift+G` - Attack Graph view
+
+**Example:**
+```
+Controlled Asset: db-backup (low privilege)
+     ↓ (Priv Esc via CVE-2024-1234, confidence: 0.85)
+Compromised Asset: admin-workstation (high privilege)
+     ↓ (Lateral move via Service Account, confidence: 0.92)
+Target: domain-controller
+```
+
+#### 2. Objective Distance Calculator
+
+**Purpose:** Calculate steps remaining to campaign objective.
+
+**Metrics:**
+- steps_remaining: How many privilege/lateral/discovery steps
+- confidence: Path stability (0.0-1.0)
+- critical_path: Detailed breakdown of required steps
+- alternatives: Other paths to same objective
+- blockers: Obstacles (enhanced monitoring, EDR, privileged hosts)
+
+**Formula:**
+```
+distance = privilege_steps + lateral_moves + unknown_penalty + pressure_penalty
+```
+
+**Access:** `Ctrl+Shift+O` - Objective Progress view
+
+**Example:**
+```
+Objective: Dump SAM database
+Required Steps: 3
+  ├─ Step 1: Privilege escalation (confidence: 0.88)
+  ├─ Step 2: Access local filesystem (confidence: 0.95)
+  └─ Step 3: Dump SAM hive (confidence: 0.92)
+Overall Path Confidence: 0.75
+Recommended Alternative: Use VSS shadow copy (slightly safer)
+```
+
+#### 3. Recommendation Scoring Engine
+
+**Purpose:** Score and rank proposed operator actions.
+
+**Scoring Formula:**
+```
+value_score = privilege_gain + intel_gain + objective_proximity
+noise_score = expected_logs + tool_signature + behavioral_flags
+risk_score = noise_score × detection_pressure × asset_criticality
+stealth_score = (1 - risk_score) × familiarity_bonus
+novelty_score = 1 / usage_frequency
+final_score = value_score × stealth_score × novelty_score
+```
+
+**Outputs for each action:**
+- final_score: 0.0-1.0 recommendation strength
+- confidence: Certainty in this assessment
+- explanation: Human-readable reasoning
+- expected_logs[]: What logs this action generates
+- edr_risks[]: EDR detection probabilities
+- safer_alternatives[]: Lower-risk equivalent approaches
+
+**Technique Profiles:** 10 major MITRE techniques with noise/detection metrics
+
+**Access:** `Ctrl+Shift+C` - Cognition Recommendations panel
+
+**Example:**
+```
+Action: Run "whoami" on target
+  Score: 0.92 (excellent)
+  Confidence: 0.98
+  Expected Logs: 5 (process creation, command line)
+  EDR Risk: Low (0.05 probability)
+  Reasoning: High utility, minimal risk on this asset type
+  
+Action: Run "mimikatz.exe" on domain controller
+  Score: 0.31 (poor)
+  Confidence: 0.95
+  Expected Logs: 18+ (AMSI, EDR, Event Log)
+  EDR Risk: Very High (0.87 probability)
+  Reasoning: High detection cost outweighs privilege gain
+  Safer Alternative: Use DCSync via script-based approach
+```
+
+#### 4. Detection Pressure Tracker
+
+**Purpose:** Track defensive detection state (0-100 scale).
+
+**State Machine:**
+- **QUIET (0-20):** Minimal defensive activity, safe to operate
+- **CAUTION (21-40):** Increased alertness, be more careful
+- **WATCHED (41-60):** Active monitoring detected, consider stealth
+- **HUNTING (61-80):** Active hunt/response in progress, high risk
+- **COMPROMISED (81-100):** Assumed detected, extraction time
+
+**Metrics:**
+- recent_alerts: Count of detections in last 24 hours
+- failed_actions: Count of blocked/failed attempts
+- repetition_penalty: Same technique used too often
+- trending: increasing / stable / decreasing
+
+**Access:** `Ctrl+Shift+P` - Detection Pressure view
+
+**Example:**
+```
+Current Pressure: 52 (WATCHED)
+Trend: Increasing (↑)
+Recent Alerts: 3 in last 6 hours
+  ├─ Suspicious PowerShell execution (2h ago)
+  ├─ Unusual network connection (4h ago)
+  └─ Registry anomaly (5h ago)
+Recommendation: Reduce noise, switch to stealthier techniques
+Days Until Critical (if trend continues): ~12 hours
+```
+
+#### 5. OpSec Simulation Engine
+
+**Purpose:** Predict logs and detection for proposed actions.
+
+**Probabilities:**
+- probability_logged: 0.0-1.0 (will this be logged?)
+- probability_detected_edr: 0.0-1.0 (will EDR catch this?)
+- probability_behavioral: 0.0-1.0 (behavioral anomaly?)
+- is_safe: Boolean safety recommendation
+- risk_level: low / medium / high / critical
+
+**Modifiers:**
+- asset_criticality: critical/high/medium/low
+- environment: production / staging / development
+- technique_noise_profile: Known risk factors
+
+**Example:**
+```
+Action: Enable WMI Event Subscription
+Asset: admin-workstation (criticality: high)
+Environment: production
+
+Outcomes:
+  Logged: 35% chance (WMI event log not always enabled)
+  EDR Detection: 62% chance (Sigma rule exists)
+  Behavioral Anomaly: 44% chance (unusual pattern)
+  Overall Risk: MEDIUM
+  
+Safer Alternative: Use registry-based persistence (lower EDR risk)
+```
+
+#### 6. Event Replay Engine
+
+**Purpose:** Maintain immutable campaign narrative timeline.
+
+**Event Types:**
+- action: Operator executed action (timestamped)
+- detection: Defensive detection occurred
+- discovery: New credential/asset found
+- analysis: Assessment or analysis result
+
+**Capabilities:**
+- Record every operator action with context
+- Generate narrative markdown (campaign story)
+- Timeline analysis (when did things happen)
+- Operator behavior analysis (patterns & trends)
+
+**Generated Reports:**
+- Campaign narrative (human-readable story)
+- Structured timeline (JSON events)
+- Operator action summary
+- Behavior pattern analysis
+
+#### 7. Operator Tempo Analyzer
+
+**Purpose:** Track operator action rate and recommend operational modes.
+
+**Metrics:**
+- actions_per_hour: Rate of execution
+- actions_per_day: Daily volume
+- action_intensity: slow / normal / fast / aggressive
+- spike_detection: Rapid bursts (3+ actions in <5 min)
+
+**Operational Modes:**
+- **slow_mode:** 1-2 actions/hour (careful, stealth-focused)
+- **normal_mode:** 3-5 actions/hour (balanced approach)
+- **fast_mode:** 6+ actions/hour (aggressive, higher risk)
+
+**Use Case:** Adjust recommendation confidence based on current tempo
+
+**Example:**
+```
+Current Tempo: 7 actions/hour (FAST)
+Last 6 hours: 42 actions
+Spike Detected: 5 actions in 4 minutes (3h ago)
+Recommendation: Slow down, detection pressure increasing
+```
+
+#### 8. Infrastructure Burn Tracker
+
+**Purpose:** Track C2 and tool infrastructure exposure.
+
+**Metrics:**
+- detections_correlated_with_c2: Count of detections mentioning C2
+- unique_c2_ips_exposed: How many different IPs discovered
+- tools_attributed: [metasploit, empire, cobalt-strike, mimikatz, ...]
+
+**Burn Levels:**
+- **fresh:** No exposure, safe to use
+- **warm:** Some detections, not attributed
+- **hot:** Clear correlation or multiple detections
+- **burned:** Definitely detected/blocked
+
+**Outputs:**
+- burn_probability: 0.0-1.0
+- days_until_critical: Estimated time to permanent compromise
+- should_rotate: Recommendation to switch infrastructure
+- warning_message: Human-readable assessment
+
+**Example:**
+```
+C2 Infrastructure: 192.168.1.50 (HTTP Beacon)
+Burn Level: HOT
+Probability Burned: 0.78
+Detections Attributed:
+  ├─ "C2 beacon detected" (SOC alert, 2h ago)
+  ├─ "Metasploit traffic" (IDS log, 4h ago)
+  └─ "Known C2 IP" (threat feed, ongoing)
+Recommendation: Rotate to backup infrastructure TODAY
+```
+
+#### 9. Confidence Analysis Engine
+
+**Purpose:** Assess overall decision confidence.
+
+**Formula:**
+```
+confidence = data_completeness × observation_count × path_stability
+```
+
+**Factors:**
+- data_completeness: % of environment mapped (assets/100)
+- observation_count: Count of credentials + detections
+- path_stability: Successful techniques / (successes + failures)
+
+**Core Principle:** NEVER advise without confidence ≥ 0.3
+
+**Outputs:**
+- overall_confidence: 0.0-1.0
+- confidence_trend: increasing / stable / decreasing
+- major_unknowns[]: What we don't know
+- data_gaps[]: Missing information
+
+**Example:**
+```
+Data Completeness: 34% (34 assets mapped / ~100 estimated)
+Observation Count: 127 (85 credentials, 42 detections)
+Path Stability: 0.76 (19 successes, 6 failures)
+
+Overall Confidence: 0.41 (MODERATE)
+Trend: Increasing (↑)
+Major Unknowns:
+  ├─ Network topology (internal subnets unknown)
+  ├─ Active EDR deployment (partially visible)
+  └─ Backup systems (not yet discovered)
+Recommendation: Gather more intel before major escalations
+```
+
+#### 10. Memory & Pattern Learning Engine
+
+**Purpose:** Long-term campaign context and pattern learning.
+
+**Learns:**
+- Technique success rates per asset type (Windows vs Linux)
+- Failed approaches and why
+- Asset evolution over time (how targets change)
+- Operator behavioral preferences
+
+**Patterns:**
+- TechniquePattern: success_count, failure_count, avg_time_to_compromise, confidence
+- AssetPattern: discovery_time, compromise_time, common_techniques
+- OperatorPreference: preferred techniques by operator
+
+**Capabilities:**
+- Suggest techniques based on asset type
+- Recommend avoidance of previously failed approaches
+- Build operator behavioral profiles
+- Generate lessons-learned narrative
+
+**Example:**
+```
+Asset Type: Windows Server 2016
+Historical Success Rates:
+  ├─ Privilege escalation via CVE-2016-0099: 85% (n=7)
+  ├─ Token impersonation: 92% (n=12)
+  ├─ Mimikatz credential dumping: 78% (n=9)
+  └─ Kerberoasting: 45% (n=5)
+
+Recommended for This Asset: Token impersonation (highest success)
+Avoid: Kerberoasting (low success rate on this version)
+```
+
+### Mandatory Workflow: Observe → Simulate → Execute → Evaluate → Adapt
+
+Every operator action triggers the automatic state refresh cycle:
+
+```
+1. Observe Phase
+   └─ Record event in immutable replay log
+   
+2. Simulate Phase
+   ├─ Update attack graph with new asset relationships
+   ├─ Recalculate objective distance
+   ├─ Update detection pressure
+   └─ Assess confidence in recommendations
+
+3. Execute Phase
+   └─ Operator chooses next action (or accepts recommendation)
+
+4. Evaluate Phase
+   ├─ Was action successful?
+   ├─ What logs were generated?
+   ├─ Did it trigger detections?
+   └─ Update success/failure patterns
+
+5. Adapt Phase
+   ├─ Adjust operator recommendations
+   ├─ Update confidence in paths
+   ├─ Learn technique success rates
+   └─ Prepare next cycle
+```
+
+### Keybindings for Cognition Views
+
+| Keybinding | Function |
+|------------|----------|
+| `Ctrl+Shift+C` | Cognition panel (recommendations) |
+| `Ctrl+Shift+G` | Attack graph & pathfinding |
+| `Ctrl+Shift+O` | Objective progress & distance |
+| `Ctrl+Shift+P` | Detection pressure & defensive trend |
+
+### Decision Safety Guardrails
+
+VectorVue automatically flags risky actions:
+
+- ⚠️ **Production System:** Warn if targeting critical infrastructure
+- ⚠️ **Burned Infrastructure:** Warn if using compromised C2
+- ⚠️ **High Pressure:** Warn if detection pressure is critical (>80)
+- ⚠️ **Low Confidence:** Suppress recommendations if confidence <0.3
+- ⚠️ **Fast Tempo:** Warn if operator pace exceeds normal (spike detected)
 
 ---
 

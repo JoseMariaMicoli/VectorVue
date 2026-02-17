@@ -12,11 +12,11 @@ You may NOT:
 ✘ Remove copyright notices
 */
 
-# VectorVue v3.7 Documentation Index
+# VectorVue v3.8 Documentation Index
 
-![Version](https://img.shields.io/badge/Version-v3.7-39FF14) ![Phase](https://img.shields.io/badge/Phase-5/8_Complete-00FFFF) ![Docs](https://img.shields.io/badge/Documentation-Complete-00FF00)
+![Version](https://img.shields.io/badge/Version-v3.8-39FF14) ![Phase](https://img.shields.io/badge/Phase-5.5_Complete-39FF14) ![Cognition](https://img.shields.io/badge/Cognition-Operational-00FF00) ![Docs](https://img.shields.io/badge/Documentation-Complete-00FF00)
 
-Complete navigation guide for VectorVue v3.7 documentation. This index organizes all manuals by topic and operational phase.
+Complete navigation guide for VectorVue v3.8 documentation with Phase 5.5 (Operational Cognition) now complete. This index organizes all manuals by topic and operational phase.
 
 ---
 
@@ -191,7 +191,37 @@ Complete navigation guide for VectorVue v3.7 documentation. This index organizes
 
 ---
 
-## Documentation by Topic
+### Phase 5.5: Operational Cognition & Decision Support
+
+**Files:**
+- [OPERATOR_MANUAL.md](./OPERATOR_MANUAL.md#phase-5.5) - Cognition workflows & recommendations
+- [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md#phase-5.5) - 10 cognition modules & integration
+- Supplementary: [Cognition Quick Reference](../../docs/dev-log/COGNITION_QUICK_REFERENCE.md)
+
+**Topics:**
+- ✅ Attack graph & compromise pathfinding (Dijkstra's shortest path)
+- ✅ Objective distance calculation (steps to campaign goal)
+- ✅ Recommendation scoring (risk-weighted action suggestions)
+- ✅ Detection pressure tracking (0-100 defensive state scale)
+- ✅ OpSec simulation (probability logging/detection prediction)
+- ✅ Event replay (immutable campaign narrative timeline)
+- ✅ Operator tempo analysis (action rate tracking & spike detection)
+- ✅ Infrastructure burn tracking (C2 & tool exposure assessment)
+- ✅ Confidence analysis (data completeness & observation scoring)
+- ✅ Memory & pattern learning (technique success rate history)
+
+**Core Principle:**
+No autonomy. Every recommendation is explainable. Operator always decides via **Observe → Simulate → Execute → Evaluate → Adapt** workflow.
+
+**Key Commands:**
+- `Ctrl+Shift+C` - Cognition panel (recommendations & analysis)
+- `Ctrl+Shift+G` - Attack graph & pathfinding
+- `Ctrl+Shift+O` - Objective progress & distance
+- `Ctrl+Shift+P` - Detection pressure & defensive trend
+
+---
+
+## Documentation by Phase
 
 ### Authentication & Security
 

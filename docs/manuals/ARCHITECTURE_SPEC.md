@@ -12,11 +12,11 @@ You may NOT:
 ✘ Remove copyright notices
 */
 
-# VectorVue v3.7 Architecture Specification
+# VectorVue v3.8 Architecture Specification
 
-![Version](https://img.shields.io/badge/Version-v3.7-39FF14) ![Phase](https://img.shields.io/badge/Phase-5/8_Complete-00FFFF) ![Tables](https://img.shields.io/badge/Database-72_Tables-FF00FF)
+![Version](https://img.shields.io/badge/Version-v3.8-39FF14) ![Phase](https://img.shields.io/badge/Phase-5.5_Complete-39FF14) ![Tables](https://img.shields.io/badge/Database-78_Tables-FF00FF) ![Cognition](https://img.shields.io/badge/Cognition-10_Modules-39FF14)
 
-Complete technical architecture for VectorVue v3.7 - Red Team Campaign Management Platform. This specification details database schema, cryptography, background task execution, and system design patterns.
+Complete technical architecture for VectorVue v3.8 - Red Team Campaign Management Platform with Operational Cognition. This specification details database schema, cryptography, cognition modules, background task execution, and system design patterns.
 
 ---
 
@@ -24,8 +24,8 @@ Complete technical architecture for VectorVue v3.7 - Red Team Campaign Managemen
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         VectorVue v3.7                          │
-│                    Red Team Campaign Manager                    │
+│                         VectorVue v3.8                          │
+│            Red Team Campaign Manager + Cognition Layer          │
 └─────────────────────────────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -38,6 +38,7 @@ Complete technical architecture for VectorVue v3.7 - Red Team Campaign Managemen
 │  ├─ FileManagerView (File CRUD)                                │
 │  ├─ MitreIntelligenceView (T-number lookup)                    │
 │  ├─ ThreatIntelligenceView (Phase 5: feeds, actors, IoCs)      │
+│  └─ CognitionView (Phase 5.5: recommendations, pathfinding)    │
 │  ├─ ReportingView (Phase 3: evidence + export)                 │
 │  ├─ TeamManagementView (Phase 4: multi-team coordination)      │
 │  └─ [12+ additional views]                                     │
