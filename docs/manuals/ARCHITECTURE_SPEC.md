@@ -1547,6 +1547,222 @@ CREATE TABLE feed_data_cache (
 
 ---
 
+### Phase 5.5: Operational Cognition (10 Modules + Integration Layer)
+
+**New in v3.8:** Deterministic decision-support system with 10 cognition modules for safe, explainable operator recommendations.
+
+**Core Modules:**
+
+#### 1. vv_graph.py — Attack Graph (Dijkstra Pathfinding)
+- **Purpose:** Maintain directed graph of compromise relationships & attack paths
+- **Algorithms:** Dijkstra's shortest path (multi-start), BFS reachability, privilege escalation enumeration
+- **Key Classes:** `Edge`, `CompromiseGraph`, `AttackGraph`
+- **Confidence Scoring:** Longer paths = lower confidence
+
+#### 2. vv_objective.py — Objective Distance Calculator
+- **Purpose:** Calculate distance to campaign objectives
+- **Formula:** `distance = privilege_steps + lateral_moves + unknown_penalty + pressure_penalty`
+- **Outputs:** steps_remaining, confidence, critical_path, alternatives[], blockers[]
+- **Key Class:** `ObjectiveEngine.calculate_distances()`
+
+#### 3. vv_recommend.py — Recommendation Scoring Engine
+- **Purpose:** Score and rank operator action recommendations
+- **Scoring Formula:** `final_score = value_score × stealth_score × novelty_score`
+- **Technique Profiles:** 10 MITRE techniques with noise/logs/EDR metrics
+- **Outputs:** action, final_score, confidence, explanation, expected_logs[], edr_risks[], safer_alternatives[]
+- **Key Class:** `RecommendationEngine.score_recommendations()`
+
+#### 4. vv_detection_pressure.py — Detection Pressure Tracker
+- **Purpose:** Track defensive detection state (0-100 scale)
+- **State Machine:** QUIET (0-20) → CAUTION (21-40) → WATCHED (41-60) → HUNTING (61-80) → COMPROMISED (81-100)
+- **Formula:** `pressure = recent_alerts + failed_actions + repetition_penalty`
+- **Outputs:** state, confidence, trending (increasing/stable/decreasing)
+- **Key Class:** `DetectionPressureEngine.calculate_pressure()`
+
+#### 5. vv_opsec.py — OpSec Simulation Engine
+- **Purpose:** Predict logs, EDR rules, behavioral flags for actions
+- **Probabilities:** probability_logged, probability_detected_edr, probability_behavioral
+- **Modifiers:** asset_criticality (critical/high/medium/low), environment (prod/staging/dev), technique_noise_profile
+- **Outputs:** is_safe (boolean), risk_level (low/medium/high/critical), safer_alternative
+- **Key Class:** `OpSecSimulator.simulate()` & `batch_simulate()`
+
+#### 6. vv_replay.py — Immutable Event Log & Narrative
+- **Purpose:** Append-only event history for campaign narrative
+- **Event Types:** action, detection, discovery, analysis
+- **Capabilities:** record_event(), generate_narrative(), get_event_timeline(), analyze_operator_behavior()
+- **Outputs:** Campaign narrative (Markdown), structured timeline (JSON), behavior patterns
+- **Key Class:** `ReplayEngine(campaign_id)`
+
+#### 7. vv_tempo.py — Operator Tempo Analyzer
+- **Purpose:** Track operator action rate and recommend operational modes
+- **Metrics:** actions_per_hour, actions_per_day, action_intensity (slow/normal/fast/aggressive)
+- **Spike Detection:** Rapid bursts (3+ actions in <5 min intervals)
+- **Modes:** slow_mode (1-2/hour), normal_mode (3-5/hour), fast_mode (6+/hour)
+- **Key Class:** `TempoEngine.analyze_tempo()`
+
+#### 8. vv_infra_burn.py — Infrastructure Burn Tracker
+- **Purpose:** Track C2 and tool infrastructure exposure/attribution
+- **Metrics:** detections_correlated_with_c2, unique_c2_ips_exposed, tools_attributed[]
+- **Burn Levels:** fresh → warm → hot → burned
+- **Outputs:** burn_probability (0.0-1.0), days_until_critical, should_rotate, warning_message
+- **Key Class:** `InfraBurnEngine.update_burn()`
+
+#### 9. vv_confidence.py — Confidence Analysis Engine
+- **Purpose:** Analyze overall decision confidence
+- **Formula:** `confidence = data_completeness × observation_count × path_stability`
+- **Core Principle:** NEVER advise without confidence ≥ 0.3
+- **Outputs:** overall_confidence, confidence_trend, major_unknowns[], data_gaps[]
+- **Key Class:** `ConfidenceEngine.calculate_confidence()`
+
+#### 10. vv_memory.py — Pattern Learning Engine
+- **Purpose:** Long-term campaign context and pattern learning
+- **Learns:** Technique success rates, failed approaches, asset evolution, operator preferences
+- **Patterns:** TechniquePattern (success/failure count, avg_time), AssetPattern, OperatorPreference
+- **Capabilities:** learn_technique_outcome(), suggest_techniques(), get_operator_profile(), get_lessons_learned()
+- **Key Class:** `MemoryEngine(campaign_id)`
+
+#### Integration: vv_cognition_integration.py — Orchestration
+- **Purpose:** Single entry point with mandatory state refresh cycle
+- **Core Class:** `CognitionOrchestrator(campaign_id)`
+- **Mandatory Workflow:** Observe → Simulate → Execute → Evaluate → Adapt
+- **Auto Refresh:** After every operator action:
+  1. record_event() [replay]
+  2. update_graph() [graph]
+  3. calculate_distances() [objective]
+  4. calculate_pressure() [detection]
+  5. score_recommendations() [recommend]
+  6. calculate_confidence() [confidence]
+  7. analyze_tempo() [tempo]
+
+**Data Contract (vv_cognition.py):**
+- Centralized inter-module communication
+- Enums: ConfidenceLevel, DetectionState
+- Dataclasses: Asset, Credential, Session, DetectionEvent, OperatorAction, Recommendation, ObjectiveDistance, DetectionPressure, OpSecSimulation, TempoAnalysis, InfraBurnAnalysis, ConfidenceAnalysis, ReplayEvent, CognitionState
+- All modules ONLY communicate via these structures (no raw database access)
+
+**New Database Tables for Phase 5.5:**
+
+```sql
+-- Cognition state caching (for speed)
+CREATE TABLE cognition_state_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    state_type TEXT,                      -- attack_graph, objective_distance, etc.
+    state_data TEXT,                      -- JSON serialized state
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+    UNIQUE(campaign_id, state_type)
+);
+
+-- Recommendation history (for learning)
+CREATE TABLE recommendation_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    recommended_action TEXT,
+    recommended_score DECIMAL(3,2),
+    operator_followed BOOLEAN,
+    outcome TEXT,                         -- success, failed, unknown
+    executed_at DATETIME,
+    feedback TEXT,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
+);
+
+-- Event replay log (immutable)
+CREATE TABLE replay_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    event_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT,                      -- action, detection, discovery, analysis
+    event_detail TEXT,                    -- JSON
+    user_id INTEGER,
+    technique_id TEXT,
+    outcome TEXT,
+    confidence DECIMAL(3,2),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Technique success patterns
+CREATE TABLE technique_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    technique_id TEXT,                    -- MITRE T-number
+    asset_type TEXT,                      -- Windows Server, Linux, Network Device
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    avg_time_to_compromise DECIMAL(8,2), -- Seconds
+    last_used DATETIME,
+    confidence_score DECIMAL(3,2),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+    UNIQUE(campaign_id, technique_id, asset_type)
+);
+
+-- Detection pressure history
+CREATE TABLE detection_pressure_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    pressure_value DECIMAL(5,1),          -- 0-100
+    pressure_state TEXT,                  -- QUIET, CAUTION, WATCHED, HUNTING, COMPROMISED
+    measured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    recent_alerts_count INTEGER,
+    failed_actions_count INTEGER,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
+);
+
+-- Operator tempo metrics
+CREATE TABLE operator_tempo_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    campaign_id INTEGER NOT NULL,
+    actions_per_hour DECIMAL(5,2),
+    actions_per_day DECIMAL(6,2),
+    action_intensity TEXT,                -- slow, normal, fast, aggressive
+    last_action_time DATETIME,
+    spike_detected BOOLEAN DEFAULT 0,
+    measured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
+);
+
+-- C2 infrastructure tracking
+CREATE TABLE c2_infrastructure (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    c2_ip_address TEXT,
+    c2_hostname TEXT,
+    c2_type TEXT,                         -- HTTP, DNS, HTTPS, Custom
+    burn_level TEXT,                      -- fresh, warm, hot, burned
+    burn_probability DECIMAL(3,2),        -- 0.0-1.0
+    detections_count INTEGER DEFAULT 0,
+    tools_used TEXT,                      -- JSON: [metasploit, cobalt-strike]
+    last_used DATETIME,
+    should_rotate BOOLEAN DEFAULT 0,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
+);
+
+-- Objective progress tracking
+CREATE TABLE objective_progress (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    objective_name TEXT,
+    steps_remaining INTEGER,
+    confidence DECIMAL(3,2),
+    critical_path TEXT,                   -- JSON: step-by-step breakdown
+    estimated_time_to_achieve DECIMAL(6,1), -- Hours
+    last_calculated DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
+);
+```
+
+**Integration Points:**
+- CognitionOrchestrator automatically initialized after campaign selection
+- Cognition state refreshes every operator action (automatic)
+- All recommendations include confidence scores & explanation chains
+- Operator tempo tracked automatically (no configuration needed)
+- Detection pressure updated from activity_log (automatic)
+
+---
+
 ## Cryptography & Security
 
 ### Session Crypto Implementation
