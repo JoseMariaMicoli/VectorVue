@@ -1817,6 +1817,9 @@ class Database:
         
         # --- PHASE 3: REPORTING & EXPORT ENGINE MIGRATIONS ---
         self._run_phase3_migrations()
+        
+        # --- PHASE 4: MULTI-TEAM & FEDERATION MIGRATIONS ---
+        self._run_phase4_migrations()
 
     # -------------------------------------------------------------------------
     # TRANSACTION SUPPORT (v3.0)
@@ -5613,6 +5616,629 @@ class Database:
             group_id=row["group_id"], created_at=row["created_at"],
             last_login=row["last_login"], salt=row["salt"]
         )
+
+    # =========================================================================
+    # PHASE 4: MULTI-TEAM & FEDERATION (Team Management, Coordination, Isolation)
+    # =========================================================================
+
+    def _run_phase4_migrations(self):
+        """Create Phase 4 tables: Teams, team membership, roles, permissions, metrics, sharing policies."""
+        c = self.conn.cursor()
+        
+        try:
+            # 4.1: Teams Table
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS teams (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    lead_operator_id INTEGER NOT NULL,
+                    budget_usd REAL DEFAULT 0.0,
+                    status TEXT DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by TEXT NOT NULL,
+                    FOREIGN KEY (lead_operator_id) REFERENCES users(id)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_teams_lead ON teams(lead_operator_id)")
+            
+            # 4.2: Team Members Table
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS team_members (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    team_role TEXT DEFAULT 'member',
+                    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    assigned_by TEXT NOT NULL,
+                    FOREIGN KEY (team_id) REFERENCES teams(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    UNIQUE(team_id, user_id)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id)")
+            
+            # 4.3: Team Roles Table
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS team_roles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER NOT NULL,
+                    role_name TEXT NOT NULL,
+                    permissions TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (team_id) REFERENCES teams(id),
+                    UNIQUE(team_id, role_name)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_team_roles_team ON team_roles(team_id)")
+            
+            # 4.4: Team Permissions Table
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS team_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    permission_type TEXT NOT NULL,
+                    resource_type TEXT,
+                    granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    granted_by TEXT NOT NULL,
+                    FOREIGN KEY (team_id) REFERENCES teams(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    UNIQUE(team_id, user_id, permission_type, resource_type)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_team_perms_team ON team_permissions(team_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_team_perms_user ON team_permissions(user_id)")
+            
+            # 4.5: Campaign Team Assignment
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS campaign_team_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    campaign_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    assigned_by TEXT NOT NULL,
+                    access_level TEXT DEFAULT 'read_write',
+                    FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+                    FOREIGN KEY (team_id) REFERENCES teams(id),
+                    UNIQUE(campaign_id, team_id)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_camp_team_camp ON campaign_team_assignments(campaign_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_camp_team_team ON campaign_team_assignments(team_id)")
+            
+            # 4.6: Data Sharing Policies
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS data_sharing_policies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_team_id INTEGER NOT NULL,
+                    target_team_id INTEGER NOT NULL,
+                    resource_type TEXT NOT NULL,
+                    access_level TEXT DEFAULT 'read_only',
+                    requires_approval INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by TEXT NOT NULL,
+                    FOREIGN KEY (source_team_id) REFERENCES teams(id),
+                    FOREIGN KEY (target_team_id) REFERENCES teams(id),
+                    UNIQUE(source_team_id, target_team_id, resource_type)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_sharing_source ON data_sharing_policies(source_team_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_sharing_target ON data_sharing_policies(target_team_id)")
+            
+            # 4.7: Team Metrics
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS team_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER NOT NULL,
+                    period_start DATE NOT NULL,
+                    period_end DATE NOT NULL,
+                    total_findings INTEGER DEFAULT 0,
+                    critical_findings INTEGER DEFAULT 0,
+                    approved_findings INTEGER DEFAULT 0,
+                    average_approval_time_hours REAL DEFAULT 0.0,
+                    total_campaigns INTEGER DEFAULT 0,
+                    active_campaigns INTEGER DEFAULT 0,
+                    calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (team_id) REFERENCES teams(id),
+                    UNIQUE(team_id, period_start, period_end)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_team_metrics_team ON team_metrics(team_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_team_metrics_period ON team_metrics(period_start, period_end)")
+            
+            # 4.8: Operator Performance Tracking
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS operator_performance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    period_start DATE NOT NULL,
+                    period_end DATE NOT NULL,
+                    findings_created INTEGER DEFAULT 0,
+                    findings_approved INTEGER DEFAULT 0,
+                    approval_rate REAL DEFAULT 0.0,
+                    average_cvss_score REAL DEFAULT 0.0,
+                    total_operations INTEGER DEFAULT 0,
+                    success_rate REAL DEFAULT 0.0,
+                    effectiveness_score REAL DEFAULT 0.0,
+                    calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (team_id) REFERENCES teams(id),
+                    UNIQUE(user_id, team_id, period_start, period_end)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_perf_user ON operator_performance(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_perf_team ON operator_performance(team_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_perf_period ON operator_performance(period_start, period_end)")
+            
+            # 4.9: Team Intelligence Pools
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS team_intelligence_pools (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER NOT NULL,
+                    pool_name TEXT NOT NULL,
+                    description TEXT,
+                    intelligence_items TEXT,
+                    is_shared INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by TEXT NOT NULL,
+                    FOREIGN KEY (team_id) REFERENCES teams(id),
+                    UNIQUE(team_id, pool_name)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_intel_pool_team ON team_intelligence_pools(team_id)")
+            
+            # 4.10: Cross-Team Coordination Logs
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS coordination_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_team_id INTEGER NOT NULL,
+                    target_team_id INTEGER NOT NULL,
+                    coordination_type TEXT NOT NULL,
+                    message TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by TEXT NOT NULL,
+                    resolved_at TIMESTAMP,
+                    FOREIGN KEY (source_team_id) REFERENCES teams(id),
+                    FOREIGN KEY (target_team_id) REFERENCES teams(id)
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_coord_source ON coordination_logs(source_team_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_coord_target ON coordination_logs(target_team_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_coord_status ON coordination_logs(status)")
+            
+            self.conn.commit()
+            print("[Phase 4] ✓ All tables created successfully")
+        except Exception as e:
+            print(f"[Phase 4] Migration error: {e}")
+            self.conn.rollback()
+
+    def create_team(self, team_name: str, description: str, lead_operator_id: int, budget_usd: float = 0.0) -> int:
+        """Create a new team with lead operator and initial budget."""
+        user = self.current_user
+        if not user or not role_gte(user.role, Role.LEAD):
+            return 0
+        
+        c = self.conn.cursor()
+        try:
+            c.execute("""
+                INSERT INTO teams (name, description, lead_operator_id, budget_usd, created_by)
+                VALUES (?, ?, ?, ?, ?)
+            """, (team_name, description, lead_operator_id, budget_usd, user.username))
+            team_id = c.lastrowid
+            self.log_audit_event(user.username, "TEAM_CREATED", 
+                                {"team_id": team_id, "name": team_name, "lead_id": lead_operator_id})
+            self.conn.commit()
+            return team_id
+        except Exception as e:
+            self.log_audit_event(user.username, "TEAM_CREATE_FAILED", {"error": str(e)[:50]})
+            return 0
+
+    def add_team_member(self, team_id: int, user_id: int, team_role: str = "member") -> bool:
+        """Add user to team with specified role."""
+        user = self.current_user
+        if not user or not role_gte(user.role, Role.LEAD):
+            return False
+        
+        c = self.conn.cursor()
+        try:
+            c.execute("""
+                INSERT INTO team_members (team_id, user_id, team_role, assigned_by)
+                VALUES (?, ?, ?, ?)
+            """, (team_id, user_id, team_role, user.username))
+            self.log_audit_event(user.username, "TEAM_MEMBER_ADDED", 
+                                {"team_id": team_id, "user_id": user_id, "role": team_role})
+            self.conn.commit()
+            return True
+        except Exception as e:
+            self.log_audit_event(user.username, "TEAM_MEMBER_ADD_FAILED", {"error": str(e)[:50]})
+            return False
+
+    def list_teams(self) -> list:
+        """Get all teams accessible to current user."""
+        user = self.current_user
+        if not user:
+            return []
+        
+        c = self.conn.cursor()
+        if role_gte(user.role, Role.ADMIN):
+            c.execute("SELECT * FROM teams ORDER BY created_at DESC")
+        else:
+            c.execute("""
+                SELECT DISTINCT t.* FROM teams t
+                JOIN team_members tm ON t.id = tm.team_id
+                WHERE tm.user_id = ? ORDER BY t.created_at DESC
+            """, (user.id,))
+        
+        teams = []
+        for row in c.fetchall():
+            teams.append({
+                "id": row["id"], "name": row["name"], "description": row["description"],
+                "lead_operator_id": row["lead_operator_id"], "budget_usd": row["budget_usd"],
+                "status": row["status"], "created_at": row["created_at"]
+            })
+        return teams
+
+    def get_team_members(self, team_id: int) -> list:
+        """Get all members of a team with their roles."""
+        c = self.conn.cursor()
+        c.execute("""
+            SELECT tm.id, tm.user_id, u.username, u.role, tm.team_role, tm.joined_at
+            FROM team_members tm
+            JOIN users u ON tm.user_id = u.id
+            WHERE tm.team_id = ?
+            ORDER BY tm.joined_at
+        """, (team_id,))
+        
+        members = []
+        for row in c.fetchall():
+            members.append({
+                "id": row["id"], "user_id": row["user_id"], "username": row["username"],
+                "role": row["role"], "team_role": row["team_role"], "joined_at": row["joined_at"]
+            })
+        return members
+
+    def assign_campaign_to_team(self, campaign_id: int, team_id: int, access_level: str = "read_write") -> bool:
+        """Assign campaign to team with access control."""
+        user = self.current_user
+        if not user or not role_gte(user.role, Role.LEAD):
+            return False
+        
+        c = self.conn.cursor()
+        try:
+            c.execute("""
+                INSERT INTO campaign_team_assignments (campaign_id, team_id, access_level, assigned_by)
+                VALUES (?, ?, ?, ?)
+            """, (campaign_id, team_id, access_level, user.username))
+            self.log_audit_event(user.username, "CAMPAIGN_ASSIGNED_TO_TEAM",
+                                {"campaign_id": campaign_id, "team_id": team_id, "access": access_level})
+            self.conn.commit()
+            return True
+        except Exception as e:
+            self.log_audit_event(user.username, "CAMPAIGN_ASSIGN_FAILED", {"error": str(e)[:50]})
+            return False
+
+    def get_team_campaigns(self, team_id: int) -> list:
+        """Get all campaigns assigned to a team."""
+        c = self.conn.cursor()
+        c.execute("""
+            SELECT c.id, c.name, c.client, c.operator_team, c.status, cta.access_level
+            FROM campaigns c
+            JOIN campaign_team_assignments cta ON c.id = cta.campaign_id
+            WHERE cta.team_id = ?
+            ORDER BY c.created_at DESC
+        """, (team_id,))
+        
+        campaigns = []
+        for row in c.fetchall():
+            campaigns.append({
+                "id": row["id"], "name": row["name"], "client": row["client"],
+                "operator_team": row["operator_team"], "status": row["status"],
+                "access_level": row["access_level"]
+            })
+        return campaigns
+
+    def create_data_sharing_policy(self, source_team_id: int, target_team_id: int, 
+                                   resource_type: str, access_level: str = "read_only",
+                                   requires_approval: bool = True) -> bool:
+        """Create sharing policy between teams."""
+        user = self.current_user
+        if not user or not role_gte(user.role, Role.ADMIN):
+            return False
+        
+        c = self.conn.cursor()
+        try:
+            c.execute("""
+                INSERT INTO data_sharing_policies 
+                (source_team_id, target_team_id, resource_type, access_level, requires_approval, created_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (source_team_id, target_team_id, resource_type, access_level, 1 if requires_approval else 0, user.username))
+            self.log_audit_event(user.username, "SHARING_POLICY_CREATED",
+                                {"source_team": source_team_id, "target_team": target_team_id, "resource": resource_type})
+            self.conn.commit()
+            return True
+        except Exception as e:
+            self.log_audit_event(user.username, "SHARING_POLICY_FAILED", {"error": str(e)[:50]})
+            return False
+
+    def get_sharing_policies(self, team_id: int) -> list:
+        """Get all sharing policies for a team (inbound and outbound)."""
+        c = self.conn.cursor()
+        c.execute("""
+            SELECT id, source_team_id, target_team_id, resource_type, access_level, requires_approval
+            FROM data_sharing_policies
+            WHERE source_team_id = ? OR target_team_id = ?
+            ORDER BY created_at DESC
+        """, (team_id, team_id))
+        
+        policies = []
+        for row in c.fetchall():
+            policies.append({
+                "id": row["id"], "source_team_id": row["source_team_id"],
+                "target_team_id": row["target_team_id"], "resource_type": row["resource_type"],
+                "access_level": row["access_level"], "requires_approval": bool(row["requires_approval"])
+            })
+        return policies
+
+    def calculate_team_metrics(self, team_id: int, period_start: str, period_end: str) -> dict:
+        """Calculate team performance metrics for period."""
+        c = self.conn.cursor()
+        
+        # Count findings created by team members
+        c.execute("""
+            SELECT COUNT(*) as total FROM findings f
+            WHERE f.created_by IN (
+                SELECT u.username FROM users u
+                JOIN team_members tm ON u.id = tm.user_id
+                WHERE tm.team_id = ?
+            ) AND f.created_at BETWEEN ? AND ?
+        """, (team_id, period_start, period_end))
+        total_findings = c.fetchone()[0] or 0
+        
+        # Count critical findings
+        c.execute("""
+            SELECT COUNT(*) as critical FROM findings f
+            WHERE f.created_by IN (
+                SELECT u.username FROM users u
+                JOIN team_members tm ON u.id = tm.user_id
+                WHERE tm.team_id = ?
+            ) AND f.cvss_score >= 9.0 AND f.created_at BETWEEN ? AND ?
+        """, (team_id, period_start, period_end))
+        critical_findings = c.fetchone()[0] or 0
+        
+        # Count approved findings
+        c.execute("""
+            SELECT COUNT(*) as approved FROM findings f
+            WHERE f.created_by IN (
+                SELECT u.username FROM users u
+                JOIN team_members tm ON u.id = tm.user_id
+                WHERE tm.team_id = ?
+            ) AND f.approval_status = 'approved' AND f.created_at BETWEEN ? AND ?
+        """, (team_id, period_start, period_end))
+        approved_findings = c.fetchone()[0] or 0
+        
+        # Count campaigns
+        c.execute("""
+            SELECT COUNT(*) as total FROM campaigns c
+            JOIN campaign_team_assignments cta ON c.id = cta.campaign_id
+            WHERE cta.team_id = ? AND c.created_at BETWEEN ? AND ?
+        """, (team_id, period_start, period_end))
+        total_campaigns = c.fetchone()[0] or 0
+        
+        # Count active campaigns
+        c.execute("""
+            SELECT COUNT(*) as active FROM campaigns c
+            JOIN campaign_team_assignments cta ON c.id = cta.campaign_id
+            WHERE cta.team_id = ? AND c.status = 'active' AND c.created_at BETWEEN ? AND ?
+        """, (team_id, period_start, period_end))
+        active_campaigns = c.fetchone()[0] or 0
+        
+        approval_rate = (approved_findings / total_findings * 100) if total_findings > 0 else 0.0
+        
+        try:
+            c.execute("""
+                INSERT INTO team_metrics 
+                (team_id, period_start, period_end, total_findings, critical_findings, 
+                 approved_findings, average_approval_time_hours, total_campaigns, active_campaigns)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (team_id, period_start, period_end, total_findings, critical_findings,
+                  approved_findings, 0.0, total_campaigns, active_campaigns))
+            self.conn.commit()
+        except:
+            pass
+        
+        return {
+            "team_id": team_id, "period_start": period_start, "period_end": period_end,
+            "total_findings": total_findings, "critical_findings": critical_findings,
+            "approved_findings": approved_findings, "approval_rate": approval_rate,
+            "total_campaigns": total_campaigns, "active_campaigns": active_campaigns
+        }
+
+    def calculate_operator_performance(self, user_id: int, team_id: int, period_start: str, period_end: str) -> dict:
+        """Calculate individual operator performance metrics."""
+        c = self.conn.cursor()
+        
+        # Get user info
+        c.execute("SELECT username FROM users WHERE id=?", (user_id,))
+        row = c.fetchone()
+        username = row[0] if row else "unknown"
+        
+        # Count findings created
+        c.execute("""
+            SELECT COUNT(*) FROM findings 
+            WHERE created_by = ? AND created_at BETWEEN ? AND ?
+        """, (username, period_start, period_end))
+        findings_created = c.fetchone()[0] or 0
+        
+        # Count findings approved
+        c.execute("""
+            SELECT COUNT(*) FROM findings 
+            WHERE created_by = ? AND approval_status = 'approved' AND created_at BETWEEN ? AND ?
+        """, (username, period_start, period_end))
+        findings_approved = c.fetchone()[0] or 0
+        
+        # Count operations (actions logged)
+        c.execute("""
+            SELECT COUNT(*) FROM actions
+            WHERE operator = ? AND timestamp BETWEEN ? AND ?
+        """, (username, period_start, period_end))
+        total_operations = c.fetchone()[0] or 0
+        
+        # Calculate averages
+        approval_rate = (findings_approved / findings_created * 100) if findings_created > 0 else 0.0
+        
+        c.execute("""
+            SELECT AVG(cvss_score) FROM findings
+            WHERE created_by = ? AND created_at BETWEEN ? AND ?
+        """, (username, period_start, period_end))
+        row = c.fetchone()
+        avg_cvss = row[0] if row and row[0] else 0.0
+        
+        effectiveness_score = (findings_created * avg_cvss / 100) if findings_created > 0 else 0.0
+        
+        try:
+            c.execute("""
+                INSERT INTO operator_performance
+                (user_id, team_id, period_start, period_end, findings_created, findings_approved,
+                 approval_rate, average_cvss_score, total_operations, effectiveness_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (user_id, team_id, period_start, period_end, findings_created, findings_approved,
+                  approval_rate, avg_cvss, total_operations, effectiveness_score))
+            self.conn.commit()
+        except:
+            pass
+        
+        return {
+            "user_id": user_id, "username": username, "team_id": team_id,
+            "period_start": period_start, "period_end": period_end,
+            "findings_created": findings_created, "findings_approved": findings_approved,
+            "approval_rate": approval_rate, "average_cvss_score": avg_cvss,
+            "total_operations": total_operations, "effectiveness_score": effectiveness_score
+        }
+
+    def get_team_leaderboard(self, team_id: int) -> list:
+        """Get operator leaderboard for team by effectiveness."""
+        c = self.conn.cursor()
+        c.execute("""
+            SELECT user_id, username, approval_rate, average_cvss_score, 
+                   effectiveness_score, findings_created, findings_approved
+            FROM operator_performance
+            WHERE team_id = ?
+            ORDER BY effectiveness_score DESC LIMIT 20
+        """, (team_id,))
+        
+        leaderboard = []
+        for i, row in enumerate(c.fetchall(), 1):
+            leaderboard.append({
+                "rank": i, "user_id": row["user_id"], "username": row["username"],
+                "effectiveness_score": row["effectiveness_score"],
+                "approval_rate": row["approval_rate"],
+                "avg_cvss_score": row["average_cvss_score"],
+                "findings_created": row["findings_created"],
+                "findings_approved": row["findings_approved"]
+            })
+        return leaderboard
+
+    def create_intelligence_pool(self, team_id: int, pool_name: str, description: str = "") -> int:
+        """Create shared intelligence pool for team."""
+        user = self.current_user
+        if not user or not role_gte(user.role, Role.OPERATOR):
+            return 0
+        
+        c = self.conn.cursor()
+        try:
+            c.execute("""
+                INSERT INTO team_intelligence_pools (team_id, pool_name, description, created_by)
+                VALUES (?, ?, ?, ?)
+            """, (team_id, pool_name, description, user.username))
+            pool_id = c.lastrowid
+            self.log_audit_event(user.username, "INTEL_POOL_CREATED",
+                                {"team_id": team_id, "pool_id": pool_id, "name": pool_name})
+            self.conn.commit()
+            return pool_id
+        except Exception as e:
+            self.log_audit_event(user.username, "INTEL_POOL_FAILED", {"error": str(e)[:50]})
+            return 0
+
+    def add_to_intelligence_pool(self, pool_id: int, intelligence_item: str) -> bool:
+        """Add intelligence item to team pool."""
+        user = self.current_user
+        if not user or not role_gte(user.role, Role.OPERATOR):
+            return False
+        
+        c = self.conn.cursor()
+        try:
+            c.execute("SELECT intelligence_items FROM team_intelligence_pools WHERE id=?", (pool_id,))
+            row = c.fetchone()
+            if not row:
+                return False
+            
+            items = json.loads(row[0]) if row[0] else []
+            items.append({"item": intelligence_item, "added_by": user.username, "added_at": datetime.now().isoformat()})
+            
+            c.execute("""
+                UPDATE team_intelligence_pools SET intelligence_items = ? WHERE id = ?
+            """, (json.dumps(items), pool_id))
+            self.conn.commit()
+            return True
+        except Exception:
+            return False
+
+    def log_coordination(self, source_team_id: int, target_team_id: int, 
+                        coordination_type: str, message: str = "") -> int:
+        """Log cross-team coordination event."""
+        user = self.current_user
+        if not user:
+            return 0
+        
+        c = self.conn.cursor()
+        try:
+            c.execute("""
+                INSERT INTO coordination_logs 
+                (source_team_id, target_team_id, coordination_type, message, created_by)
+                VALUES (?, ?, ?, ?, ?)
+            """, (source_team_id, target_team_id, coordination_type, message, user.username))
+            log_id = c.lastrowid
+            self.log_audit_event(user.username, "COORDINATION_LOGGED",
+                                {"source_team": source_team_id, "target_team": target_team_id, "type": coordination_type})
+            self.conn.commit()
+            return log_id
+        except Exception as e:
+            self.log_audit_event(user.username, "COORDINATION_LOG_FAILED", {"error": str(e)[:50]})
+            return 0
+
+    def get_coordination_logs(self, team_id: int, status: str = None) -> list:
+        """Get coordination logs for team."""
+        c = self.conn.cursor()
+        if status:
+            c.execute("""
+                SELECT id, source_team_id, target_team_id, coordination_type, message, 
+                       status, created_at, created_by
+                FROM coordination_logs
+                WHERE (source_team_id = ? OR target_team_id = ?) AND status = ?
+                ORDER BY created_at DESC
+            """, (team_id, team_id, status))
+        else:
+            c.execute("""
+                SELECT id, source_team_id, target_team_id, coordination_type, message, 
+                       status, created_at, created_by
+                FROM coordination_logs
+                WHERE source_team_id = ? OR target_team_id = ?
+                ORDER BY created_at DESC
+            """, (team_id, team_id))
+        
+        logs = []
+        for row in c.fetchall():
+            logs.append({
+                "id": row["id"], "source_team_id": row["source_team_id"],
+                "target_team_id": row["target_team_id"], "coordination_type": row["coordination_type"],
+                "message": row["message"], "status": row["status"],
+                "created_at": row["created_at"], "created_by": row["created_by"]
+            })
+        return logs
 
     def close(self):
         self.conn.close()

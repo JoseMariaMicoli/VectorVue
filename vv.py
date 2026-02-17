@@ -1127,6 +1127,201 @@ Attestation Date: {compliance_report.get('attestation_date', 'N/A')}
         status.styles.color = color
 
 # =============================================================================
+# v4.0 TEAM MANAGEMENT & FEDERATION VIEWS
+# =============================================================================
+
+class TeamManagementView(Container):
+    """Phase 4: Multi-Team & Federation - Team management, cross-team coordination, operator performance."""
+    
+    CSS = """
+    TeamManagementView { layout: vertical; background: $bg-void; height: 100%; }
+    #team-header { height: auto; padding: 1; background: $bg-panel; border-bottom: heavy $p-purple; }
+    #team-split { layout: horizontal; height: 1fr; }
+    #team-controls { width: 40%; height: 100%; background: $bg-panel; border-right: solid $e-cyan; padding: 1; overflow-y: auto; }
+    #team-content { width: 1fr; height: 100%; padding: 1; background: $bg-void; overflow-y: auto; }
+    .team-section { margin-bottom: 2; border-left: solid $p-purple; padding-left: 1; }
+    .team-label { color: $p-purple; text-style: bold; margin-top: 1; margin-bottom: 1; }
+    #team-status { color: white; height: auto; padding: 1; background: $bg-panel; border-top: solid $steel; }
+    """
+    
+    def compose(self) -> ComposeResult:
+        yield Label("[bold magenta]PHASE 4: MULTI-TEAM & FEDERATION[/]", id="team-header", classes="reg-title")
+        
+        with Container(id="team-split"):
+            # Left Panel: Team Controls
+            with Vertical(id="team-controls"):
+                # 1. Team Management
+                yield Label("TEAM MANAGEMENT", classes="team-label")
+                with Vertical(classes="team-section"):
+                    yield Input(id="inp-team-name", placeholder="Team Name")
+                    yield Input(id="inp-team-desc", placeholder="Description")
+                    yield Input(id="inp-team-budget", placeholder="Budget (USD)", type="number")
+                    yield Button("CREATE TEAM", id="btn-create-team", variant="primary")
+                    yield VimDataTable(id="table-teams", cursor_type="row")
+                
+                # 2. Team Members
+                yield Label("TEAM MEMBERS", classes="team-label")
+                with Vertical(classes="team-section"):
+                    yield Static("Select team to manage members", id="lbl-team-members")
+                    yield Button("ADD MEMBER", id="btn-add-member", variant="primary")
+                    yield VimDataTable(id="table-members", cursor_type="row")
+                
+                # 3. Data Sharing Policies
+                yield Label("SHARING POLICIES", classes="team-label")
+                with Vertical(classes="team-section"):
+                    yield Select([("Read Only", "read_only"), ("Read/Write", "read_write"), ("Admin", "admin")],
+                               id="sel-access-level", prompt="Access Level")
+                    yield Button("CREATE POLICY", id="btn-create-policy", variant="primary")
+                
+                # 4. Intelligence Pools
+                yield Label("INTELLIGENCE POOLS", classes="team-label")
+                with Vertical(classes="team-section"):
+                    yield Input(id="inp-pool-name", placeholder="Pool Name")
+                    yield Button("CREATE POOL", id="btn-create-pool", variant="primary")
+                    yield VimDataTable(id="table-pools", cursor_type="row")
+            
+            # Right Panel: Metrics & Leaderboard
+            with Vertical(id="team-content"):
+                yield Label("TEAM METRICS & PERFORMANCE", classes="cyber-label")
+                with Horizontal():
+                    yield Static("Teams: 0", id="stat-team-count", classes="info-box")
+                    yield Static("Members: 0", id="stat-member-count", classes="info-box")
+                    yield Static("Campaigns: 0", id="stat-team-campaigns", classes="info-box")
+                    yield Static("Findings: 0", id="stat-team-findings", classes="info-box")
+                
+                yield Label("OPERATOR LEADERBOARD", classes="cyber-label")
+                yield VimDataTable(id="table-leaderboard", cursor_type="row")
+                
+                yield Label("COORDINATION LOGS", classes="cyber-label")
+                yield VimDataTable(id="table-coordination", cursor_type="row")
+        
+        yield Label("TEAM MANAGEMENT READY", id="team-status", classes="info-box")
+
+    def on_mount(self):
+        # Setup tables
+        self.query_one("#table-teams").add_columns("ID", "Team Name", "Lead", "Status", "Budget")
+        self.query_one("#table-members").add_columns("User", "Role", "Joined")
+        self.query_one("#table-pools").add_columns("Pool Name", "Items", "Shared", "Created")
+        self.query_one("#table-leaderboard").add_columns("Rank", "Operator", "Score", "Findings", "Approval %")
+        self.query_one("#table-coordination").add_columns("Source Team", "Target Team", "Type", "Status")
+
+    @on(Button.Pressed, "#btn-create-team")
+    def on_create_team(self):
+        """Create new team."""
+        app = self.app
+        user = app.db.current_user
+        if not user or not role_gte(user.role, Role.LEAD):
+            self.update_team_status("LEAD+ ROLE REQUIRED", CyberColors.RED_ALERT)
+            return
+        
+        name = self.query_one("#inp-team-name").value.strip()
+        desc = self.query_one("#inp-team-desc").value.strip()
+        try:
+            budget = float(self.query_one("#inp-team-budget").value or "0.0")
+        except ValueError:
+            budget = 0.0
+        
+        if not name:
+            self.update_team_status("TEAM NAME REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        
+        try:
+            team_id = app.db.create_team(name, desc, user.id, budget)
+            if team_id:
+                self.refresh_teams()
+                self.query_one("#inp-team-name").value = ""
+                self.query_one("#inp-team-desc").value = ""
+                self.query_one("#inp-team-budget").value = ""
+                self.update_team_status(f"✓ TEAM CREATED (ID: {team_id})", CyberColors.PHOSPHOR_GREEN)
+            else:
+                self.update_team_status("FAILED TO CREATE TEAM", CyberColors.RED_ALERT)
+        except Exception as e:
+            self.update_team_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+
+    @on(Button.Pressed, "#btn-add-member")
+    def on_add_member(self):
+        """Add member to selected team."""
+        app = self.app
+        user = app.db.current_user
+        if not user or not role_gte(user.role, Role.LEAD):
+            self.update_team_status("LEAD+ ROLE REQUIRED", CyberColors.RED_ALERT)
+            return
+        
+        table = self.query_one("#table-teams")
+        if not table.row_count:
+            self.update_team_status("SELECT A TEAM FIRST", CyberColors.AMBER_WARNING)
+            return
+        
+        self.update_team_status("MEMBER ADDITION: Use UI to select user and role", CyberColors.ELECTRIC_CYAN)
+
+    @on(Button.Pressed, "#btn-create-policy")
+    def on_create_policy(self):
+        """Create data sharing policy."""
+        app = self.app
+        user = app.db.current_user
+        if not user or not role_gte(user.role, Role.ADMIN):
+            self.update_team_status("ADMIN ROLE REQUIRED", CyberColors.RED_ALERT)
+            return
+        
+        self.update_team_status("POLICY CREATION: Configure teams and access levels", CyberColors.ELECTRIC_CYAN)
+
+    @on(Button.Pressed, "#btn-create-pool")
+    def on_create_pool(self):
+        """Create intelligence pool."""
+        app = self.app
+        user = app.db.current_user
+        if not user or not role_gte(user.role, Role.OPERATOR):
+            self.update_team_status("OPERATOR+ ROLE REQUIRED", CyberColors.RED_ALERT)
+            return
+        
+        pool_name = self.query_one("#inp-pool-name").value.strip()
+        if not pool_name:
+            self.update_team_status("POOL NAME REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        
+        # Get first team for user
+        teams = app.db.list_teams()
+        if not teams:
+            self.update_team_status("NO TEAM AVAILABLE", CyberColors.AMBER_WARNING)
+            return
+        
+        try:
+            pool_id = app.db.create_intelligence_pool(teams[0]["id"], pool_name)
+            if pool_id:
+                self.refresh_pools()
+                self.query_one("#inp-pool-name").value = ""
+                self.update_team_status(f"✓ INTELLIGENCE POOL CREATED (ID: {pool_id})", CyberColors.PHOSPHOR_GREEN)
+            else:
+                self.update_team_status("FAILED TO CREATE POOL", CyberColors.RED_ALERT)
+        except Exception as e:
+            self.update_team_status(f"ERROR: {str(e)[:60]}", CyberColors.RED_ALERT)
+
+    def refresh_teams(self):
+        """Refresh teams list."""
+        app = self.app
+        table = self.query_one("#table-teams")
+        table.clear()
+        
+        teams = app.db.list_teams()
+        for team in teams:
+            table.add_row(str(team["id"]), team["name"], f"Lead: {team['lead_operator_id']}", 
+                         team["status"], f"${team['budget_usd']:.2f}")
+        
+        self.query_one("#stat-team-count").update(f"Teams: {len(teams)}")
+
+    def refresh_pools(self):
+        """Refresh intelligence pools."""
+        table = self.query_one("#table-pools")
+        table.clear()
+
+    def update_team_status(self, msg: str, color: str = "#ffffff"):
+        """Update team management status bar."""
+        status = self.query_one("#team-status")
+        ts = datetime.now().strftime('%H:%M:%S')
+        status.update(f"[{ts}] {msg}")
+        status.styles.color = color
+
+# =============================================================================
 # SHUTDOWN VIEWS
 # =============================================================================
 
@@ -1248,6 +1443,7 @@ class CyberTUI(App):
         Binding("ctrl+4", "toggle_remediation",   "Remediation"),
         Binding("ctrl+5", "toggle_capability",    "Capability"),
         Binding("ctrl+r", "toggle_reporting",     "Reporting"),
+        Binding("ctrl+t", "toggle_teams",         "Teams"),
         Binding("alt+1", "toggle_collaboration",  "Collab"),
         Binding("alt+2", "toggle_tasks",          "Tasks"),
         Binding("alt+3", "toggle_behavioral",     "Analytics"),
@@ -1300,6 +1496,9 @@ class CyberTUI(App):
             
             # v3.5 Reporting & Export Views
             yield ReportingView(id="reporting-view")
+            
+            # v4.0 Team Management & Federation Views
+            yield TeamManagementView(id="team-view")
             
             yield ShutdownConfirmationView(id="shutdown-view")
 
@@ -1593,6 +1792,17 @@ class CyberTUI(App):
         else:
             sw.current = "reporting-view"
             self.update_status("MODE: REPORTING & EXPORT ENGINE (Phase 3)", CyberColors.ELECTRIC_CYAN)
+
+    def action_toggle_teams(self):
+        if not self.db.current_user:
+            self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        sw = self.query_one("#view-switcher")
+        if sw.current == "team-view": self.action_return_to_editor()
+        else:
+            sw.current = "team-view"
+            self.query_one("TeamManagementView").refresh_teams()
+            self.update_status("MODE: TEAM MANAGEMENT & FEDERATION (Phase 4)", CyberColors.PURPLE_HAZE)
 
     # v3.4 View Toggles
     def action_toggle_collaboration(self):
