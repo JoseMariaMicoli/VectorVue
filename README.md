@@ -22,11 +22,12 @@ Previous versions remain under the original license.
 ```
 
 ![Status](https://img.shields.io/badge/Status-Operational-39FF14)
-![Version](https://img.shields.io/badge/Version-3.7-00FFFF)
-![Maturity](https://img.shields.io/badge/Maturity-Phase_5.5-orange)
+![Version](https://img.shields.io/badge/Version-3.8-00FFFF)
+![Maturity](https://img.shields.io/badge/Maturity-Phase_5.5_Complete-39FF14)
+![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
 ![Evidence](https://img.shields.io/badge/Evidence-Defensible-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-Apache_2.0-green)
 
 ---
 
@@ -40,18 +41,19 @@ Unlike pentest note tools, VectorVue models the **state of an operation** and he
 
 ## Maturity Model
 
-| Stage     | Purpose              |
-| --------- | -------------------- |
-| Notebook  | Store evidence       |
-| Manager   | Organize engagement  |
-| Platform  | Enforce workflow     |
-| Cognition | Guide decisions      |
-| Autonomy  | Supervised execution |
+| Stage     | Purpose              | Status |
+| --------- | -------------------- | ------ |
+| Notebook  | Store evidence       | ✅ Complete (v1-2) |
+| Manager   | Organize engagement  | ✅ Complete (v2.0+) |
+| Platform  | Enforce workflow     | ✅ Complete (v3.0+) |
+| Cognition | Guide decisions      | ✅ Complete (v3.8) |
+| Autonomy  | Supervised execution | 🔮 Phase 6+ |
 
 Current state:
 
-**Phase 5 — Campaign Platform (stable)**
-**Phase 5.5 — Operational Cognition (active development)**
+**Phase 5 — Campaign Platform (stable)** ✅
+**Phase 5.5 — Operational Cognition (complete)** ✅
+**Phase 6 — Strategic Planning (upcoming)**
 
 ---
 
@@ -127,23 +129,39 @@ Priority order:
 
 ### Campaign Management
 
-Multi-campaign isolation with RBAC.
+Multi-campaign isolation with RBAC, team coordination, client context.
 
 ### Operational Tracking
 
-Sessions, detections, persistence, objectives.
+Sessions, detections, persistence, objectives, activity timelines.
+
+### Operational Cognition (Phase 5.5)
+
+**Decision-support system with 10 deterministic modules:**
+- **Attack Graph** — Compromise relationship pathfinding
+- **Objective Distance** — Steps to campaign goal calculation
+- **Recommendation Scoring** — Risk-weighted action scoring
+- **Detection Pressure** — Defensive state tracking (0-100)
+- **OpSec Simulation** — Probability logging/detection prediction
+- **Event Replay** — Immutable campaign narrative timeline
+- **Operator Tempo** — Action rate analysis & spike detection
+- **Infrastructure Burn** — C2 & tool exposure tracking
+- **Confidence Analysis** — Data completeness & observation scoring
+- **Memory Learning** — Pattern recognition & technique success rates
+
+All logic deterministic, explainable, and confidence-scored.
 
 ### Intelligence Correlation
 
-IOC ingestion and risk aggregation.
+IOC ingestion, threat actor profiling, feed aggregation, risk aggregation.
 
 ### Reporting
 
-Compliance-ready reports and evidence manifests.
+Compliance-ready reports, evidence manifests, approval workflows, multi-format export.
 
 ### Security Controls
 
-Encryption, audit logs, retention enforcement.
+AES-256-GCM encryption, PBKDF2 key derivation, audit logs, retention enforcement, immutable evidence chains.
 
 ---
 
@@ -219,10 +237,10 @@ The purpose is defense improvement.
 
 ## Roadmap
 
-Phase 5.5 — Operational cognition
-Phase 6 — Strategic planning
-Phase 7 — Adaptive operations
-Phase 8 — Supervised autonomy
+Phase 5.5 — Operational cognition ✅ **COMPLETE**
+Phase 6 — Strategic planning & hypothesis testing
+Phase 7 — Adaptive operations & environment learning
+Phase 8 — Supervised autonomy & execution engines
 
 ---
 

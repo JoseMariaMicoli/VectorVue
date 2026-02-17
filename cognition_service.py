@@ -1,7 +1,6 @@
-
-/*
+"""
 Copyright (c) 2026 José María Micoli
-Licensed under Apache-2.0
+Licensed under {'license_type': 'Apache-2.0'}
 
 You may:
 ✔ Study
@@ -9,8 +8,9 @@ You may:
 ✔ Use for internal security testing
 
 You may NOT:
-✘ Remove copyright notices
-*/
+✘ Offer as a commercial service
+✘ Sell derived competing products
+"""
 
 """
 cognition_service.py - Service Layer for Phase 5.5 Cognition Platform
