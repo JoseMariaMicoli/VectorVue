@@ -80,6 +80,85 @@ Complete technical architecture for VectorVue v3.7 - Red Team Campaign Managemen
 │  └─ Amber Warning: #FFAA00 (warnings, cautions)                │
 └─────────────────────────────────────────────────────────────────┘
 ```
+---
+
+## 📈 Project Maturity Timeline (Normalized)
+
+VectorVue development is not linear feature delivery — it is a capability maturation path.
+
+Each phase upgrades the system category.
+
+| Phase   | System Type                        | Operator Role      | System Role             |
+| ------- | ---------------------------------- | ------------------ | ----------------------- |
+| 0-2     | Secure Notebook                    | Data Recorder      | Storage                 |
+| 3-4     | Engagement Manager                 | Evidence Manager   | Organization            |
+| 5       | Campaign Platform                  | Operator Assistant | Workflow Enforcement    |
+| **5.5** | **Operational Cognition Platform** | **Decision Maker** | **Operational Advisor** |
+| 6       | Autonomous Planning                | Supervisor         | Strategy Engine         |
+| 7       | Adaptive Operations                | Commander          | Co-Pilot                |
+| 8       | Autonomous Red Team                | Approver           | Operator                |
+
+---
+
+## 🧠 Capability Maturity Levels
+
+### Level 1 — Documentation System
+
+Record → Search → Export
+
+### Level 2 — Structured Campaign Management
+
+Track → Approve → Report
+
+### Level 3 — Assisted Operations
+
+Recommend → Validate → Protect operator
+
+### Level 4 — Operational Cognition (**Phase 5.5**)
+
+Understand → Predict → Guide
+
+### Level 5 — Strategic Autonomy (Phase 6+)
+
+Plan → Adapt → Execute safely
+
+---
+
+## 🚀 Development Velocity Impact
+
+Phase 5 delivered features
+Phase 5.5 delivers intelligence
+
+This changes development characteristics:
+
+| Before 5.5       | After 5.5                    |
+| ---------------- | ---------------------------- |
+| UI driven        | Engine driven                |
+| CRUD logic       | Decision models              |
+| Data correctness | Behavioral correctness       |
+| Feature bugs     | Strategy bugs                |
+| Local validation | Emergent behavior validation |
+
+Testing focus shifts from:
+
+> “Does it work?”
+> to
+> “Does it make correct decisions?”
+
+---
+
+## ⚠️ Important Engineering Consequence
+
+From Phase 5.5 onward:
+
+VectorVue is a **stateful reasoning system**
+
+This means:
+
+* Regression tests must include scenarios
+* Deterministic scoring must stay reproducible
+* All decisions must be explainable
+* UI is no longer primary — engines are primary
 
 ---
 
