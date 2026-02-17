@@ -572,7 +572,7 @@ Approver: john.lead [LEAD]
 
 ### Report Delivery
 
-Reports automatically saved to **05-Delivery/** directory:
+Reports automatically saved to **Reports/** directory:
 - `ACME_Corp_Q1_2026_Technical_Report.pdf`
 - `ACME_Corp_Q1_2026_Executive_Summary.html`
 - `ACME_Corp_Q1_2026_Compliance_Report.pdf`
