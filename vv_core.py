@@ -1820,6 +1820,9 @@ class Database:
         
         # --- PHASE 4: MULTI-TEAM & FEDERATION MIGRATIONS ---
         self._run_phase4_migrations()
+        
+        # --- PHASE 5: ADVANCED THREAT INTELLIGENCE MIGRATIONS ---
+        self._run_phase5_migrations()
 
     # -------------------------------------------------------------------------
     # TRANSACTION SUPPORT (v3.0)
@@ -6239,6 +6242,517 @@ class Database:
                 "created_at": row["created_at"], "created_by": row["created_by"]
             })
         return logs
+
+    # =========================================================================
+    # PHASE 5: ADVANCED THREAT INTELLIGENCE (Feed Ingestion, Correlation)
+    # =========================================================================
+
+    def _run_phase5_migrations(self):
+        """Create Phase 5 Threat Intelligence tables."""
+        c = self.conn.cursor()
+        
+        # 1. EXTERNAL THREAT FEEDS (VirusTotal, Shodan, AlienVault OTX, MISP, custom)
+        c.execute('''CREATE TABLE IF NOT EXISTS threat_feeds (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            feed_name   TEXT NOT NULL UNIQUE,
+            feed_type   TEXT NOT NULL,
+            feed_url    TEXT,
+            api_key_hash TEXT,
+            last_updated TEXT,
+            last_error  TEXT,
+            status      TEXT DEFAULT 'active',
+            description TEXT,
+            created_at  TEXT NOT NULL,
+            created_by  INTEGER REFERENCES users(id),
+            feed_icon   TEXT DEFAULT '🔗')''')
+        
+        # 2. THREAT ACTOR PROFILES (APT groups, individual attackers, gangs)
+        c.execute('''CREATE TABLE IF NOT EXISTS threat_actors (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_name  TEXT NOT NULL UNIQUE,
+            aliases     TEXT,
+            origin_country TEXT,
+            organization TEXT,
+            known_targets TEXT,
+            first_seen  TEXT,
+            last_seen   TEXT,
+            attribution_confidence REAL DEFAULT 0.5,
+            description TEXT,
+            created_at  TEXT NOT NULL,
+            created_by  INTEGER REFERENCES users(id))''')
+        
+        # 3. THREAT ACTOR TTPs (documented techniques per actor)
+        c.execute('''CREATE TABLE IF NOT EXISTS actor_ttps (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_id    INTEGER NOT NULL REFERENCES threat_actors(id),
+            mitre_technique TEXT NOT NULL,
+            frequency   TEXT DEFAULT 'common',
+            last_observed TEXT,
+            confidence  REAL DEFAULT 0.5,
+            evidence    TEXT,
+            UNIQUE(actor_id, mitre_technique))''')
+        
+        # 4. INDICATORS OF COMPROMISE (IoCs: IPs, domains, hashes, emails)
+        c.execute('''CREATE TABLE IF NOT EXISTS indicators_of_compromise (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER REFERENCES campaigns(id),
+            indicator_type TEXT NOT NULL,
+            indicator_value TEXT NOT NULL,
+            source_feed_id INTEGER REFERENCES threat_feeds(id),
+            threat_level TEXT DEFAULT 'MEDIUM',
+            threat_actor_id INTEGER REFERENCES threat_actors(id),
+            first_seen  TEXT NOT NULL,
+            last_seen   TEXT,
+            matched_count INTEGER DEFAULT 0,
+            confidence  REAL DEFAULT 0.5,
+            classification TEXT DEFAULT 'UNKNOWN',
+            UNIQUE(campaign_id, indicator_type, indicator_value))''')
+        
+        # 5. AUTOMATED ENRICHMENT (GeoIP, WHOIS, file signatures, threat scores)
+        c.execute('''CREATE TABLE IF NOT EXISTS enrichment_data (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ioc_id      INTEGER NOT NULL REFERENCES indicators_of_compromise(id),
+            enrichment_type TEXT NOT NULL,
+            enrichment_value TEXT NOT NULL,
+            source      TEXT,
+            confidence  REAL DEFAULT 0.5,
+            enriched_at TEXT NOT NULL,
+            expires_at  TEXT,
+            UNIQUE(ioc_id, enrichment_type))''')
+        
+        # 6. THREAT CORRELATION (finding-to-IoC, actor-to-campaign)
+        c.execute('''CREATE TABLE IF NOT EXISTS threat_correlations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+            correlation_type TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id   INTEGER,
+            target_type TEXT NOT NULL,
+            target_id   INTEGER,
+            confidence  REAL DEFAULT 0.5,
+            evidence    TEXT,
+            correlation_timestamp TEXT NOT NULL,
+            correlated_by INTEGER REFERENCES users(id),
+            UNIQUE(campaign_id, source_type, source_id, target_type, target_id))''')
+        
+        # 7. RISK SCORING ENGINE (automated severity calculation)
+        c.execute('''CREATE TABLE IF NOT EXISTS risk_scores (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+            finding_id  INTEGER REFERENCES findings(id),
+            risk_level  TEXT DEFAULT 'MEDIUM',
+            threat_score REAL DEFAULT 5.0,
+            likelihood_score REAL DEFAULT 5.0,
+            impact_score REAL DEFAULT 5.0,
+            final_score REAL DEFAULT 5.0,
+            trend       TEXT DEFAULT 'stable',
+            calculated_at TEXT NOT NULL)''')
+        
+        # 8. INTELLIGENCE ARCHIVE & HISTORY (track intelligence collection over time)
+        c.execute('''CREATE TABLE IF NOT EXISTS intelligence_archive (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_id    INTEGER REFERENCES threat_actors(id),
+            campaign_id INTEGER REFERENCES campaigns(id),
+            archive_type TEXT NOT NULL,
+            content     TEXT NOT NULL,
+            tags        TEXT,
+            classification TEXT DEFAULT 'UNCLASSIFIED',
+            source      TEXT,
+            archived_at TEXT NOT NULL,
+            archived_by INTEGER REFERENCES users(id),
+            UNIQUE(actor_id, archive_type, campaign_id))''')
+        
+        # Create indexes for Phase 5
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_threat_feeds_status ON threat_feeds(status)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_threat_actors_name ON threat_actors(actor_name)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_actor_ttps_actor ON actor_ttps(actor_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ioc_type ON indicators_of_compromise(indicator_type)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ioc_campaign ON indicators_of_compromise(campaign_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_enrichment_ioc ON enrichment_data(ioc_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_threat_correlations_campaign ON threat_correlations(campaign_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_risk_scores_campaign ON risk_scores(campaign_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_intelligence_archive_actor ON intelligence_archive(actor_id)")
+        except Exception:
+            pass
+        
+        self.conn.commit()
+
+    def add_threat_feed(self, feed_name: str, feed_type: str, feed_url: str = None,
+                       api_key: str = None, description: str = None) -> int:
+        """Register external threat intelligence feed (VirusTotal, Shodan, OTX, MISP, etc.)."""
+        self._require_role(Role.ADMIN)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest() if api_key else None
+        
+        try:
+            c.execute("""INSERT INTO threat_feeds 
+                        (feed_name, feed_type, feed_url, api_key_hash, status, description, created_at, created_by)
+                         VALUES (?, ?, ?, ?, 'active', ?, ?, ?)""",
+                     (feed_name, feed_type, feed_url, key_hash, description, ts,
+                      self.current_user.id if self.current_user else None))
+            self.conn.commit()
+            feed_id = c.lastrowid
+            
+            actor = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(actor, "THREAT_FEED_ADDED", {
+                "feed_id": feed_id, "feed_name": feed_name, "feed_type": feed_type
+            })
+            return feed_id
+        except sqlite3.IntegrityError:
+            return -1
+
+    def create_threat_actor(self, actor_name: str, origin_country: str = None,
+                           organization: str = None, known_targets: str = None,
+                           description: str = None, confidence: float = 0.5) -> int:
+        """Create threat actor profile (APT group, cyber gang, individual)."""
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        
+        try:
+            c.execute("""INSERT INTO threat_actors 
+                        (actor_name, origin_country, organization, known_targets, description,
+                         attribution_confidence, first_seen, created_at, created_by)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (actor_name, origin_country, organization, known_targets, description,
+                      confidence, ts, ts, self.current_user.id if self.current_user else None))
+            self.conn.commit()
+            actor_id = c.lastrowid
+            
+            op = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(op, "THREAT_ACTOR_CREATED", {
+                "actor_id": actor_id, "actor_name": actor_name, "origin": origin_country
+            })
+            return actor_id
+        except sqlite3.IntegrityError:
+            return -1
+
+    def link_actor_ttp(self, actor_id: int, mitre_technique: str, frequency: str = "common",
+                      confidence: float = 0.5, evidence: str = None) -> bool:
+        """Link documented technique to threat actor profile."""
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        
+        try:
+            c.execute("""INSERT INTO actor_ttps 
+                        (actor_id, mitre_technique, frequency, confidence, last_observed, evidence)
+                         VALUES (?, ?, ?, ?, ?, ?)""",
+                     (actor_id, mitre_technique, frequency, confidence, ts, evidence))
+            self.conn.commit()
+            
+            op = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(op, "ACTOR_TTP_LINKED", {
+                "actor_id": actor_id, "technique": mitre_technique, "confidence": confidence
+            })
+            return True
+        except Exception:
+            return False
+
+    def ingest_ioc(self, campaign_id: int, indicator_type: str, indicator_value: str,
+                   threat_level: str = "MEDIUM", feed_id: int = None,
+                   actor_id: int = None, confidence: float = 0.5) -> int:
+        """Ingest indicator of compromise from external feed or manual entry."""
+        self._require_role(Role.OPERATOR)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        
+        try:
+            c.execute("""INSERT INTO indicators_of_compromise 
+                        (campaign_id, indicator_type, indicator_value, source_feed_id, threat_actor_id,
+                         threat_level, first_seen, confidence)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (campaign_id, indicator_type, indicator_value, feed_id, actor_id,
+                      threat_level, ts, confidence))
+            self.conn.commit()
+            ioc_id = c.lastrowid
+            
+            op = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(op, "IOC_INGESTED", {
+                "campaign_id": campaign_id, "ioc_id": ioc_id, "indicator_type": indicator_type,
+                "indicator_value": indicator_value[:30], "threat_level": threat_level
+            })
+            return ioc_id
+        except Exception:
+            return -1
+
+    def enrich_ioc(self, ioc_id: int, enrichment_type: str, enrichment_value: str,
+                  source: str, confidence: float = 0.5, ttl_hours: int = 24) -> bool:
+        """Add enrichment data to IoC (GeoIP, WHOIS, file signatures, threat scores)."""
+        self._require_role(Role.OPERATOR)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        expires = (datetime.utcnow() + timedelta(hours=ttl_hours)).isoformat() + "Z"
+        
+        try:
+            c.execute("""INSERT INTO enrichment_data 
+                        (ioc_id, enrichment_type, enrichment_value, source, confidence, enriched_at, expires_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                     (ioc_id, enrichment_type, enrichment_value, source, confidence, ts, expires))
+            self.conn.commit()
+            
+            op = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(op, "IOC_ENRICHED", {
+                "ioc_id": ioc_id, "enrichment_type": enrichment_type, "ttl_hours": ttl_hours
+            })
+            return True
+        except Exception:
+            return False
+
+    def correlate_threat(self, campaign_id: int, source_type: str, source_id: int,
+                        target_type: str, target_id: int, correlation_type: str,
+                        confidence: float = 0.5, evidence: str = None) -> int:
+        """Correlate findings, assets, credentials to threat actors/campaigns."""
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        
+        try:
+            c.execute("""INSERT INTO threat_correlations 
+                        (campaign_id, correlation_type, source_type, source_id, target_type, target_id,
+                         confidence, evidence, correlation_timestamp, correlated_by)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (campaign_id, correlation_type, source_type, source_id, target_type, target_id,
+                      confidence, evidence, ts, self.current_user.id if self.current_user else None))
+            self.conn.commit()
+            corr_id = c.lastrowid
+            
+            op = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(op, "THREAT_CORRELATED", {
+                "campaign_id": campaign_id, "correlation_id": corr_id, "type": correlation_type,
+                "confidence": confidence
+            })
+            return corr_id
+        except Exception:
+            return -1
+
+    def calculate_risk_score(self, campaign_id: int, finding_id: int = None,
+                            threat_score: float = 5.0, likelihood_score: float = 5.0,
+                            impact_score: float = 5.0) -> float:
+        """Calculate automated risk score (0-10) based on threat, likelihood, impact."""
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        
+        # Final score = (threat * 0.3) + (likelihood * 0.3) + (impact * 0.4)
+        final_score = (threat_score * 0.3) + (likelihood_score * 0.3) + (impact_score * 0.4)
+        final_score = min(10.0, max(0.0, final_score))
+        
+        # Determine trend
+        trend = "rising" if final_score > 6.0 else "falling" if final_score < 3.0 else "stable"
+        
+        try:
+            c.execute("""INSERT INTO risk_scores 
+                        (campaign_id, finding_id, risk_level, threat_score, likelihood_score,
+                         impact_score, final_score, trend, calculated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (campaign_id, finding_id,
+                      "CRITICAL" if final_score >= 8.0 else "HIGH" if final_score >= 6.0 else "MEDIUM" if final_score >= 4.0 else "LOW",
+                      threat_score, likelihood_score, impact_score, final_score, trend, ts))
+            self.conn.commit()
+            
+            op = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(op, "RISK_SCORED", {
+                "campaign_id": campaign_id, "finding_id": finding_id, "final_score": round(final_score, 2),
+                "risk_level": "CRITICAL" if final_score >= 8.0 else "HIGH" if final_score >= 6.0 else "MEDIUM"
+            })
+            return final_score
+        except Exception:
+            return 0.0
+
+    def archive_intelligence(self, archive_type: str, content: str, actor_id: int = None,
+                            campaign_id: int = None, tags: str = None,
+                            classification: str = "UNCLASSIFIED") -> int:
+        """Archive intelligence for long-term reference (TTPs, campaigns, profiles)."""
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        
+        try:
+            c.execute("""INSERT INTO intelligence_archive 
+                        (actor_id, campaign_id, archive_type, content, tags, classification, archived_at, archived_by)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (actor_id, campaign_id, archive_type, content, tags, classification, ts,
+                      self.current_user.id if self.current_user else None))
+            self.conn.commit()
+            archive_id = c.lastrowid
+            
+            op = self.current_user.username if self.current_user else "SYSTEM"
+            self.log_audit_event(op, "INTELLIGENCE_ARCHIVED", {
+                "archive_id": archive_id, "archive_type": archive_type, "classification": classification
+            })
+            return archive_id
+        except Exception:
+            return -1
+
+    def get_actor_profile(self, actor_id: int) -> dict:
+        """Get comprehensive threat actor profile with TTPs and campaigns."""
+        self._require_role(Role.OPERATOR)
+        c = self.conn.cursor()
+        
+        # Get actor basic info
+        c.execute("SELECT * FROM threat_actors WHERE id=?", (actor_id,))
+        actor = c.fetchone()
+        if not actor:
+            return {}
+        
+        # Get known TTPs
+        c.execute("""SELECT mitre_technique, frequency, confidence FROM actor_ttps
+                     WHERE actor_id=? ORDER BY confidence DESC""",
+                 (actor_id,))
+        ttps = [dict(row) for row in c.fetchall()]
+        
+        # Get campaign correlations
+        c.execute("""SELECT campaign_id, COUNT(*) as correlation_count FROM threat_correlations
+                     WHERE target_type='actor' AND target_id=?
+                     GROUP BY campaign_id ORDER BY correlation_count DESC""",
+                 (actor_id,))
+        campaigns = [dict(row) for row in c.fetchall()]
+        
+        return {
+            "actor": dict(actor),
+            "ttps": ttps,
+            "associated_campaigns": campaigns,
+            "profile_completeness": len(ttps) / max(1, len(campaigns))
+        }
+
+    def get_ioc_intelligence(self, ioc_id: int) -> dict:
+        """Get full intelligence picture for indicator of compromise."""
+        self._require_role(Role.OPERATOR)
+        c = self.conn.cursor()
+        
+        # Get IoC
+        c.execute("SELECT * FROM indicators_of_compromise WHERE id=?", (ioc_id,))
+        ioc = c.fetchone()
+        if not ioc:
+            return {}
+        
+        # Get enrichments
+        c.execute("""SELECT enrichment_type, enrichment_value, source, confidence FROM enrichment_data
+                     WHERE ioc_id=? AND (expires_at IS NULL OR expires_at > ?)""",
+                 (ioc_id, datetime.utcnow().isoformat() + "Z"))
+        enrichments = [dict(row) for row in c.fetchall()]
+        
+        # Get correlations
+        c.execute("""SELECT source_type, source_id, correlation_type, confidence FROM threat_correlations
+                     WHERE (source_type='ioc' AND source_id=?) OR (target_type='ioc' AND target_id=?)""",
+                 (ioc_id, ioc_id))
+        correlations = [dict(row) for row in c.fetchall()]
+        
+        # Get threat actor if linked
+        actor = None
+        if ioc.get("threat_actor_id"):
+            c.execute("SELECT actor_name FROM threat_actors WHERE id=?", (ioc["threat_actor_id"],))
+            actor_row = c.fetchone()
+            actor = actor_row["actor_name"] if actor_row else None
+        
+        return {
+            "ioc": dict(ioc),
+            "enrichments": enrichments,
+            "correlations": correlations,
+            "threat_actor": actor,
+            "intelligence_quality": round(len(enrichments) / max(1, 5), 2)
+        }
+
+    def generate_threat_report(self, campaign_id: int) -> str:
+        """Generate threat intelligence report for campaign."""
+        self._require_role(Role.LEAD)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat()
+        
+        # Get campaign info
+        c.execute("SELECT name FROM campaigns WHERE id=?", (campaign_id,))
+        campaign = c.fetchone()
+        campaign_name = campaign["name"] if campaign else "Unknown"
+        
+        report = [f"# THREAT INTELLIGENCE REPORT",
+                  f"## Campaign: {campaign_name}",
+                  f"**Generated:** {ts[:19]} UTC\n"]
+        
+        # 1. Threat Actors
+        c.execute("""SELECT DISTINCT ta.actor_name, COUNT(*) as correlation_count
+                     FROM threat_actors ta
+                     INNER JOIN threat_correlations tc ON ta.id = tc.target_id
+                     WHERE tc.campaign_id=? AND tc.target_type='actor'
+                     GROUP BY ta.id ORDER BY correlation_count DESC""",
+                 (campaign_id,))
+        actors = c.fetchall()
+        
+        report.append("## Threat Actors\n")
+        if actors:
+            for actor in actors:
+                report.append(f"- **{actor['actor_name']}** ({actor['correlation_count']} correlation(s))")
+        else:
+            report.append("- No threat actors linked\n")
+        
+        # 2. Indicators of Compromise
+        c.execute("""SELECT indicator_type, COUNT(*) as count FROM indicators_of_compromise
+                     WHERE campaign_id=? GROUP BY indicator_type""",
+                 (campaign_id,))
+        iocs = c.fetchall()
+        
+        report.append("\n## Indicators of Compromise (IoC)\n")
+        if iocs:
+            report.append("| Type | Count |")
+            report.append("|------|-------|")
+            for ioc in iocs:
+                report.append(f"| {ioc['indicator_type']} | {ioc['count']} |")
+        else:
+            report.append("- No IoCs collected\n")
+        
+        # 3. Risk Assessment
+        c.execute("""SELECT risk_level, COUNT(*) as count FROM risk_scores
+                     WHERE campaign_id=? GROUP BY risk_level""",
+                 (campaign_id,))
+        risks = c.fetchall()
+        
+        report.append("\n## Risk Assessment\n")
+        if risks:
+            report.append("| Risk Level | Count |")
+            report.append("|------------|-------|")
+            for risk in risks:
+                report.append(f"| {risk['risk_level']} | {risk['count']} |")
+        else:
+            report.append("- No risk scores calculated\n")
+        
+        # 4. Intelligence Quality
+        c.execute("""SELECT COUNT(*) as total FROM indicators_of_compromise WHERE campaign_id=?""",
+                 (campaign_id,))
+        total_iocs = c.fetchone()["total"]
+        
+        c.execute("""SELECT COUNT(*) as enriched FROM enrichment_data ed
+                     INNER JOIN indicators_of_compromise ioc ON ed.ioc_id = ioc.id
+                     WHERE ioc.campaign_id=?""",
+                 (campaign_id,))
+        enriched = c.fetchone()["enriched"]
+        
+        enrichment_pct = round((enriched / max(1, total_iocs)) * 100, 1)
+        report.append(f"\n## Intelligence Quality\n")
+        report.append(f"- **Total IoCs:** {total_iocs}")
+        report.append(f"- **Enriched:** {enriched} ({enrichment_pct}%)")
+        report.append(f"- **Coverage:** {enrichment_pct}% of indicators have enrichment data\n")
+        
+        op = self.current_user.username if self.current_user else "SYSTEM"
+        self.log_audit_event(op, "THREAT_REPORT_GENERATED", {
+            "campaign_id": campaign_id, "campaign_name": campaign_name
+        })
+        
+        return "\n".join(report)
+
+    def get_user_by_id(self, user_id: int) -> Optional[User]:
+        """Get user by ID (helper for various lookups)."""
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM users WHERE id=?", (user_id,))
+        row = c.fetchone()
+        if not row:
+            return None
+        return User(
+            id=row["id"], username=row["username"], password_hash=row["password_hash"],
+            role=row["role"], group_id=row["group_id"], created_at=row["created_at"],
+            last_login=row["last_login"], salt=row["salt"]
+        )
 
     def close(self):
         self.conn.close()

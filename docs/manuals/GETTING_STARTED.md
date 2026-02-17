@@ -1,36 +1,63 @@
-# Getting Started with VectorVue v3.4
+# Getting Started with VectorVue v3.7 
 
-![Setup](https://img.shields.io/badge/Setup-v3.4_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_2/8-00FFFF?style=flat-square) ![Phase](https://img.shields.io/badge/Phase-Complete-39FF14)
+![Setup](https://img.shields.io/badge/Setup-v3.7_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_5/8_Complete-00FFFF?style=flat-square) ![Features](https://img.shields.io/badge/Features-72_Tables_200%2B_Methods-39FF14)
 
-This guide covers deployment of VectorVue v3.4 Red Team Campaign Management Platform, which includes phases 0-2 complete with 41 database tables, 16 UI views, background task execution, and enterprise-ready security features. Follow these steps to get operationally ready.
+This guide covers deployment of **VectorVue v3.7**, the complete Red Team Campaign Management Platform with Phases 0-5 implemented: campaign management, RBAC, evidence chain of custody, operational intelligence, advanced runtime features, reporting & export, multi-team federation, and advanced threat intelligence. Follow these steps to get operationally ready.
 
-## 1. System Requirements
+---
+
+## 🎯 What is VectorVue v3.7?
+
+VectorVue is a terminal-based (TUI) platform for red team operators to:
+- **Manage campaigns** with client context, ROE, objectives, and team assignments
+- **Document findings** with CVSS scoring, MITRE ATT&CK mapping, approval workflows
+- **Track operations** including command execution, active sessions, persistence, detections
+- **Correlate intelligence** with threat feeds, threat actors, IoCs, enrichment data
+- **Generate reports** in multiple formats with evidence manifests and compliance mapping
+- **Coordinate teams** with role-based access, shared pools, performance tracking
+- **Analyze threats** with automated risk scoring, behavioral analytics, defense prediction
+
+**New in v3.7:** Advanced threat intelligence (Phase 5) - feed ingestion, threat actor profiling, IoC management, correlation engine, automated risk scoring.
+
+---
+
+## 1️⃣ System Requirements
 
 ### Operating System
-- **Linux:** Debian 11+, Ubuntu 20.04+, Fedora 36+, Kali Linux, ParrotOS
-- **macOS:** Monterey 12.0+ (Intel and Apple Silicon)
+- **Linux:** Debian 11+, Ubuntu 20.04+, Fedora 36+, Kali Linux, ParrotOS, Arch
+- **macOS:** Monterey 12.0+ (Intel and Apple Silicon native)
 - **Windows:** WSL2 (Windows 10/11) with native terminal support
+- **Container:** Docker support coming in Phase 6
 
 ### Python & Runtime
 - **Python:** 3.10+ (tested on 3.10, 3.11, 3.12)
-- **Terminal:** 24-bit TrueColor (UTF-8 rendering required)
+- **pip:** 21.0+ (dependency management)
+- **Terminal:** 256-color minimum, 24-bit TrueColor recommended (UTF-8 required)
   - ✅ **Recommended:** Kitty, Alacritty, WezTerm, iTerm2, Windows Terminal v1.5+
-  - ❌ **Not Supported:** Legacy Windows CMD, basic xterm
+  - ✅ **Works:** GNOME Terminal, Konsole, Xterm with color support
+  - ❌ **Not Supported:** Legacy Windows CMD, basic xterm, PuTTY
 
 ### Hardware
-- **Memory:** 256MB minimum, 1GB+ recommended (for background tasks)
-- **Storage:** 100MB+ free (SQLite grows ~10MB per 1000 findings)
-- **Network:** Not required after initial setup (air-gap capable)
+- **Memory:** 512MB minimum, 2GB+ recommended (for background tasks and analytics)
+- **Storage:** 200MB+ free (SQLite database grows ~10MB per 1000 findings, 5MB per 500 credentials)
+- **CPU:** Dual-core minimum (background executor runs on separate async task)
+- **Network:** Not required (fully air-gap capable, local SQLite only)
 
-## 2. Installation & Setup
+### Optional: MITRE ATT&CK
+- `mitre_reference.txt` file should exist in root directory (CSV format)
+- Contains: Technique ID, Tactic, Technique Name, Description
+
+---
+
+## 2️⃣ Installation & Setup
 
 ### Step 1: Clone Repository
 ```bash
-git clone https://internal.repo/vectorvue.git
+git clone https://github.com/yourorg/vectorvue.git
 cd vectorvue
 ```
 
-### Step 2: Create Virtual Environment
+### Step 2: Create Python Virtual Environment
 ```bash
 # Linux / macOS
 python3 -m venv venv
@@ -38,323 +65,429 @@ source venv/bin/activate
 
 # Windows (PowerShell)
 python -m venv venv
-.\venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
+
+# Windows (Command Prompt)
+python -m venv venv
+venv\Scripts\activate.bat
+```
+
+Verify activation:
+```bash
+which python  # Linux/macOS
+where python  # Windows
+# Should show: /path/to/vectorvue/venv/bin/python
 ```
 
 ### Step 3: Install Dependencies
 ```bash
+# Upgrade pip (important for security)
 pip install --upgrade pip setuptools wheel
+
+# Install requirements
 pip install -r requirements.txt
 ```
 
-**Required Packages:**
-- `textual` (0.90+) - TUI framework
-- `cryptography` - AES-256-GCM encryption
-- `argon2-cffi` - Password hashing
-- `pydantic` - Data validation
+**Core Dependencies:**
+- `textual>=0.90.0` - Terminal UI framework
+- `cryptography>=42.0.0` - AES-256-GCM encryption
+- `argon2-cffi>=23.1.0` - Password hashing (PBKDF2)
+- `Pillow>=11.0.0` - Image handling for reports
 
-### Step 4: Verify MITRE Reference Data
+**Installation troubleshooting:**
+- If `pip install` fails with build errors, install system dev packages:
+  ```bash
+  # Ubuntu/Debian
+  sudo apt-get install python3-dev libssl-dev
+  
+  # Fedora/RHEL
+  sudo dnf install python3-devel openssl-devel
+  
+  # macOS (Homebrew)
+  brew install python@3.12  # If needed
+  ```
+
+### Step 4: Verify Installation
 ```bash
-# Check if MITRE ATT&CK lookup table exists
-ls -lh mitre_reference.txt
+# Check Python version
+python --version  # Should be 3.10+
 
-# Expected content: CSV with Technique ID, Name, Tactic, Description
-# Example: T1566,Phishing,Initial Access,Adversaries may send phishing messages...
+# Check dependencies
+python -c "import textual, cryptography; print('✓ Dependencies OK')"
+
+# Check MITRE reference (if available)
+ls -l mitre_reference.txt  # Should exist
+
+# Run syntax check
+python -m py_compile vv.py vv_core.py vv_theme.py vv_fs.py
+echo "✓ All source files valid"
 ```
 
-## 3. First Launch & Configuration
+---
+
+## 3️⃣ First Launch & Authentication
+
+### IMPORTANT: Authentication is Required on Every Launch
+
+**Security Note:** VectorVue requires fresh authentication on each startup. There is **no automatic session resumption** - you must log in each time. This prevents unauthorized access to sensitive campaign data.
 
 ### Initial Startup
 ```bash
 python3 vv.py
 ```
 
-**Expected behavior on first launch:**
-1. ✅ Application initializes without errors
-2. ✅ Registration screen appears (no users yet)
-3. ✅ Terminal displays colors correctly (green #39FF14, cyan #00FFFF)
-4. ✅ Status bar shows operational status
+**Expected first-time behavior:**
+1. ✅ Application initializes, TUI loads
+2. ✅ Database created: `vectorvue.db` (41-72 MB)
+3. ✅ Salt file created: `vectorvue.salt` (256-bit random)
+4. ✅ Registration screen displayed (no users yet)
+5. ✅ Status bar shows: "FIRST RUN: REGISTER YOUR ADMIN ACCOUNT"
+6. ✅ Terminal displays phosphor green (#39FF14) and cyan (#00FFFF) colors
 
-### Create Admin User
-The first user created automatically becomes ADMIN:
+### Create Admin User (First Run Only)
 
-1. Fill registration form:
-   - **Username:** Your operator identifier
-   - **Password:** Strong passphrase (min 12 chars recommended)
-   - **Confirm:** Re-enter password
-2. Press **REGISTER**
-3. Auto-redirected to login screen
-4. Log in with new credentials
-5. **Congratulations!** You're now authenticated as ADMIN
+The **first user** created automatically becomes **ADMIN** (highest privilege level).
 
-### Create First Campaign
-After login:
+1. **Fill Registration Form:**
+   - Username: Your operator identifier (e.g., `john.operator`, `red-lead-1`)
+   - Password: Strong passphrase (12+ characters recommended)
+     - Use mix of upper/lower/numbers/symbols
+     - Example: `Cr1ms0n-Shadow-2026!`
+   - Confirm Password: Re-enter identical password
 
-1. Click **INIT CAMPAIGN** (or press `Ctrl+K`)
-2. Fill campaign details:
-   - **Campaign Name:** e.g., "ACME Corp Red Team Q1 2026"
-   - **Client:** "ACME Corporation"
-   - **Operator Team:** Your team identifier
-   - **Start Date:** YYYY-MM-DD format
-   - **Objective:** "Comprehensive security assessment of..."
-   - **Rules of Engagement:** Operating hours, restrictions, sensitive systems
-   - **Classification:** CONFIDENTIAL or SECRET
-3. Press **CREATE CAMPAIGN**
-4. Campaign initializes with status **PLANNING**
+2. **Click REGISTER** or press Enter
 
-## 4. Database Initialization
+3. **Await confirmation:**
+   - Status bar: "REGISTRATION COMPLETE — AUTHENTICATE NOW" (green)
+   - Auto-redirects to login screen
 
-On first launch, VectorVue v3.4 automatically creates:
+4. **Log in with new credentials:**
+   - Username: [same as above]
+   - Password: [same as above]
+   - Press LOGIN
 
-| File | Purpose | Size | Notes |
-|------|---------|------|-------|
-| `vectorvue.db` | Operational data (41 tables) | ~100KB empty | SQLite3, encrypted |
-| `adversary.db` | Intelligence store | ~50KB empty | Secondary database |
-| `vectorvue.salt` | Encryption salt | 16 bytes | PBKDF2 salt, keep secure |
+5. **Success! You are now ADMIN:**
+   - Status bar: "ACCESS GRANTED [ADMIN] — john.operator"
+   - Main editor view loads
+   - All buttons become enabled
 
-**Important:** Back up `vectorvue.salt` immediately! Losing this file makes all encrypted data unrecoverable.
+### Subsequent Launches
 
-## 5. Post-Installation Verification
+On subsequent runs, when you execute `python3 vv.py`:
 
-### Test Compilation
+1. Application checks if users exist in database
+2. If users exist: Login screen appears immediately
+3. **Must authenticate with username + password**
+4. No automatic login or session resumption
+5. After successful login: Editor view loads
+
+---
+
+## 4️⃣ Create Your First Campaign
+
+After successful authentication:
+
+### Step 1: Initialize Campaign
+Press **Ctrl+K** (or click **CAMPAIGN OPS**) to open Campaign View
+
+### Step 2: Fill Campaign Details
+- **Campaign Name:** e.g., "ACME Corp Q1 2026 Assessment"
+- **Client:** Organization name (e.g., "ACME Corporation")
+- **Operator Team:** Your red team identifier (e.g., "Red Team Alpha")
+- **Start Date:** YYYY-MM-DD format (e.g., 2026-02-17)
+- **End Date:** Optional, or leave as NULL
+- **Rules of Engagement:** Operating constraints
+  ```
+  Operating hours: 9 AM - 5 PM EST weekdays
+  Avoid: Production databases, critical systems
+  Sensitive hosts: Finance servers (192.168.10.0/24)
+  ```
+- **Objective:** Campaign goal (e.g., "Comprehensive assessment of perimeter security")
+- **Classification:** Sensitivity level (UNCLASSIFIED/CONFIDENTIAL/SECRET)
+
+### Step 3: Click CREATE CAMPAIGN
+
+Status bar confirms: "✓ CAMPAIGN CREATED (ID: 1)"
+
+### Step 4: Verify Campaign is Active
+- Lateral panel shows: "CAMPAIGN ACTIVE: ACME Corp Q1 2026 Assessment"
+- **Ctrl+K** now shows your campaign data
+
+---
+
+## 5️⃣ Understanding User Roles & Permissions
+
+VectorVue has **4 role levels** with increasing privileges:
+
+### VIEWER (Level 0)
+- Can view all findings, evidence, reports
+- **Cannot** create, edit, or delete
+- Use for: Observers, auditors, read-only access
+
+### OPERATOR (Level 1)  
+- Can create and edit findings
+- Can ingest IoCs, create evidence items
+- Can execute background tasks
+- **Cannot** approve findings or delete campaigns
+- Use for: Day-to-day operators entering findings
+
+### LEAD (Level 2)
+- Can do everything Operators can do
+- **Can** approve findings (before export)
+- Can create teams, policies, and intelligence reports
+- Can configure webhooks and integrations
+- **Cannot** delete campaigns or modify users
+- Use for: Team leads, senior operators
+
+### ADMIN (Level 3)
+- **Full access** to all features
+- Can create/delete/modify anything
+- Can create user accounts and assign roles
+- Can manage retention policies and compliance settings
+- Use for: Lead operators, system administrators
+
+---
+
+## 6️⃣ Core UI Navigation
+
+### Primary Views (Ctrl+ key)
+
+| Key | View | Purpose |
+|-----|------|---------|
+| Space | File Manager | Browse, upload, manage files |
+| Ctrl+M | MITRE DB | Technique/tactic search & linking |
+| Ctrl+K | Campaign | Active campaign context & switching |
+| Ctrl+E | Command Log | Executed commands & C2 output |
+| Ctrl+J | Sessions | Active operational sessions |
+| Ctrl+D | Detections | Detected by defender activity |
+| Ctrl+O | Objectives | Campaign goal tracking |
+| Ctrl+P | Persistence | Backdoors & persistence mechanisms |
+
+### Analytics Views (Ctrl+1-5)
+
+| Key | View | Purpose |
+|-----|------|---------|
+| Ctrl+1 | Dashboard | Real-time metrics, risk heat map |
+| Ctrl+2 | Analysis | Post-engagement TTP analysis |
+| Ctrl+3 | Intel (legacy) | Threat intelligence (Phase 2) |
+| Ctrl+4 | Remediation | Remediation action tracking |
+| Ctrl+5 | Capability | Capability assessment matrix |
+
+### Advanced Views (Alt+1-6)
+
+| Key | View | Purpose |
+|-----|------|---------|
+| Alt+1 | Collaboration | Multi-operator session mgmt |
+| Alt+2 | Tasks | Background task orchestration |
+| Alt+3 | Analytics | Behavioral anomaly detection |
+| Alt+4 | Integration | Webhook endpoint management |
+| Alt+5 | Compliance | Compliance attestation reports |
+| Alt+6 | Security | TLP, audit logs, retention |
+
+### Phase 3-5 Views
+
+| Key | View | Purpose |
+|-----|------|---------|
+| Ctrl+R | Reporting | PDF/HTML reports, evidence manifests |
+| Ctrl+T | Teams | Team management, coordination |
+| Ctrl+Shift+I | Threat Intel | IoC management, threat actor profiles, risk scoring |
+
+---
+
+## 7️⃣ First Operational Tasks
+
+### Create Your First Finding
+
+1. Press **Escape** to return to main editor
+2. Type in markdown format:
+   ```markdown
+   # Weak Password Policy
+
+   ## Summary
+   User passwords are not enforced to meet complexity requirements.
+
+   ## CVSS Score
+   6.5 (Medium)
+
+   ## Impact
+   Attackers can use dictionary attacks to compromise accounts.
+   ```
+
+3. Fill lateral panel:
+   - **Vector Title:** "Weak Password Policy"
+   - **CVSS Vector:** CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+   - **MITRE ID:** T1110 (Brute Force)
+
+4. Click **NEW ENTRY** to add to findings queue
+
+5. Click **COMMIT DB** to save finding
+
+### Log a Command Execution (Phase 1)
+
+1. Press **Ctrl+E** (Command Execution Log)
+2. View logged commands if any exist
+3. Commands logged via database methods (not manual in UI)
+
+### Check Campaign Coverage (Phase 2b)
+
+1. Press **Ctrl+1** (Dashboard)
+2. View metrics: assets, credentials, sessions, persistence
+3. Risk score aggregated from findings
+
+### Generate a Report (Phase 3)
+
+1. Press **Ctrl+R** (Reporting)
+2. Select report type: Technical, Executive, Client
+3. Select format: PDF or HTML
+4. Add executive summary
+5. Click **GENERATE REPORT**
+6. Report saved to `05-Delivery/` directory
+
+---
+
+## 8️⃣ Background Task Execution (Phase 2c)
+
+VectorVue runs a **background task executor** automatically after login. This handles:
+
+- **Task Scheduler:** Executes pending scheduled tasks every 30 seconds
+- **Webhook Delivery:** Sends integration payloads to external endpoints
+- **Session Timeout:** Expires idle sessions after 120 minutes
+- **Retention Policy:** Purges old findings/credentials/logs per policy
+- **Anomaly Detection:** Analyzes operator behavior for anomalies
+
+You don't need to manually start the executor - it's started automatically in `_post_login_setup()`.
+
+**Stop Executor:**
+- Press **Ctrl+L** (Logout) - executor stops gracefully
+- Press **q** (Quit) - executor stops before exit
+
+---
+
+## 9️⃣ Multi-Team Setup (Phase 4)
+
+### Create a Team
+
+1. Press **Ctrl+T** (Team Management)
+2. Enter Team Name, Description, Budget (USD)
+3. Click **CREATE TEAM**
+4. Team appears in team list
+
+### Add Members to Team
+
+1. In Team Management, select team
+2. Click **ADD MEMBER**
+3. Select user, assign role (team_member, team_lead)
+4. Member added to team_members table
+
+### Share Intelligence
+
+1. Create an Intelligence Pool (Phase 4)
+2. Add findings/IoCs to pool
+3. Select teams with access
+4. Teams can query pooled intelligence
+
+---
+
+## 🔟 Threat Intelligence Setup (Phase 5)
+
+### Add Threat Feed
+
+1. Press **Ctrl+Shift+I** (Threat Intelligence)
+2. Click **Add Feed (VirusTotal/Shodan/OTX/MISP)**
+3. Enter:
+   - Feed URL (e.g., https://api.virustotal.com/api/v3/feeds)
+   - Feed Type (VirusTotal, Shodan, OTX, MISP, Custom)
+   - API Key (encrypted in database)
+   - Description
+4. Click **ADD FEED**
+
+### Create Threat Actor Profile
+
+1. In Threat Intelligence view
+2. Click **Create Threat Actor Profile**
+3. Enter:
+   - Actor Name (e.g., "Lazarus Group")
+   - Origin Country (e.g., "North Korea")
+   - Organization (e.g., "APT1")
+   - Known Targets (e.g., "Financial institutions")
+   - Confidence (0.0-1.0)
+4. Click **CREATE**
+
+### Ingest Indicators of Compromise
+
+1. In Threat Intelligence view
+2. Click **Ingest IoC (IP/Domain/Hash/Email)**
+3. Select indicator type
+4. Enter value (e.g., 192.168.1.100)
+5. Set threat level (LOW/MEDIUM/HIGH/CRITICAL)
+6. Click **INGEST**
+
+### Check Risk Scores
+
+1. View Risk Scores & Threats section
+2. See automated 0-10 risk scores for findings
+3. Risk levels: CRITICAL (≥8.0), HIGH (≥6.0), MEDIUM (≥4.0), LOW (<4.0)
+
+---
+
+## 🚀 Troubleshooting Initial Setup
+
+### Issue: "Terminal colors not displaying"
+**Solution:** Ensure terminal supports 256-color or 24-bit true color
 ```bash
-python3 -m py_compile vv.py vv_core.py vv_theme.py vv_fs.py
-# Clean output = success
-```
+# Check color support
+echo $TERM  # Should show xterm-256color, alacritty, etc.
 
-### Verify Database Schema
-```bash
-sqlite3 vectorvue.db ".tables"
-# Should list 41 tables: campaigns, findings, assets, credentials, actions, evidence_items, activity_log, users, ...
-```
-
-### Test Background Executor
-The RuntimeExecutor automatically starts on login and executes:
-- Scheduled tasks (every 30 seconds)
-- Webhook deliveries
-- Session timeout enforcement (120 min inactivity)
-- Data retention policies
-- Anomaly detection
-
-Monitor in status bar: `[Scheduler] 5 pending tasks executed`
-
-## 6. Data Storage & Backups
-
-### Backup Strategy
-```bash
-# Daily backup (before login)
-tar czf vectorvue-backup-$(date +%Y%m%d).tar.gz vectorvue.db adversary.db vectorvue.salt requirements.txt
-
-# Store securely (encrypted USB, cloud vault, etc.)
-```
-
-### Restore from Backup
-```bash
-# Stop VectorVue (logout)
-# Restore files
-tar xzf vectorvue-backup-YYYYMMDD.tar.gz
-
-# Restart VectorVue
+# Force color mode
+export TERM=xterm-256color
 python3 vv.py
 ```
 
-### Database Maintenance
-Clean up old data using retention policies:
-1. Press **Alt+6** (SecurityHardeningView)
-2. Configure retention policies:
-   - Findings: 90 days (archive)
-   - Credentials: 180 days (secure delete)
-   - Audit logs: 365 days (archive)
-   - Detection events: 30 days (secure delete)
-3. Runtime scheduler auto-executes nightly
-
-## 7. Security Hardening (Day 1)
-
-### Change Admin Password
-```
-1. Login as admin
-2. Press Ctrl+L (Logout)
-3. Login again with new password (prompted on next session)
+### Issue: "Cannot import textual"
+**Solution:** Reinstall from requirements.txt with correct pip
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt --force-reinstall
 ```
 
-### Create Team Users
-As ADMIN, invite operators:
-1. Press **Ctrl+K** → **Team Management**
-2. Click **ADD OPERATOR**
-3. Assign role: VIEWER, OPERATOR, or LEAD
-4. Operator receives credentials
-5. All actions attributed to their username in activity log
+### Issue: "No such file or directory: 'mitre_reference.txt'"
+**Solution:** This is optional, but recommended
+```bash
+# Get MITRE ATT&CK data from upstream source
+# File format: technique_id,tactic,name,description
+# Create empty file if unavailable:
+touch mitre_reference.txt
+```
 
-### Enable Campaign Isolation
-Enforce that operators only see their assigned campaigns:
-1. Campaign settings → **Visibility Mode: TEAM_SCOPED**
-2. Teams only access findings/assets they create or are assigned
-3. ADMIN can override for audits
+### Issue: "Authentication required on every launch"
+**Solution:** This is **intentional for security**. VectorVue requires fresh login each time to prevent unauthorized access.
 
-### Review Audit Trail
-Check all activity:
-1. Press **Ctrl+1** (SituationalAwarenessView)
-2. Review **Activity Timeline**
-3. Verify operator attribution and timestamps
+### Issue: "SQLite database locked"
+**Solution:** Another VectorVue instance is running
+```bash
+# Check running processes
+ps aux | grep vv.py
 
-## 8. Troubleshooting First Launch
+# Kill if needed
+pkill -f vv.py
 
-| Issue | Symptom | Solution |
-|-------|---------|----------|
-| Terminal colors wrong | Pink/brown instead of green/cyan | Update terminal (Alacritty recommended) |
-| Database errors | "Cannot open database file" | Check write permissions in current directory |
-| Import errors | ModuleNotFoundError: cryptography | Run `pip install -r requirements.txt` |
-| Encryption fails | "CRYPTO_AVAILABLE = False" | Install `cryptography` package |
-| MITRE missing | No tactic/technique suggestions | Place mitre_reference.txt in root directory |
-| Background tasks fail | Status: "Scheduler error" | Check logs in status bar, verify database connectivity |
-
-For more issues, see **TROUBLESHOOTING_GUIDE.md**.
-
-## 9. Next Steps
-
-### For Operators
-- [OPERATOR_MANUAL.md](./OPERATOR_MANUAL.md) - Daily workflows, keybindings, findings management
-
-### For Developers
-- [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md) - Database schema, design patterns, APIs
-
-### For Admins
-- [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md) - System diagnostics, recovery procedures
+# Restart
+python3 vv.py
+```
 
 ---
 
-**VectorVue v3.4** | Production Ready | Phase 2/8 Complete
-Username: [your-username]
-Password: [strong-password-16+ chars recommended]
-Confirm Password: [re-enter]
-Role: ADMIN
-```
+## 📚 Next Steps
 
-Save these credentials securely—you cannot recover a lost admin password without database recovery tools.
+After completing first-time setup:
 
-## 4. Creating Your First Campaign
-
-### Step 1: Log In
-Use the admin credentials created during first launch:
-- Username: `[your-username]`
-- Password: `[your-password]`
-
-### Step 2: Create Campaign
-Once logged in, create your first campaign:
-1. Navigate to **Campaigns** view
-2. Press `[C]` to create new campaign
-3. Fill in campaign details:
-   - **Name:** e.g., "Client-Corp Red Team 2026"
-   - **Client:** e.g., "Client Corporation"
-   - **Operator Team:** Your team name
-   - **Objective:** Engagement scope, e.g., "Complete network penetration test"
-   - **Rules of Engagement:** Restrictions, hours, sensitive systems
-   - **Classification:** e.g., "CONFIDENTIAL"
-
-### Step 3: Invite Operators
-Add team members to the campaign:
-1. In campaign settings, select **Manage Team**
-2. Add operators by username:
-   - **Username:** Team member's account
-   - **Role:** Operator (default), Lead, or Viewer
-3. They can log in and access the campaign immediately
-
-## 5. Understanding User Roles
-
-VectorVue v3.0 implements four-level role-based access control (RBAC):
-
-| Role | Permissions | Use Case |
-|------|-------------|----------|
-| **VIEWER** | Read-only access to findings, assets, evidence | Client presentations, documentation review |
-| **OPERATOR** | Create findings, collect evidence, log actions | Pentesters, exploitation engineers |
-| **LEAD** | Approve findings, manage evidence, create reports | Engagement leads, quality assurance |
-| **ADMIN** | User management, campaign deletion, system config | Project managers, engagement leads |
-
-**Permission Hierarchy:** VIEWER < OPERATOR < LEAD < ADMIN
-
-A user with LEAD role inherits all OPERATOR permissions and can approve findings before they're finalized.
-
-## 6. Core Workflows
-
-### Adding Your First Finding
-1. Navigate to **Findings** view
-2. Press `[N]` for new finding
-3. Fill in details:
-   - **Title:** Vulnerability title (e.g., "SQL Injection in Login Form")
-   - **Severity:** CRITICAL, HIGH, MEDIUM, LOW, INFO
-   - **CVSS Score:** e.g., 9.1 (auto-calculated if you prefer)
-   - **Description:** Details and proof of concept
-   - **MITRE Technique:** Select from dropdown (e.g., T1566 - Phishing)
-4. Save finding (status: **PENDING**)
-5. Wait for LEAD approval
-
-### Collecting Evidence
-1. In the finding, press `[E]` to add evidence
-2. Select file or create evidence:
-   - **Type:** Screenshot, log, credential, artifact
-   - **File:** Upload proof (hash verified automatically)
-3. System records:
-   - ✅ SHA256 hash of artifact
-   - ✅ Who collected it (your username)
-   - ✅ When it was collected (timestamp)
-   - ✅ Collection method (manual, C2, tool output)
-4. Evidence is **immutable** (cannot be edited after creation)
-
-### Approving Findings (LEAD+ Only)
-1. As a LEAD, navigate to **Findings**
-2. Filter by **Status: PENDING**
-3. Review each finding
-4. Press `[A]` to **approve** or `[R]` to **reject**
-5. Approved findings are locked and ready for export
-
-## 7. Generating Reports
-
-### Create Campaign Report
-1. Navigate to **Reports** view
-2. Press `[G]` to generate report
-3. Select export format:
-   - **Markdown:** Default, human-readable
-   - **JSON:** Machine-readable with metadata
-   - **CSV:** For spreadsheet analysis
-4. Report includes:
-   - ✅ Only **approved** findings
-   - ✅ Attack timeline (chronological activity log)
-   - ✅ MITRE coverage matrix
-   - ✅ Operator attribution
-   - ✅ Evidence integrity verification
-
-## 8. Troubleshooting Initial Setup
-
-### Issue: "Not Authenticated" Error
-**Cause:** User not logged in or session expired  
-**Solution:** Log out and log back in using admin credentials
-
-### Issue: "Campaign Not Found"
-**Cause:** No campaign created yet  
-**Solution:** Follow Step 4 above to create your first campaign
-
-### Issue: Colors Not Rendering (Monochrome)
-**Cause:** Terminal doesn't support TrueColor  
-**Solution:** Use recommended terminal (Kitty, Alacritty, Windows Terminal)
-
-### Issue: "mitre_reference.txt Not Found"
-**Cause:** MITRE data file missing  
-**Solution:** File is optional; MITRE lookups will be disabled but app still works
-
-For more troubleshooting, see [Troubleshooting Guide](./TROUBLESHOOTING_GUIDE.md)
+1. **Read [OPERATOR_MANUAL.md](./OPERATOR_MANUAL.md)** - Complete operations guide
+2. **Review [COMPLETE_FEATURES.md](./COMPLETE_FEATURES.md)** - All feature reference
+3. **Check [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)** - Common issues
+4. **Study [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md)** - Technical deep-dive
 
 ---
 
-## 🎯 Next Steps
+**VectorVue v3.7** | Production Ready | 72 Tables | 200+ Methods | Phase 5 Complete
 
-✅ **Installation complete!** Now proceed to:
-
-1. **[Operator Manual](./OPERATOR_MANUAL.md)** - Learn keyboard shortcuts and daily workflows
-2. **[Architecture Spec](./ARCHITECTURE_SPEC.md)** - Understand database schema and RBAC design (optional)
-3. Start documenting your engagement findings
-
-**Questions?** See [Troubleshooting Guide](./TROUBLESHOOTING_GUIDE.md) or contact your team lead.
-
----
-
-**VectorVue v3.0** | Red Team Campaign Management Platform | v3.0-RC1
+For support: See [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)
