@@ -14,6 +14,8 @@ from typing import List, Optional, Dict, Tuple, Any
 from pathlib import Path
 from datetime import datetime, timedelta
 
+from vv_fs import FileSystemService
+
 # --- CRYPTOGRAPHY LAYER ---
 try:
     from cryptography.fernet import Fernet, InvalidToken
@@ -4905,6 +4907,7 @@ class Database:
         except ImportError:
             return (False, "reportlab not installed. Run: pip install reportlab")
         
+        ts = datetime.utcnow().isoformat()
         c = self.conn.cursor()
         c.execute("SELECT * FROM campaign_reports WHERE id=?", (report_id,))
         report = c.fetchone()
