@@ -1,3 +1,17 @@
+
+/*
+Copyright (c) 2026 José María Micoli
+Licensed under Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Remove copyright notices
+*/
+
 """
 VectorVue v3.0 - Phosphor Cyberpunk Design System
 Centralized Theme & Layout Configuration for Red Team Platform
@@ -27,6 +41,18 @@ class CyberColors:
     
     # Phase 5 Threat Intelligence Colors
     NEON_PINK       = "#FF10F0"  # Threat Intelligence: Feed data, IoC enrichment, Actor profiles
+    
+    # Phase 5.5 Cognition Engine Colors (10 Engines)
+    COG_OPPORTUNITY = "#39FF14"  # Opportunity Engine: Green (execution ready)
+    COG_PATH        = "#BD00FF"  # Path Engine: Purple (planning)
+    COG_STATE       = "#00FFFF"  # Campaign State: Cyan (awareness)
+    COG_DETECTION   = "#FF0000"  # Detection Engine: Red (pressure)
+    COG_CONFIDENCE  = "#FFBF00"  # Confidence Engine: Amber (uncertainty)
+    COG_KNOWLEDGE   = "#00FF41"  # Knowledge Engine: Lime (completeness)
+    COG_TECHNIQUE   = "#FF10F0"  # Technique Engine: Pink (effectiveness)
+    COG_VALIDATION  = "#FF1493"  # Validation Engine: Magenta (approval)
+    COG_EXPLAINABILITY = "#00CCFF"  # Explainability: Light Cyan (reasoning)
+    COG_DASHBOARD   = "#39FF14"  # Dashboard: Green (unified view)
     
     # Industrial Dark Mode Neutrals
     VOID_DARK      = "#050505"  # Deepest background
@@ -58,6 +84,16 @@ $m-audit: {CyberColors.MAGENTA_AUDIT};
 $t-approval: {CyberColors.TEAL_APPROVAL};
 $g-disabled: {CyberColors.GRAY_DISABLED};
 $n-pink: {CyberColors.NEON_PINK};
+$cog-opp: {CyberColors.COG_OPPORTUNITY};
+$cog-path: {CyberColors.COG_PATH};
+$cog-state: {CyberColors.COG_STATE};
+$cog-detect: {CyberColors.COG_DETECTION};
+$cog-conf: {CyberColors.COG_CONFIDENCE};
+$cog-know: {CyberColors.COG_KNOWLEDGE};
+$cog-tech: {CyberColors.COG_TECHNIQUE};
+$cog-val: {CyberColors.COG_VALIDATION};
+$cog-explain: {CyberColors.COG_EXPLAINABILITY};
+$cog-dash: {CyberColors.COG_DASHBOARD};
 $bg-void: {CyberColors.VOID_DARK};
 $bg-panel: {CyberColors.PANEL_GREY};
 $steel: {CyberColors.STEEL_BORDER};
@@ -747,4 +783,117 @@ Input.success {{
     border: heavy $p-green;
     color: $p-green;
 }}
+
+/* --- PHASE 5.5 COGNITION ENGINE VIEWS --- */
+
+/* Opportunity View */
+OpportunitiesView {{
+    border-left: heavy $cog-opp;
+}}
+.opp-score-high {{ color: $p-green; }}
+.opp-score-med {{ color: $a-amber; }}
+.opp-score-low {{ color: $r-alert; }}
+
+/* Attack Paths View */
+AttackPathsView {{
+    border-left: heavy $cog-path;
+}}
+
+/* Campaign State View */
+CampaignStateView {{
+    border-left: heavy $cog-state;
+}}
+
+/* Detection Pressure View */
+DetectionPressureView {{
+    border-left: heavy $cog-detect;
+}}
+#pressure-gauge {{
+    background: $bg-panel;
+    border: solid $cog-detect;
+    padding: 1;
+}}
+
+/* Confidence Analysis View */
+ConfidenceAnalysisView {{
+    border-left: heavy $cog-conf;
+}}
+#conf-meter {{
+    background: $bg-panel;
+    border: solid $cog-conf;
+    padding: 1;
+}}
+
+/* Knowledge Completeness View */
+KnowledgeCompletenessView {{
+    border-left: heavy $cog-know;
+}}
+#knowledge-bar {{
+    background: $bg-panel;
+    border: solid $cog-know;
+    padding: 1;
+}}
+
+/* Technique Effectiveness View */
+TechniqueEffectivenessView {{
+    border-left: heavy $cog-tech;
+}}
+
+/* Validation Queue View */
+ValidationQueueView {{
+    border-left: heavy $cog-val;
+}}
+.val-pending {{ color: $a-amber; }}
+.val-approved {{ color: $p-green; }}
+.val-rejected {{ color: $r-alert; }}
+
+/* Explainability View */
+ExplainabilityView {{
+    border-left: heavy $cog-explain;
+}}
+#explain-text {{
+    background: $bg-panel;
+    border: solid $cog-explain;
+    padding: 1;
+}}
+
+/* Cognition Dashboard View */
+CognitionDashboardView {{
+    border-left: heavy $cog-dash;
+}}
+.dash-panel {{
+    background: $bg-panel;
+    border: solid $steel;
+    padding: 1;
+}}
+
+/* Cognition Tab Styling */
+.cog-tab {{
+    border-bottom: solid $steel;
+    color: $steel;
+}}
+.cog-tab:hover {{
+    color: $e-cyan;
+}}
+.cog-tab-active {{
+    color: $cog-dash;
+    text-style: bold;
+    border-bottom: heavy $cog-dash;
+}}
+
+/* Scoring Indicators */
+.score-excellent {{ color: $p-green; text-style: bold; }}
+.score-good {{ color: $e-cyan; }}
+.score-fair {{ color: $a-amber; }}
+.score-poor {{ color: $r-alert; }}
+
+/* Confidence Indicators */
+.conf-high {{ color: $p-green; }}
+.conf-medium {{ color: $a-amber; }}
+.conf-low {{ color: $r-alert; }}
+
+/* Path Planning Indicators */
+.path-viable {{ color: $p-green; }}
+.path-risky {{ color: $a-amber; }}
+.path-dangerous {{ color: $r-alert; }}
 """

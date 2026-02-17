@@ -1,3 +1,17 @@
+
+/*
+Copyright (c) 2026 José María Micoli
+Licensed under Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Remove copyright notices
+*/
+
 import os
 import sys
 import asyncio
@@ -24,6 +38,20 @@ try:
     from vv_fs import FileSystemService
     from vv_file_manager import FileManagerView
     from vv_theme import CYBER_CSS, CyberColors
+    # ===== Phase 5.5 Cognition Layer Imports =====
+    from cognition_service import CognitionService
+    from vv_cognition_views import (
+        OpportunitiesView,
+        AttackPathsView,
+        CampaignStateView,
+        DetectionPressureView,
+        ConfidenceAnalysisView,
+        KnowledgeCompletenessView,
+        TechniqueEffectivenessView,
+        ValidationQueueView,
+        ExplainabilityView,
+        CognitionDashboardView,
+    )
 except ImportError as e:
     print(f"CRITICAL: Dependency missing. {e}")
     sys.exit(1)
@@ -1577,6 +1605,17 @@ class CyberTUI(App):
         Binding("ctrl+s", "save_db",              "Save"),
         Binding("ctrl+l", "action_logout",        "Logout"),
         Binding("escape", "return_to_editor",     "Editor"),
+        # ===== Phase 5.5 Cognition Layer Bindings =====
+        Binding("ctrl+shift+1", "toggle_cognition_opportunities",   "Opportunities"),
+        Binding("ctrl+shift+2", "toggle_cognition_paths",           "Paths"),
+        Binding("ctrl+shift+3", "toggle_cognition_state",           "State"),
+        Binding("ctrl+shift+4", "toggle_cognition_detection",       "Pressure"),
+        Binding("ctrl+shift+5", "toggle_cognition_confidence",      "Confidence"),
+        Binding("ctrl+shift+6", "toggle_cognition_knowledge",       "Knowledge"),
+        Binding("ctrl+shift+7", "toggle_cognition_techniques",      "Techniques"),
+        Binding("ctrl+shift+8", "toggle_cognition_validation",      "Validation"),
+        Binding("ctrl+shift+9", "toggle_cognition_explain",         "Explain"),
+        Binding("ctrl+shift+0", "toggle_cognition_dashboard",       "Dashboard"),
     ]
 
     current_project_id = reactive("DEFAULT")
@@ -1625,6 +1664,19 @@ class CyberTUI(App):
             
             # Phase 5: Advanced Threat Intelligence
             yield ThreatIntelligenceView(id="threat-intel-view")
+            
+            # ===== PHASE 5.5 COGNITION LAYER VIEWS =====
+            yield OpportunitiesView(id="cognition-opportunities")
+            yield AttackPathsView(id="cognition-paths")
+            yield CampaignStateView(id="cognition-state")
+            yield DetectionPressureView(id="cognition-detection")
+            yield ConfidenceAnalysisView(id="cognition-confidence")
+            yield KnowledgeCompletenessView(id="cognition-knowledge")
+            yield TechniqueEffectivenessView(id="cognition-techniques")
+            yield ValidationQueueView(id="cognition-validation")
+            yield ExplainabilityView(id="cognition-explain")
+            yield CognitionDashboardView(id="cognition-dashboard")
+            # ===== END COGNITION VIEWS =====
             
             yield ShutdownConfirmationView(id="shutdown-view")
 
@@ -1727,6 +1779,14 @@ class CyberTUI(App):
         
         # Start Phase 2 runtime executor (background task scheduler)
         self.runtime_maintenance_task()
+        
+        # ===== Initialize Phase 5.5 Cognition Service =====
+        try:
+            self.cognition = CognitionService(self.db)
+            self.update_status("Cognition layer initialized", CyberColors.PHOSPHOR_GREEN)
+        except Exception as e:
+            self.update_status(f"Cognition init failed: {e}", CyberColors.RED_ALERT)
+            self.cognition = None
 
     @work(exclusive=True)
     async def runtime_maintenance_task(self):
@@ -2012,6 +2072,88 @@ class CyberTUI(App):
             sw.current = "security-view"
             self.query_one("SecurityHardeningView").refresh_security(self, self.current_campaign_id)
             self.update_status("MODE: SECURITY HARDENING", CyberColors.RED_ALERT)
+
+    # ===== PHASE 5.5 COGNITION LAYER ACTIONS =====
+    
+    def action_toggle_cognition_opportunities(self):
+        """Switch to Opportunities view (Ctrl+Shift+1)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-opportunities"
+        self.update_status("COGNITION: OPPORTUNITIES ANALYSIS", CyberColors.COG_OPPORTUNITY)
+    
+    def action_toggle_cognition_paths(self):
+        """Switch to Attack Paths view (Ctrl+Shift+2)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-paths"
+        self.update_status("COGNITION: ATTACK PATH PLANNING", CyberColors.COG_PATH)
+    
+    def action_toggle_cognition_state(self):
+        """Switch to Campaign State view (Ctrl+Shift+3)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-state"
+        self.update_status("COGNITION: CAMPAIGN STATE ASSESSMENT", CyberColors.COG_STATE)
+    
+    def action_toggle_cognition_detection(self):
+        """Switch to Detection Pressure view (Ctrl+Shift+4)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-detection"
+        self.update_status("COGNITION: DETECTION PRESSURE ANALYSIS", CyberColors.COG_DETECTION)
+    
+    def action_toggle_cognition_confidence(self):
+        """Switch to Confidence Analysis view (Ctrl+Shift+5)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-confidence"
+        self.update_status("COGNITION: CONFIDENCE ASSESSMENT", CyberColors.COG_CONFIDENCE)
+    
+    def action_toggle_cognition_knowledge(self):
+        """Switch to Knowledge Completeness view (Ctrl+Shift+6)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-knowledge"
+        self.update_status("COGNITION: KNOWLEDGE COMPLETENESS", CyberColors.COG_KNOWLEDGE)
+    
+    def action_toggle_cognition_techniques(self):
+        """Switch to Technique Effectiveness view (Ctrl+Shift+7)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-techniques"
+        self.update_status("COGNITION: TECHNIQUE EFFECTIVENESS", CyberColors.COG_TECHNIQUE)
+    
+    def action_toggle_cognition_validation(self):
+        """Switch to Validation Queue view (Ctrl+Shift+8)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-validation"
+        self.update_status("COGNITION: VALIDATION QUEUE", CyberColors.COG_VALIDATION)
+    
+    def action_toggle_cognition_explain(self):
+        """Switch to Explainability view (Ctrl+Shift+9)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-explain"
+        self.update_status("COGNITION: DECISION EXPLAINABILITY", CyberColors.COG_EXPLAINABILITY)
+    
+    def action_toggle_cognition_dashboard(self):
+        """Switch to Cognition Dashboard view (Ctrl+Shift+0)"""
+        if not self.db.current_user or not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR COGNITION", CyberColors.AMBER_WARNING)
+            return
+        self.query_one("#view-switcher").current = "cognition-dashboard"
+        self.update_status("COGNITION: UNIFIED DASHBOARD", CyberColors.COG_DASHBOARD)
 
     def action_return_to_editor(self):
         if not self.db.current_user: return

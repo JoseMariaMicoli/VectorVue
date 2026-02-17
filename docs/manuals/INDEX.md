@@ -1,3 +1,17 @@
+
+/*
+Copyright (c) 2026 José María Micoli
+Licensed under Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Remove copyright notices
+*/
+
 # VectorVue v3.7 Documentation Index
 
 ![Version](https://img.shields.io/badge/Version-v3.7-39FF14) ![Phase](https://img.shields.io/badge/Phase-5/8_Complete-00FFFF) ![Docs](https://img.shields.io/badge/Documentation-Complete-00FF00)
