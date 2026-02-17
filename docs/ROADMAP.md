@@ -591,250 +591,164 @@ VectorVue is evolving from a single-operator red team notebook into an enterpris
 
 ---
 
-# Phase 5.5 — Operational Cognition & Decision Layer (FINAL)
+## PHASE 5.5: Operational Cognition & Decision Layer 🧠 IN PROGRESS
 
-Purpose: Convert VectorVue from recorder → adversary thinking assistant
-
-This phase introduces deterministic operational intelligence.
-
-The system NEVER autonomously acts.
-It only advises, scores, predicts, and explains.
-
-Operator remains in control.
+**Status:** In Development | **Estimated Lines:** 1,400-2,200 | **Tables:** +4 | **Views:** +4 | **Methods:** 60+
 
 ---
 
-# Core Philosophy
+### Core Concept
 
-VectorVue must behave like a senior operator sitting next to you.
+The platform stops being a passive campaign tracker and becomes an active operational advisor.
 
-It answers:
-
-* What should I do next?
-* How risky is this?
-* Why?
-* What happens if I do it?
-* What will the defender see?
-
-NOT:
-
-* automatic exploitation
-* random suggestions
-* ML guesses
-
-Everything must be explainable.
+The system continuously evaluates the campaign state and guides operator decisions.
 
 ---
 
-# Canonical Entities
+## Engines
 
-Asset(id, hostname, domain, os, criticality, tags[])
-Credential(id, username, domain, privilege_level, source)
-Session(id, asset_id, user, integrity, access_type)
-DetectionEvent(id, asset, severity, source, type, raw)
-OperatorAction(id, action, target, technique, operator, timestamp, metadata)
+### 5.5.1 Attack Graph Engine
 
----
+* [ ] Continuous compromise graph generation
+* [ ] Relationship modeling (admin_to, authenticates_to, trusts, delegates, controls)
+* [ ] Shortest path to objective calculation
+* [ ] Privilege escalation chain discovery
+* [ ] Choke point identification
+* [ ] Credential blast radius estimation
+* [ ] Domain dominance likelihood estimation
 
-# 5.5.1 Attack Graph Engine
+### 5.5.2 Objective Distance Engine
 
-Maintains compromise relationships.
+* [ ] Remaining effort score
+* [ ] Blocking constraint detection
+* [ ] Confidence level calculation
+* [ ] Detection pressure penalty
+* [ ] Unknown edge weighting
 
-Nodes:
-assets, identities, credentials, sessions
+### 5.5.3 Action Recommendation Engine
 
-Edges:
-authenticates_to
-admin_to
-controls
-can_rdp
-can_psremote
-trusts
-delegates
+* [ ] Deterministic scoring
+* [ ] Stealth vs value ranking
+* [ ] Ranked suggestions with explanation
+* [ ] Alternative safer actions
 
-Provides:
+### 5.5.4 Detection Pressure Engine
 
-* shortest path to objective
-* privilege escalation chains
-* choke points
-* credential blast radius
-* domain dominance estimation
+* [ ] Continuous campaign pressure score
+* [ ] Alert clustering detection
+* [ ] Repetition penalties
+* [ ] Campaign state classification
 
----
+### 5.5.5 OPSEC Simulation Engine
 
-# 5.5.2 Objective Distance Engine
+* [ ] Detection probability prediction
+* [ ] Log artifact preview
+* [ ] EDR behavior estimation
+* [ ] Safer alternative suggestion
 
-Calculates operational effort:
+### 5.5.6 Engagement Replay System
 
-distance_score =
-required_privilege_steps +
-lateral_moves +
-unknown_edges_penalty +
-detection_pressure_penalty
+* [ ] Append-only operation stream
+* [ ] Timeline reconstruction
+* [ ] Narrative generation
+* [ ] Training replay export
 
-Output:
-steps_remaining
-confidence_level
-blocking_constraints
+### 5.5.7 Cross-Campaign Memory
 
----
+* [ ] Defender behavior learning
+* [ ] Technique reliability tracking
+* [ ] Environment familiarity
 
-# 5.5.3 Action Recommendation Engine
+### 5.5.8 Confidence Scoring
 
-Every action scored using deterministic math.
+* [ ] Data completeness weighting
+* [ ] Stability measurement
+* [ ] Recommendation reliability annotation
 
-value_score =
-privilege_gain_weight +
-objective_proximity_weight +
-intel_gain_weight
+### 5.5.9 Campaign Tempo Model
 
-noise_score =
-expected_log_artifacts +
-command_entropy +
-tool_signature_presence
+* [ ] Operator speed anomaly detection
+* [ ] Suggested slow windows
+* [ ] Staging recommendations
 
-risk_score =
-noise_score * detection_pressure_modifier * asset_criticality
+### 5.5.10 Infrastructure Burn Tracker
 
-stealth_score =
-(1 - risk_score) * familiarity_bonus * low_variance_bonus
-
-novelty_score =
-inverse_frequency_of_technique_in_environment
-
-final_score =
-value_score * stealth_score * novelty_score
-
-All recommendations must include explanation text.
+* [ ] C2 exposure tracking
+* [ ] Payload reputation
+* [ ] Burn alerts
 
 ---
 
-# 5.5.4 Detection Pressure Engine
+## UI Integration (vv.py)
 
-Maintains continuous campaign heat level.
+The UI stops being CRUD navigation and becomes a situational awareness console.
 
-pressure =
-recent_alerts_weight +
-edr_hits +
-failed_actions +
-repeated_techniques_penalty
+### New Views
 
-health_score = 100 - pressure
+1. **Operational Dashboard View**
 
-States:
-80-100 = quiet
-60-79 = caution
-40-59 = watched
-20-39 = hunting
-0-19 = compromised
+   * Campaign health indicator
+   * Detection pressure bar
+   * Objective distance meter
+   * Recommended next actions
 
----
+2. **Attack Path View**
 
-# 5.5.5 OPSEC Simulation Engine
+   * Live compromise graph
+   * Highlighted critical nodes
+   * Dominance projection
 
-Predicts defender visibility BEFORE execution.
+3. **OPSEC Preview Panel**
 
-simulate(action):
+   * Pre-execution risk simulation
+   * Artifact preview
+   * Safer alternatives
 
-predict_logs()
-predict_edr_rules()
-predict_behavioral_flags()
+4. **Engagement Timeline View**
 
-Returns:
-detection_probability
-likely_sensor
-recommended_safer_variant
+   * Replayable operation history
+   * Defender reaction markers
+   * Kill-chain reconstruction
 
 ---
 
-# 5.5.6 Engagement Replay
+## Real-Time Operator Flow
 
-Append-only operation stream.
+1. Operator opens asset
+2. Advisor shows recommended actions
+3. Operator selects action
+4. OPSEC preview appears
+5. Operator executes
+6. Detection pressure updates
+7. Attack graph recalculates
+8. Next suggestions adapt
 
-Allows:
-timeline reconstruction
-automatic report narrative
-purple-team replay
-training dataset export
-
----
-
-# 5.5.7 Cross Campaign Memory
-
-Stores defender behavior patterns.
-
-Learns:
-alert thresholds
-noisy techniques
-allowed protocols
-escalation patterns
-
-Produces:
-environment familiarity bonus
+Loop:
+Observe → Simulate → Execute → Evaluate → Adapt
 
 ---
 
-# 5.5.8 Confidence System (NEW)
+## Database Tables
 
-Every system output includes confidence:
-
-confidence =
-data_completeness *
-observation_count *
-path_stability
-
-Prevents hallucinated strategy suggestions.
+* attack_graph_edges
+* operation_events
+* campaign_memory
+* infrastructure_exposure
 
 ---
 
-# 5.5.9 Campaign Tempo Model (NEW)
+## Deliverables
 
-Detects operator speed anomalies.
-
-If operator moves too fast:
-increase predicted detection risk
-
-Suggests:
-slow mode
-sleep windows
-pivot staging
-
----
-
-# 5.5.10 Infrastructure Burn Tracker (NEW)
-
-Tracks exposure probability of:
-
-C2
-redirectors
-domains
-payload hashes
-
-Burn score increases when:
-detections occur near infra
-beacon killed
-hash flagged
-
-Warns operator before total burn.
-
----
-
-# Operator UX Flow
-
-1 Operator lands shell
-2 Attack Map updates
-3 Objective Distance recalculated
-4 Suggested Actions appear
-5 Operator selects action
-6 OPSEC simulation runs
-7 Risk shown BEFORE execution
-8 Operator executes
-9 Detection Pressure updates
-10 Health Score changes
-11 Recommendations adapt
-
-Cycle:
-Observe → Simulate → Execute → Evaluate → A
+* TacticalAdvisorPanel
+* OperationalDashboard
+* AttackGraphView
+* OpsecSimulationPanel
+* TimelineReplayView
+* RecommendationEngine
+* DetectionPressureModel
+* TempoModel
+* ConfidenceModel
+* BurnTracker
 
 ---
 
