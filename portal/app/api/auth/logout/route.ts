@@ -18,5 +18,12 @@ export async function POST(request: NextRequest) {
     expires: new Date(0),
     path: '/'
   });
+  res.cookies.set('vv_tenant_name', '', {
+    httpOnly: false,
+    secure: true,
+    sameSite: 'lax',
+    expires: new Date(0),
+    path: '/'
+  });
   return res;
 }

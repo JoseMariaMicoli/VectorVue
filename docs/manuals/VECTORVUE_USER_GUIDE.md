@@ -2,7 +2,7 @@
 
 # VectorVue User Guide
 
-Version: v4.0 (Phase 6 complete)  
+Version: v4.1 (Phase 6 complete)  
 Audience: Red Team operators, security engineers, authorized penetration testers
 
 ## Table of Contents
@@ -353,10 +353,8 @@ For issue-specific workflows, see `docs/manuals/TROUBLESHOOTING_GUIDE.md`.
 
 ### Version and Roadmap Summary
 
-Current implemented scope aligns with Roadmap through Phase 5.5.  
-Planned scopes (not started):
-- Phase 6: Deployment hardening (Docker/systemd/TLS/air-gap)
-- Phase 7: Client portal (web UI)
+Current implemented scope aligns with Roadmap through Phase 7.  
+Planned scope:
 - Phase 8: Advanced ML analytics
 
 Changelog source of truth: roadmap and repository history.

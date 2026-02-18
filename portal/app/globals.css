@@ -4,6 +4,18 @@
 
 :root {
   color-scheme: dark;
+  --primary: #0f172a;
+  --accent: #22d3ee;
+  --background: #0b0e14;
+  --foreground: #e5e7eb;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --primary-rgb: 15 23 42;
+  --accent-rgb: 34 211 238;
+  --background-rgb: 11 14 20;
+  --foreground-rgb: 229 231 235;
+  --danger-rgb: 239 68 68;
+  --success-rgb: 34 197 94;
 }
 
 body {
