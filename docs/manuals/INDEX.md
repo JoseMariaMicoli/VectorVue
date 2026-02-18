@@ -1,8 +1,8 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v3.8 Documentation Index
+# VectorVue v3.9 Documentation Index
 
-This is the single entrypoint for all VectorVue documentation in v3.8.
+This is the single entrypoint for all VectorVue documentation in v3.9.
 
 ## Recommended Reading Path
 
@@ -31,6 +31,8 @@ This is the single entrypoint for all VectorVue documentation in v3.8.
 - [Documentation Policy](./DOCUMENTATION_POLICY.md)
 - [PostgreSQL Migration Guide](./POSTGRES_MIGRATION_GUIDE.md)
 - [PostgreSQL Usage Guide](./POSTGRES_USAGE_GUIDE.md)
+- [Deployment & Hardening Guide](./Deployment.md)
+- [User Policy](./USER_POLICY.md)
 - [PostgreSQL Audit Report](./POSTGRES_AUDIT_REPORT.md)
 - [PostgreSQL Regression Checklist](./POSTGRES_REGRESSION_CHECKLIST.md)
 
@@ -45,6 +47,7 @@ This is the single entrypoint for all VectorVue documentation in v3.8.
 | `ARCHITECTURE_SPEC.md` | Engineers/Architects | Internal architecture and data model |
 | `POSTGRES_MIGRATION_GUIDE.md` | DevOps/Platform Engineers | SQLite→PostgreSQL and Docker migration |
 | `POSTGRES_USAGE_GUIDE.md` | Operators/DevOps | Day-2 runbook for PostgreSQL backend operations |
+| `Deployment.md` | DevOps/SRE/Security Engineers | Phase 6 production deployment, TLS, systemd, and hardening runbook |
 | `POSTGRES_AUDIT_REPORT.md` | Engineering Leads/Auditors | Method-level migration risk and validation focus |
 | `POSTGRES_REGRESSION_CHECKLIST.md` | QA/Engineering | End-to-end no-regression verification checklist |
 | `TAB_NAVIGATION_GUIDE.md` | All users | Visual navigation model and keybindings |
@@ -52,6 +55,6 @@ This is the single entrypoint for all VectorVue documentation in v3.8.
 
 ## Version Scope
 
-- Current: **v3.8**
+- Current: **v3.9**
 - Implemented: **Phases 0–5.5**
 - Planned: **Phases 6–8** (see roadmap)

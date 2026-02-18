@@ -1,6 +1,6 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue PostgreSQL Usage Guide (v3.8)
+# VectorVue PostgreSQL Usage Guide (v3.9)
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@
 
 ## Scope
 
-This runbook provides production-style operational steps for using VectorVue v3.8 with PostgreSQL in Docker, including migration, reset, seeding, verification, and recovery workflows.
+This runbook provides production-style operational steps for using VectorVue v3.9 with PostgreSQL in Docker, including migration, reset, seeding, verification, and recovery workflows.
 
 ## Prerequisites
 
@@ -57,9 +57,9 @@ make pg-smoke
 ### Option A: Migrate existing SQLite data (recommended for continuity)
 
 ```bash
-docker compose run --rm vectorvue python scripts/migrate_sqlite_to_postgres.py \
+docker compose run --rm vectorvue_app python scripts/migrate_sqlite_to_postgres.py \
   --sqlite vectorvue.db \
-  --pg-url postgresql://vectorvue:vectorvue@postgres:5432/vectorvue \
+  --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db \
   --schema sql/postgres_schema.sql \
   --truncate
 ```
@@ -67,18 +67,18 @@ docker compose run --rm vectorvue python scripts/migrate_sqlite_to_postgres.py \
 ### Option B: Fresh clean state (no SQLite import)
 
 ```bash
-docker compose run --rm vectorvue python scripts/reset_db.py \
+docker compose run --rm vectorvue_app python scripts/reset_db.py \
   --backend postgres \
-  --pg-url postgresql://vectorvue:vectorvue@postgres:5432/vectorvue \
+  --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db \
   --drop-schema --yes
 ```
 
 Then seed:
 
 ```bash
-docker compose run --rm vectorvue python scripts/seed_db.py \
+docker compose run --rm vectorvue_app python scripts/seed_db.py \
   --backend postgres \
-  --pg-url postgresql://vectorvue:vectorvue@postgres:5432/vectorvue
+  --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
 ```
 
 ## Run VectorVue on PostgreSQL
@@ -86,14 +86,14 @@ docker compose run --rm vectorvue python scripts/seed_db.py \
 ### Docker mode
 
 ```bash
-docker compose up -d vectorvue
+docker compose up -d vectorvue_app
 ```
 
 ### Local python mode
 
 ```bash
 export VV_DB_BACKEND=postgres
-export VV_DB_URL=postgresql://vectorvue:vectorvue@127.0.0.1:5433/vectorvue
+export VV_DB_URL=postgresql://vectorvue:strongpassword@127.0.0.1:5433/vectorvue_db
 python vv.py
 ```
 
@@ -102,27 +102,27 @@ python vv.py
 ### Reset PostgreSQL by truncating data
 
 ```bash
-docker compose run --rm vectorvue python scripts/reset_db.py \
+docker compose run --rm vectorvue_app python scripts/reset_db.py \
   --backend postgres \
-  --pg-url postgresql://vectorvue:vectorvue@postgres:5432/vectorvue \
+  --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db \
   --yes
 ```
 
 ### Reset PostgreSQL by dropping schema
 
 ```bash
-docker compose run --rm vectorvue python scripts/reset_db.py \
+docker compose run --rm vectorvue_app python scripts/reset_db.py \
   --backend postgres \
-  --pg-url postgresql://vectorvue:vectorvue@postgres:5432/vectorvue \
+  --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db \
   --drop-schema --yes
 ```
 
 ### Seed PostgreSQL test dataset
 
 ```bash
-docker compose run --rm vectorvue python scripts/seed_db.py \
+docker compose run --rm vectorvue_app python scripts/seed_db.py \
   --backend postgres \
-  --pg-url postgresql://vectorvue:vectorvue@postgres:5432/vectorvue \
+  --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db \
   --admin-user admin \
   --admin-pass AdminPassw0rd!
 ```
@@ -140,8 +140,8 @@ python -m py_compile vv.py vv_core.py scripts/*.py tests/test_postgres_smoke.py
 ```bash
 docker compose run --rm \
   -e VV_DB_BACKEND=postgres \
-  -e VV_DB_URL=postgresql://vectorvue:vectorvue@postgres:5432/vectorvue \
-  vectorvue python -m unittest -q tests/test_postgres_smoke.py
+  -e VV_DB_URL=postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db \
+  vectorvue_app python -m unittest -q tests/test_postgres_smoke.py
 ```
 
 3. Optional method audit refresh:
@@ -155,13 +155,13 @@ python scripts/audit_vv_core_methods.py
 ### Backup
 
 ```bash
-docker compose exec postgres pg_dump -U vectorvue -d vectorvue > vectorvue_pg_backup.sql
+docker compose exec postgres pg_dump -U vectorvue -d vectorvue_db > vectorvue_pg_backup.sql
 ```
 
 ### Restore
 
 ```bash
-cat vectorvue_pg_backup.sql | docker compose exec -T postgres psql -U vectorvue -d vectorvue
+cat vectorvue_pg_backup.sql | docker compose exec -T postgres psql -U vectorvue -d vectorvue_db
 ```
 
 ## Troubleshooting
@@ -180,7 +180,7 @@ Initialize schema first:
 
 ```bash
 python scripts/export_pg_schema.py
-docker compose run --rm vectorvue python scripts/migrate_sqlite_to_postgres.py --truncate --pg-url postgresql://vectorvue:vectorvue@postgres:5432/vectorvue
+docker compose run --rm vectorvue_app python scripts/migrate_sqlite_to_postgres.py --truncate --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
 ```
 
 ## Operational Safety Notes

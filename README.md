@@ -24,8 +24,8 @@ Previous versions remain under the original license.
 ```
 
 ![Status](https://img.shields.io/badge/Status-Operational-39FF14)
-![Version](https://img.shields.io/badge/Version-3.8-00FFFF)
-![Maturity](https://img.shields.io/badge/Maturity-Phase_5.5_Complete-39FF14)
+![Version](https://img.shields.io/badge/Version-3.9-00FFFF)
+![Maturity](https://img.shields.io/badge/Maturity-Phase_6_Complete-39FF14)
 ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
 ![Evidence](https://img.shields.io/badge/Evidence-Defensible-blue)
@@ -43,7 +43,7 @@ Unlike pentest note tools, VectorVue models the **state of an operation** and he
 
 ## UI Navigation: Three Ways to Navigate
 
-**New in v3.8+:** Visual tab system for all 26 views. Operators can navigate using:
+**New in v3.9+:** Visual tab system for all 26 views. Operators can navigate using:
 
 ### 1. Keybindings (Fastest)
 - **Space** → Files | **Ctrl+M** → MITRE | **Ctrl+K** → Campaign | **Ctrl+E** → Cmd Log
@@ -83,17 +83,19 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 | Notebook  | Store evidence       | ✅ Complete (v1-2) |
 | Manager   | Organize engagement  | ✅ Complete (v2.0+) |
 | Platform  | Enforce workflow     | ✅ Complete (v3.0+) |
-| Cognition | Guide decisions      | ✅ Complete (v3.8) |
-| PostgreSQL Migration | Database + container baseline | ✅ Complete (v3.8, Phase 5.6) |
-| Autonomy  | Supervised execution | 🔮 Phase 6+ |
-| **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v3.8+)** |
+| Cognition | Guide decisions      | ✅ Complete (v3.9) |
+| PostgreSQL Migration | Database + container baseline | ✅ Complete (v3.9, Phase 5.6) |
+| Deployment & Hardening | Production-ready secure deployment | ✅ Complete (v3.9, Phase 6) |
+| Autonomy  | Supervised execution | 🔮 Phase 7+ |
+| **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v3.9+)** |
 
 Current state:
 
 **Phase 5 — Campaign Platform (stable)** ✅
 **Phase 5.5 — Operational Cognition (complete)** ✅
 **Phase 5.6 — PostgreSQL + Docker baseline (complete)** ✅
-**Phase 6 — Strategic Planning (upcoming)**
+**Phase 6 — Deployment & Hardening (complete)** ✅
+**Phase 7 — Client Portal (planned)**
 
 ---
 
@@ -287,9 +289,9 @@ The purpose is defense improvement.
 ## Roadmap
 
 Phase 5.5 — Operational cognition ✅ **COMPLETE**
-Phase 6 — Strategic planning & hypothesis testing
-Phase 7 — Adaptive operations & environment learning
-Phase 8 — Supervised autonomy & execution engines
+Phase 6 — Deployment & hardening ✅ **COMPLETE**
+Phase 7 — Client portal (web UI)
+Phase 8 — Supervised autonomy & analytics
 
 ---
 
