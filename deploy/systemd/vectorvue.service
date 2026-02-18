@@ -1,0 +1,42 @@
+[Unit]
+Description=VectorVue Operational Platform
+After=network.target postgresql.service redis.service nginx.service
+Requires=postgresql.service redis.service nginx.service
+
+[Service]
+Type=simple
+User=vectorvue
+Group=vectorvue
+WorkingDirectory=/opt/vectorvue
+EnvironmentFile=-/etc/vectorvue/vectorvue.env
+Environment=VV_DB_BACKEND=postgres
+Environment=VV_DB_HOST=127.0.0.1
+Environment=VV_DB_PORT=5432
+Environment=VV_DB_NAME=vectorvue_db
+Environment=VV_DB_USER=vectorvue
+Environment=VV_DB_PASSWORD=strongpassword
+Environment=VV_RUN_MODE=service
+Environment=VV_HEALTH_PORT=8080
+ExecStart=/usr/bin/python3 -m vv_core_postgres
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/vectorvue/Reports /var/log/vectorvue /run/vectorvue
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+LockPersonality=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vectorvue
+
+[Install]
+WantedBy=multi-user.target
