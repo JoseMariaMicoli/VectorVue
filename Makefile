@@ -14,14 +14,16 @@ PG_URL ?= postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
 SQLITE_DB ?= vectorvue.db
 SCHEMA_SQL ?= sql/postgres_schema.sql
 PY ?= python
+NPM ?= npm
 SKIP_BUILD ?= 0
 FORCE_CLASSIC_BUILD ?= 0
 DC ?= docker compose --ansi always
 CUSTOMER ?= default
 TENANT_NAME ?= Default Customer
 TENANT_ID ?= auto
+PORTAL_DIR ?= portal
 
-.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all phase65-migrate pg-reset pg-migrate pg-seed pg-smoke
+.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all phase65-migrate pg-reset pg-migrate pg-seed pg-smoke
 
 help:
 	@echo "VectorVue PostgreSQL operational targets"
@@ -35,11 +37,16 @@ help:
 	@echo "  make deploy     - Build/start full stack + Phase 6.5 migration + API smoke test"
 	@echo "  make customer-deploy - Deploy stack scoped by COMPOSE project name per customer"
 	@echo "  make phase65-bootstrap - Create customer dirs/env and bootstrap tenant metadata"
-	@echo "  make api-up     - Start REST API stack (postgres, redis, api, runtime worker, nginx)"
+	@echo "  make api-up     - Start full stack (postgres, redis, api, runtime worker, portal, nginx)"
 	@echo "  make api-down   - Stop REST API stack"
 	@echo "  make api-logs   - Tail API and runtime logs"
 	@echo "  make api-smoke  - Validate API health and OpenAPI endpoint"
 	@echo "  make phase7a-check - Validate Phase 7A router/schemas/url builder modules"
+	@echo "  make portal-install - Install Next.js portal dependencies"
+	@echo "  make portal-dev - Run Next.js portal in development mode"
+	@echo "  make portal-build - Build Next.js portal for production"
+	@echo "  make portal-start - Start built Next.js portal"
+	@echo "  make phase7b-check - Validate Phase 7B (portal build)"
 	@echo "  make phase6-up  - Generate TLS certs, build, and start Phase 6 stack"
 	@echo "  make phase6-test - Run functional, security, and performance validation"
 	@echo "  make phase65-migrate - Apply tenant isolation migration (Phase 6.5)"
@@ -77,21 +84,21 @@ phase6-up:
 	./deploy/scripts/generate_tls_certs.sh
 	@if [ "$(SKIP_BUILD)" != "1" ]; then \
 		if [ "$(FORCE_CLASSIC_BUILD)" = "1" ]; then \
-			DOCKER_BUILDKIT=0 $(DC) build vectorvue_app; \
+			DOCKER_BUILDKIT=0 $(DC) build vectorvue_app vectorvue_portal; \
 		else \
-			$(DC) build vectorvue_app || (echo "BuildKit failed, retrying with classic builder..." && DOCKER_BUILDKIT=0 $(DC) build vectorvue_app); \
+			$(DC) build vectorvue_app vectorvue_portal || (echo "BuildKit failed, retrying with classic builder..." && DOCKER_BUILDKIT=0 $(DC) build vectorvue_app vectorvue_portal); \
 		fi; \
 	else \
 		echo "SKIP_BUILD=1 -> skipping image build"; \
 	fi
-	$(DC) up -d --force-recreate postgres redis vectorvue_app vectorvue_runtime nginx
+	$(DC) up -d --force-recreate postgres redis vectorvue_app vectorvue_runtime vectorvue_portal nginx
 
 api-up: phase6-up
 
 api-down: phase6-down
 
 api-logs:
-	$(DC) logs --tail=120 -f vectorvue_app vectorvue_runtime nginx
+	$(DC) logs --tail=120 -f vectorvue_app vectorvue_runtime vectorvue_portal nginx
 
 api-smoke:
 	$(DC) exec -T vectorvue_app python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).read().decode())"
@@ -99,6 +106,20 @@ api-smoke:
 
 phase7a-check:
 	$(PY) -m py_compile app/client_api/__init__.py app/client_api/dependencies.py app/client_api/schemas.py app/client_api/router.py utils/url_builder.py
+
+portal-install:
+	$(NPM) --prefix $(PORTAL_DIR) install
+
+portal-dev:
+	$(NPM) --prefix $(PORTAL_DIR) run dev
+
+portal-build:
+	$(NPM) --prefix $(PORTAL_DIR) run build
+
+portal-start:
+	$(NPM) --prefix $(PORTAL_DIR) run start
+
+phase7b-check: portal-install portal-build
 
 phase65-migrate:
 	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/apply_pg_sql.py \
@@ -140,8 +161,8 @@ pg-migrate:
 		--schema $(SCHEMA_SQL) \
 		--truncate
 
-pg-seed:
-	$(DC) run --rm vectorvue_app $(PY) scripts/seed_db.py \
+pg-seed: phase65-migrate
+	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/seed_db.py \
 		--backend postgres \
 		--pg-url $(PG_URL)
 

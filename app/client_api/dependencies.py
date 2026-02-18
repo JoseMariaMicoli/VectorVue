@@ -16,14 +16,16 @@ def _db_url() -> str:
         url = make_url(env_url)
         if url.get_backend_name() == "postgresql" and url.drivername != "postgresql+psycopg":
             url = url.set(drivername="postgresql+psycopg")
-        return str(url)
+        return url.render_as_string(hide_password=False)
 
     user = os.environ.get("VV_DB_USER", os.environ.get("POSTGRES_USER", "vectorvue"))
     password = os.environ.get("VV_DB_PASSWORD", os.environ.get("POSTGRES_PASSWORD", "strongpassword"))
     host = os.environ.get("VV_DB_HOST", "postgres")
     port = os.environ.get("VV_DB_PORT", "5432")
     name = os.environ.get("VV_DB_NAME", os.environ.get("POSTGRES_DB", "vectorvue_db"))
-    return str(make_url(f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"))
+    return make_url(f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}").render_as_string(
+        hide_password=False
+    )
 
 
 engine = create_engine(_db_url(), pool_pre_ping=True, future=True)
