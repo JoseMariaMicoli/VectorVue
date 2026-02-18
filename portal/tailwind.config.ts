@@ -9,11 +9,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#0b0e14',
-        panel: '#111827',
-        accent: '#22d3ee',
-        text: '#e5e7eb',
-        muted: '#94a3b8'
+        bg: 'rgb(var(--background-rgb) / <alpha-value>)',
+        panel: 'rgb(var(--primary-rgb) / <alpha-value>)',
+        accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
+        text: 'rgb(var(--foreground-rgb) / <alpha-value>)',
+        muted: 'rgb(var(--foreground-rgb) / 0.65)',
+        danger: 'rgb(var(--danger-rgb) / <alpha-value>)',
+        success: 'rgb(var(--success-rgb) / <alpha-value>)'
       }
     }
   },

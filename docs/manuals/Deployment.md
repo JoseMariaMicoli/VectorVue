@@ -69,6 +69,19 @@ Services:
 - `redis`: cache/task coordination backend
 - `nginx`: TLS 1.3 reverse proxy and secure headers
 
+Per-tenant isolated stack (separate compose project + container namespace):
+
+```bash
+make customer-deploy-isolated \
+  CUSTOMER=acme \
+  TENANT_NAME="ACME Industries" \
+  HTTP_HOST_PORT=8081 \
+  HTTPS_HOST_PORT=8444 \
+  POSTGRES_HOST_PORT=5544
+```
+
+For a second tenant, use a different `CUSTOMER` and different host ports.
+
 ## 5. PostgreSQL Initialization / Migration / Tenant Isolation
 
 Fresh reset:
@@ -86,7 +99,7 @@ make pg-migrate
 Seed:
 
 ```bash
-make pg-seed
+make seed-clients
 ```
 
 Smoke tests:

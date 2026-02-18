@@ -24,8 +24,8 @@ Previous versions remain under the original license.
 ```
 
 ![Status](https://img.shields.io/badge/Status-Operational-39FF14)
-![Version](https://img.shields.io/badge/Version-4.0-00FFFF)
-![Maturity](https://img.shields.io/badge/Maturity-Phase_6_Complete-39FF14)
+![Version](https://img.shields.io/badge/Version-4.1-00FFFF)
+![Maturity](https://img.shields.io/badge/Maturity-Phase_7_Complete-39FF14)
 ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
 ![Evidence](https://img.shields.io/badge/Evidence-Defensible-blue)
@@ -43,7 +43,7 @@ Unlike pentest note tools, VectorVue models the **state of an operation** and he
 
 ## UI Navigation: Three Ways to Navigate
 
-**New in v4.0+:** Visual tab system for all 26 views. Operators can navigate using:
+**New in v4.1+:** Visual tab system for all 26 views. Operators can navigate using:
 
 ### 1. Keybindings (Fastest)
 - **Space** → Files | **Ctrl+M** → MITRE | **Ctrl+K** → Campaign | **Ctrl+E** → Cmd Log
@@ -77,6 +77,7 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 - PostgreSQL operations: [PostgreSQL Usage Guide](docs/manuals/POSTGRES_USAGE_GUIDE.md)
 - Deployment and hardening: [Deployment Guide](docs/manuals/Deployment.md)
 - Tenant-safe API operations: [Client API Manual](docs/manuals/CLIENT_API_MANUAL.md)
+- Client portal operations: [Client Portal Manual](docs/manuals/CLIENT_PORTAL_MANUAL.md)
 - Phase 6.5 quickstart: [API Quickstart](docs/PHASE65_API_QUICKSTART.md)
 
 ## Maturity Model
@@ -86,11 +87,11 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 | Notebook  | Store evidence       | ✅ Complete (v1-2) |
 | Manager   | Organize engagement  | ✅ Complete (v2.0+) |
 | Platform  | Enforce workflow     | ✅ Complete (v3.0+) |
-| Cognition | Guide decisions      | ✅ Complete (v4.0) |
-| PostgreSQL Migration | Database + container baseline | ✅ Complete (v4.0, Phase 5.6) |
-| Deployment & Hardening | Production-ready secure deployment | ✅ Complete (v4.0, Phase 6) |
+| Cognition | Guide decisions      | ✅ Complete (v4.1) |
+| PostgreSQL Migration | Database + container baseline | ✅ Complete (v4.1, Phase 5.6) |
+| Deployment & Hardening | Production-ready secure deployment | ✅ Complete (v4.1, Phase 6) |
 | Autonomy  | Supervised execution | 🔮 Phase 7+ |
-| **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v4.0+)** |
+| **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v4.1+)** |
 
 Current state:
 
@@ -98,7 +99,46 @@ Current state:
 **Phase 5.5 — Operational Cognition (complete)** ✅
 **Phase 5.6 — PostgreSQL + Docker baseline (complete)** ✅
 **Phase 6 — Deployment & Hardening (complete)** ✅
-**Phase 7 — Client Portal (planned)**
+**Phase 7 — Client Portal + Analytics (complete)** ✅
+Client portal includes findings timeline, JSON/CSV export, remediation tracking with verification state,
+polling notifications, multilingual toggle (EN/ES), and brandable UI variables.
+
+## Multi-Tenant Demo Seed (v4.1)
+
+Run:
+
+```bash
+make seed-clients
+```
+
+This now provisions:
+
+- 2 client panels (tenants), each with 2 client users
+- 1 global red team admin + 2 operator accounts (lead + operator)
+- 2 realistic campaigns per tenant (4 total), with findings, evidence, remediation, reports, and analytics data
+
+At the end of `make seed-clients`, VectorVue prints the full access matrix.
+See [Demo Access Matrix Manual](docs/manuals/DEMO_ACCESS_MATRIX.md) for credential defaults and overrides.
+
+Access model:
+
+- `redteam_admin` is mapped to both tenants
+- `rt_lead` is mapped to Panel 1 tenant
+- `rt_operator` is mapped to Panel 2 tenant
+- each panel has 2 client users with different roles
+
+Tenant-isolated container stacks:
+
+```bash
+make customer-deploy-isolated \
+  CUSTOMER=acme \
+  TENANT_NAME="ACME Industries" \
+  HTTP_HOST_PORT=8081 \
+  HTTPS_HOST_PORT=8444 \
+  POSTGRES_HOST_PORT=5544
+```
+
+Run another tenant with a different `CUSTOMER` and different host ports.
 
 ---
 
@@ -229,7 +269,7 @@ PostgreSQL one-command operations:
 ```bash
 make pg-reset
 make pg-migrate
-make pg-seed
+make seed-clients
 make pg-smoke
 ```
 

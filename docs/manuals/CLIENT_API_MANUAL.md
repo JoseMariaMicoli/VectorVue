@@ -1,6 +1,6 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v4.0 Client REST API Manual
+# VectorVue v4.1 Client REST API Manual
 
 ## Scope
 
@@ -24,11 +24,20 @@ Phase 6.5 introduces a tenant-isolated, read-only REST API for customer-safe acc
 ## Endpoints
 
 - `GET /healthz`
+- `POST /api/v1/client/auth/login`
 - `GET /api/v1/client/findings`
+- `GET /api/v1/client/findings/{finding_id}`
 - `GET /api/v1/client/evidence`
+- `GET /api/v1/client/evidence/{finding_id}`
 - `GET /api/v1/client/reports`
+- `GET /api/v1/client/reports/{report_id}/download`
+- `GET /api/v1/client/risk`
 - `GET /api/v1/client/risk-summary`
+- `GET /api/v1/client/risk-trend`
+- `GET /api/v1/client/remediation`
 - `GET /api/v1/client/remediation-status`
+- `GET /api/v1/client/theme`
+- `GET /api/v1/client/theme/logo`
 
 ## Deployment Commands
 
@@ -44,6 +53,7 @@ make api-smoke
 2. Apply migration: `make phase65-migrate`
 3. Verify API: `make api-smoke`
 4. Tail runtime logs: `make api-logs`
+5. Seed demo multi-tenant data: `make seed-clients`
 
 ## Compatibility Notes
 

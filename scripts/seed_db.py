@@ -70,7 +70,79 @@ def ensure_user_credentials(db: Database, username: str, password: str, role: st
     return f"error:{msg}"
 
 
-def get_or_create_campaign(db: Database, name: str, project_id: str = "DEFAULT") -> int:
+def ensure_tenant(db: Database, tenant_id: str, tenant_name: str) -> str:
+    """Ensure tenant row exists and is active (PostgreSQL only)."""
+    if getattr(db, "db_backend", "").lower() != "postgres":
+        return tenant_id
+    c = db.conn.cursor()
+    c.execute(
+        """INSERT INTO tenants (id, name, active)
+           VALUES (?, ?, TRUE)
+           ON CONFLICT (id) DO UPDATE SET
+             name=EXCLUDED.name,
+             active=TRUE""",
+        (tenant_id, tenant_name),
+    )
+    db.conn.commit()
+    return tenant_id
+
+
+def assign_user_tenant_access(
+    db: Database,
+    username: str,
+    tenant_id: str,
+    access_role: str,
+) -> None:
+    """Assign explicit tenant access to a user (PostgreSQL only)."""
+    if getattr(db, "db_backend", "").lower() != "postgres":
+        return
+    c = db.conn.cursor()
+    c.execute("SELECT id FROM users WHERE username=?", (username,))
+    row = c.fetchone()
+    if not row:
+        raise RuntimeError(f"user not found for tenant mapping: {username}")
+    user_id = int(row["id"])
+    c.execute(
+        """INSERT INTO user_tenant_access (user_id, username, tenant_id, access_role, active)
+           VALUES (?, ?, ?, ?, TRUE)
+           ON CONFLICT (user_id, tenant_id) DO UPDATE SET
+             username=EXCLUDED.username,
+             access_role=EXCLUDED.access_role,
+             active=TRUE""",
+        (user_id, username, tenant_id, access_role),
+    )
+    db.conn.commit()
+
+
+def get_or_create_campaign(
+    db: Database,
+    name: str,
+    project_id: str = "DEFAULT",
+    tenant_id: str | None = None,
+) -> int:
+    if getattr(db, "db_backend", "").lower() == "postgres" and tenant_id:
+        c = db.conn.cursor()
+        c.execute("SELECT id FROM campaigns WHERE name=? AND tenant_id=?", (name, tenant_id))
+        row = c.fetchone()
+        if row:
+            return int(row["id"])
+        created_at = datetime.utcnow().isoformat()
+        c.execute(
+            """INSERT INTO campaigns (name, project_id, created_at, created_by, status, integrity_hash, tenant_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                name,
+                project_id,
+                created_at,
+                db.current_user.id if db.current_user else None,
+                "active",
+                "",
+                tenant_id,
+            ),
+        )
+        db.conn.commit()
+        return int(c.lastrowid)
+
     existing = db.get_campaign_by_name(name)
     if existing:
         return int(existing.id)
@@ -342,7 +414,13 @@ def resolve_active_tenant_id(db: Database) -> str | None:
     return "00000000-0000-0000-0000-000000000001"
 
 
-def seed_client_portal_data(db: Database, campaign_ids: list[int], operator: str, tenant_id: str | None) -> None:
+def seed_client_portal_data(
+    db: Database,
+    campaign_ids: list[int],
+    operator: str,
+    tenant_id: str | None,
+    client_name: str,
+) -> None:
     """Seed findings/reports/remediation/evidence so Phase 7 portal is not empty."""
     if not tenant_id:
         return
@@ -448,7 +526,7 @@ def seed_client_portal_data(db: Database, campaign_ids: list[int], operator: str
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     camp,
-                    "Default Customer",
+                    client_name,
                     report_title,
                     now,
                     now,
@@ -459,7 +537,7 @@ def seed_client_portal_data(db: Database, campaign_ids: list[int], operator: str
                     1,
                     "",
                     "Seeded by VectorVue",
-                    "finalized",
+                    "final",
                     "",
                     "",
                     now,
@@ -483,18 +561,32 @@ def main() -> int:
         default=None,
         help="PostgreSQL URL override. Falls back to VV_DB_URL / VV_DB_* env vars.",
     )
-    parser.add_argument("--admin-user", default="admin")
-    parser.add_argument("--admin-pass", default="AdminPassw0rd!")
-    parser.add_argument("--client-user-1", default="client_viewer")
-    parser.add_argument("--client-pass-1", default="ClientView3r!")
-    parser.add_argument("--client-role-1", default="viewer")
-    parser.add_argument("--client-user-2", default="client_operator")
-    parser.add_argument("--client-pass-2", default="ClientOperat0r!")
-    parser.add_argument("--client-role-2", default="operator")
+    parser.add_argument("--global-admin-user", default="redteam_admin")
+    parser.add_argument("--global-admin-pass", default="RedTeamAdm1n!")
+    parser.add_argument("--operator-lead-user", default="rt_lead")
+    parser.add_argument("--operator-lead-pass", default="LeadOperat0r!")
+    parser.add_argument("--operator-user", default="rt_operator")
+    parser.add_argument("--operator-pass", default="CoreOperat0r!")
+    parser.add_argument("--panel1-tenant-id", default="10000000-0000-0000-0000-000000000001")
+    parser.add_argument("--panel1-tenant-name", default="ACME Industries")
+    parser.add_argument("--panel1-client-user-1", default="acme_viewer")
+    parser.add_argument("--panel1-client-pass-1", default="AcmeView3r!")
+    parser.add_argument("--panel1-client-role-1", default="viewer")
+    parser.add_argument("--panel1-client-user-2", default="acme_operator")
+    parser.add_argument("--panel1-client-pass-2", default="AcmeOperat0r!")
+    parser.add_argument("--panel1-client-role-2", default="operator")
+    parser.add_argument("--panel2-tenant-id", default="20000000-0000-0000-0000-000000000002")
+    parser.add_argument("--panel2-tenant-name", default="Globex Corporation")
+    parser.add_argument("--panel2-client-user-1", default="globex_viewer")
+    parser.add_argument("--panel2-client-pass-1", default="GlobexView3r!")
+    parser.add_argument("--panel2-client-role-1", default="viewer")
+    parser.add_argument("--panel2-client-user-2", default="globex_operator")
+    parser.add_argument("--panel2-client-pass-2", default="GlobexOperat0r!")
+    parser.add_argument("--panel2-client-role-2", default="operator")
     parser.add_argument(
         "--passphrase",
         default=None,
-        help="Database encryption passphrase (defaults to --admin-pass).",
+        help="Database encryption passphrase (defaults to --global-admin-pass).",
     )
     args = parser.parse_args()
 
@@ -506,7 +598,7 @@ def main() -> int:
     if args.backend == "postgres" and args.pg_url:
         os.environ["VV_DB_URL"] = args.pg_url
 
-    encryption_passphrase = args.passphrase or args.admin_pass
+    encryption_passphrase = args.passphrase or args.global_admin_pass
     crypto = SessionCrypto()
     if not crypto.derive_key(encryption_passphrase):
         raise RuntimeError("failed to derive encryption key from provided passphrase")
@@ -519,42 +611,89 @@ def main() -> int:
                 "Run scripts/reset_db.py --yes or pass the original --passphrase."
             )
 
-        ensure_login(db, args.admin_user, args.admin_pass)
-        camp1 = get_or_create_campaign(db, "OP_REDWOLF_2026")
-        camp2 = get_or_create_campaign(db, "OP_NIGHTGLASS_2026")
+        ensure_login(db, args.global_admin_user, args.global_admin_pass)
+        lead_status = ensure_user_credentials(db, args.operator_lead_user, args.operator_lead_pass, Role.LEAD)
+        operator_status = ensure_user_credentials(db, args.operator_user, args.operator_pass, Role.OPERATOR)
 
-        seed_campaign(db, camp1, "REDWOLF", args.admin_user, "RW-C2-01")
-        seed_campaign(db, camp2, "NIGHTGLASS", args.admin_user, "NG-C2-01")
-        tenant_id = resolve_active_tenant_id(db)
-        seed_client_portal_data(db, [camp1, camp2], args.admin_user, tenant_id)
+        panel1_tenant_id = ensure_tenant(db, args.panel1_tenant_id, args.panel1_tenant_name)
+        panel2_tenant_id = ensure_tenant(db, args.panel2_tenant_id, args.panel2_tenant_name)
 
-        # Ensure two client users for portal/API login after reset+seed workflows.
-        client1_status = ensure_user_credentials(
+        panel1_campaigns = [
+            ("OP_ACME_REDWOLF_2026", "ACME-REDWOLF", "ACME-C2-01"),
+            ("OP_ACME_NIGHTGLASS_2026", "ACME-NIGHTGLASS", "ACME-C2-02"),
+        ]
+        panel2_campaigns = [
+            ("OP_GLOBEX_REDWOLF_2026", "GLOBEX-REDWOLF", "GLOBEX-C2-01"),
+            ("OP_GLOBEX_NIGHTGLASS_2026", "GLOBEX-NIGHTGLASS", "GLOBEX-C2-02"),
+        ]
+
+        seeded_panel1_ids: list[int] = []
+        for campaign_name, op_name, c2_name in panel1_campaigns:
+            camp_id = get_or_create_campaign(db, campaign_name, tenant_id=panel1_tenant_id)
+            seed_campaign(db, camp_id, op_name, args.global_admin_user, c2_name)
+            seeded_panel1_ids.append(camp_id)
+        seed_client_portal_data(db, seeded_panel1_ids, args.global_admin_user, panel1_tenant_id, args.panel1_tenant_name)
+
+        seeded_panel2_ids: list[int] = []
+        for campaign_name, op_name, c2_name in panel2_campaigns:
+            camp_id = get_or_create_campaign(db, campaign_name, tenant_id=panel2_tenant_id)
+            seed_campaign(db, camp_id, op_name, args.global_admin_user, c2_name)
+            seeded_panel2_ids.append(camp_id)
+        seed_client_portal_data(db, seeded_panel2_ids, args.global_admin_user, panel2_tenant_id, args.panel2_tenant_name)
+
+        panel1_client1_status = ensure_user_credentials(
             db,
-            args.client_user_1,
-            args.client_pass_1,
-            _role_from_name(args.client_role_1),
+            args.panel1_client_user_1,
+            args.panel1_client_pass_1,
+            _role_from_name(args.panel1_client_role_1),
         )
-        client2_status = ensure_user_credentials(
+        panel1_client2_status = ensure_user_credentials(
             db,
-            args.client_user_2,
-            args.client_pass_2,
-            _role_from_name(args.client_role_2),
+            args.panel1_client_user_2,
+            args.panel1_client_pass_2,
+            _role_from_name(args.panel1_client_role_2),
         )
+        panel2_client1_status = ensure_user_credentials(
+            db,
+            args.panel2_client_user_1,
+            args.panel2_client_pass_1,
+            _role_from_name(args.panel2_client_role_1),
+        )
+        panel2_client2_status = ensure_user_credentials(
+            db,
+            args.panel2_client_user_2,
+            args.panel2_client_pass_2,
+            _role_from_name(args.panel2_client_role_2),
+        )
+
+        assign_user_tenant_access(db, args.global_admin_user, panel1_tenant_id, "admin")
+        assign_user_tenant_access(db, args.global_admin_user, panel2_tenant_id, "admin")
+        assign_user_tenant_access(db, args.operator_lead_user, panel1_tenant_id, "lead")
+        assign_user_tenant_access(db, args.operator_user, panel2_tenant_id, "operator")
+        assign_user_tenant_access(db, args.panel1_client_user_1, panel1_tenant_id, args.panel1_client_role_1)
+        assign_user_tenant_access(db, args.panel1_client_user_2, panel1_tenant_id, args.panel1_client_role_2)
+        assign_user_tenant_access(db, args.panel2_client_user_1, panel2_tenant_id, args.panel2_client_role_1)
+        assign_user_tenant_access(db, args.panel2_client_user_2, panel2_tenant_id, args.panel2_client_role_2)
 
         print("Seed complete.")
-        print("Campaigns:")
-        print(" - OP_REDWOLF_2026")
-        print(" - OP_NIGHTGLASS_2026")
         print(f"Backend: {args.backend}")
-        print("Login:")
-        print(f" - username: {args.admin_user}")
-        print(f" - password: {args.admin_pass}")
-        print("Client portal users:")
-        print(f" - {args.client_user_1} / {args.client_pass_1} (role={args.client_role_1}, status={client1_status})")
-        print(f" - {args.client_user_2} / {args.client_pass_2} (role={args.client_role_2}, status={client2_status})")
-        print("Tenant ID for client portal login:")
-        print(f" - {tenant_id or 'N/A (non-postgres backend)'}")
+        print("Global Red Team Accounts:")
+        print(f" - {args.global_admin_user} / {args.global_admin_pass} (role=admin, status=present)")
+        print(f" - {args.operator_lead_user} / {args.operator_lead_pass} (role=lead, tenant={panel1_tenant_id}, status={lead_status})")
+        print(f" - {args.operator_user} / {args.operator_pass} (role=operator, tenant={panel2_tenant_id}, status={operator_status})")
+        print("Client Panel 1:")
+        print(f" - tenant: {args.panel1_tenant_name} ({panel1_tenant_id})")
+        print(f" - campaigns: {', '.join(name for name, _, _ in panel1_campaigns)}")
+        print(f" - {args.panel1_client_user_1} / {args.panel1_client_pass_1} (role={args.panel1_client_role_1}, status={panel1_client1_status})")
+        print(f" - {args.panel1_client_user_2} / {args.panel1_client_pass_2} (role={args.panel1_client_role_2}, status={panel1_client2_status})")
+        print("Client Panel 2:")
+        print(f" - tenant: {args.panel2_tenant_name} ({panel2_tenant_id})")
+        print(f" - campaigns: {', '.join(name for name, _, _ in panel2_campaigns)}")
+        print(f" - {args.panel2_client_user_1} / {args.panel2_client_pass_1} (role={args.panel2_client_role_1}, status={panel2_client1_status})")
+        print(f" - {args.panel2_client_user_2} / {args.panel2_client_pass_2} (role={args.panel2_client_role_2}, status={panel2_client2_status})")
+        if getattr(db, "db_backend", "").lower() != "postgres":
+            fallback_tenant = resolve_active_tenant_id(db)
+            print(f" - sqlite fallback tenant id: {fallback_tenant or 'N/A'}")
         print(f" - passphrase used for DB encryption: {encryption_passphrase}")
         return 0
     finally:

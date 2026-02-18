@@ -16,7 +16,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: vectorvue:phase6
-    container_name: vectorvue_app
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_app"
     restart: unless-stopped
     read_only: true
     security_opt:
@@ -76,7 +76,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: http://vectorvue_app:8080
     image: vectorvue-portal:phase7b
-    container_name: vectorvue_portal
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_portal"
     restart: unless-stopped
     read_only: true
     security_opt:
@@ -88,6 +88,9 @@ services:
         condition: service_healthy
     environment:
       NEXT_PUBLIC_API_URL: http://vectorvue_app:8080
+      NEXT_PUBLIC_BRAND_NAME: VectorVue Client Portal
+      NEXT_PUBLIC_BRAND_ACCENT: "#22d3ee"
+      VV_TENANT_HOST_MAP: "acme.vectorvue.local=10000000-0000-0000-0000-000000000001|ACME Industries,globex.vectorvue.local=20000000-0000-0000-0000-000000000002|Globex Corporation,vectorvue.local=10000000-0000-0000-0000-000000000001|ACME Industries"
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
       NODE_ENV: production
@@ -103,7 +106,7 @@ services:
 
   vectorvue_runtime:
     image: vectorvue:phase6
-    container_name: vectorvue_runtime
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_runtime"
     restart: unless-stopped
     read_only: true
     security_opt:
@@ -148,7 +151,7 @@ services:
 
   postgres:
     image: postgres:16
-    container_name: vectorvue_postgres
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_postgres"
     restart: unless-stopped
     environment:
       POSTGRES_USER: vectorvue
@@ -156,7 +159,7 @@ services:
       POSTGRES_DB: vectorvue_db
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - vectorvue_pg_data:/var/lib/postgresql/data
       - ./deploy/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
@@ -173,7 +176,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: vectorvue_redis
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_redis"
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000", "--requirepass", "strongpassword"]
     volumes:
@@ -188,7 +191,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: vectorvue_nginx
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_nginx"
     restart: unless-stopped
     depends_on:
       vectorvue_app:
@@ -196,8 +199,8 @@ services:
       vectorvue_portal:
         condition: service_healthy
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_HOST_PORT:-80}:80"
+      - "${HTTPS_HOST_PORT:-443}:443"
     read_only: true
     security_opt:
       - no-new-privileges:true

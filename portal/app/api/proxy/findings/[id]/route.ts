@@ -1,16 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-import { API_URL } from '@/lib/config';
+import { NextRequest } from 'next/server';
+import { proxyClientApi } from '@/lib/proxy';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const token = request.cookies.get('vv_access_token')?.value;
-  const res = await fetch(`${API_URL}/api/v1/client/findings/${params.id}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    cache: 'no-store'
-  });
-
-  return new NextResponse(await res.text(), {
-    status: res.status,
-    headers: { 'content-type': res.headers.get('content-type') ?? 'application/json' }
-  });
+  return proxyClientApi(request, `/api/v1/client/findings/${params.id}`);
 }
