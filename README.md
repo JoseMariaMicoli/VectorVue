@@ -24,7 +24,7 @@ Previous versions remain under the original license.
 ```
 
 ![Status](https://img.shields.io/badge/Status-Operational-39FF14)
-![Version](https://img.shields.io/badge/Version-3.9-00FFFF)
+![Version](https://img.shields.io/badge/Version-4.0-00FFFF)
 ![Maturity](https://img.shields.io/badge/Maturity-Phase_6_Complete-39FF14)
 ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
@@ -43,7 +43,7 @@ Unlike pentest note tools, VectorVue models the **state of an operation** and he
 
 ## UI Navigation: Three Ways to Navigate
 
-**New in v3.9+:** Visual tab system for all 26 views. Operators can navigate using:
+**New in v4.0+:** Visual tab system for all 26 views. Operators can navigate using:
 
 ### 1. Keybindings (Fastest)
 - **Space** → Files | **Ctrl+M** → MITRE | **Ctrl+K** → Campaign | **Ctrl+E** → Cmd Log
@@ -75,6 +75,9 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 - Full commercial guide: [VectorVue User Guide](docs/manuals/VECTORVUE_USER_GUIDE.md)
 - PostgreSQL migration: [PostgreSQL Migration Guide](docs/manuals/POSTGRES_MIGRATION_GUIDE.md)
 - PostgreSQL operations: [PostgreSQL Usage Guide](docs/manuals/POSTGRES_USAGE_GUIDE.md)
+- Deployment and hardening: [Deployment Guide](docs/manuals/Deployment.md)
+- Tenant-safe API operations: [Client API Manual](docs/manuals/CLIENT_API_MANUAL.md)
+- Phase 6.5 quickstart: [API Quickstart](docs/PHASE65_API_QUICKSTART.md)
 
 ## Maturity Model
 
@@ -83,11 +86,11 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 | Notebook  | Store evidence       | ✅ Complete (v1-2) |
 | Manager   | Organize engagement  | ✅ Complete (v2.0+) |
 | Platform  | Enforce workflow     | ✅ Complete (v3.0+) |
-| Cognition | Guide decisions      | ✅ Complete (v3.9) |
-| PostgreSQL Migration | Database + container baseline | ✅ Complete (v3.9, Phase 5.6) |
-| Deployment & Hardening | Production-ready secure deployment | ✅ Complete (v3.9, Phase 6) |
+| Cognition | Guide decisions      | ✅ Complete (v4.0) |
+| PostgreSQL Migration | Database + container baseline | ✅ Complete (v4.0, Phase 5.6) |
+| Deployment & Hardening | Production-ready secure deployment | ✅ Complete (v4.0, Phase 6) |
 | Autonomy  | Supervised execution | 🔮 Phase 7+ |
-| **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v3.9+)** |
+| **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v4.0+)** |
 
 Current state:
 

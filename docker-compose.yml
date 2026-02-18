@@ -43,7 +43,7 @@ services:
       VV_REDIS_PORT: "6379"
       VV_REDIS_PASSWORD: strongpassword
       VV_HEALTH_PORT: "8080"
-      VV_RUN_MODE: service
+      VV_RUN_MODE: api
       VV_REPORTS_DIR: /var/lib/vectorvue/reports
       VV_LOG_DIR: /var/lib/vectorvue/logs
       TERM: xterm-256color
@@ -66,6 +66,52 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+    command: ["python", "-m", "uvicorn", "vv_client_api:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
+
+  vectorvue_runtime:
+    image: vectorvue:phase6
+    container_name: vectorvue_runtime
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: vectorvue
+      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_DB: vectorvue_db
+      VV_DB_BACKEND: postgres
+      VV_DB_HOST: postgres
+      VV_DB_PORT: "5432"
+      VV_DB_NAME: vectorvue_db
+      VV_DB_USER: vectorvue
+      VV_DB_PASSWORD: strongpassword
+      VV_DB_URL: postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
+      VV_REDIS_HOST: redis
+      VV_REDIS_PORT: "6379"
+      VV_REDIS_PASSWORD: strongpassword
+      VV_LOG_DIR: /var/lib/vectorvue/logs
+      VV_RUN_MODE: service
+    volumes:
+      - vectorvue_logs:/var/lib/vectorvue/logs
+      - vectorvue_runtime:/var/lib/vectorvue/run
+      - vectorvue_tmp:/var/lib/vectorvue/tmp
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /run:size=16m,nosuid,nodev
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import vv_core_postgres as m; import sys; s=m._health_snapshot().get('status'); sys.exit(0 if s in ('healthy','degraded') else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    command: ["python", "-m", "vv_core_postgres", "--mode", "service", "--disable-health-server"]
 
   postgres:
     image: postgres:16

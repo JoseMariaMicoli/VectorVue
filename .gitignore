@@ -63,6 +63,7 @@ downloads/
 sessions/
 cache/
 tmp/
+*.log
 
 # Tooling / editor / OS
 .vscode/
@@ -82,6 +83,8 @@ docs/dev-log/
 deploy/certs/
 deploy/security_hardening_report.txt
 deploy/airgap/
+deploy/customers/*
+!deploy/customers/.gitkeep
 vectorvue_airgap_*.tar.gz
 vectorvue_db_backup.dump
 *.dump
