@@ -71,6 +71,8 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 
 - Unified docs entrypoint: [Documentation Index](docs/manuals/INDEX.md)
 - Full commercial guide: [VectorVue User Guide](docs/manuals/VECTORVUE_USER_GUIDE.md)
+- PostgreSQL migration: [PostgreSQL Migration Guide](docs/manuals/POSTGRES_MIGRATION_GUIDE.md)
+- PostgreSQL operations: [PostgreSQL Usage Guide](docs/manuals/POSTGRES_USAGE_GUIDE.md)
 
 ## Maturity Model
 
@@ -80,6 +82,7 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 | Manager   | Organize engagement  | ✅ Complete (v2.0+) |
 | Platform  | Enforce workflow     | ✅ Complete (v3.0+) |
 | Cognition | Guide decisions      | ✅ Complete (v3.8) |
+| PostgreSQL Migration | Database + container baseline | ✅ Complete (v3.8, Phase 5.6) |
 | Autonomy  | Supervised execution | 🔮 Phase 6+ |
 | **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v3.8+)** |
 
@@ -87,6 +90,7 @@ Current state:
 
 **Phase 5 — Campaign Platform (stable)** ✅
 **Phase 5.5 — Operational Cognition (complete)** ✅
+**Phase 5.6 — PostgreSQL + Docker baseline (complete)** ✅
 **Phase 6 — Strategic Planning (upcoming)**
 
 ---
@@ -211,6 +215,15 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python vv.py
+```
+
+PostgreSQL one-command operations:
+
+```bash
+make pg-reset
+make pg-migrate
+make pg-seed
+make pg-smoke
 ```
 
 First launch:
