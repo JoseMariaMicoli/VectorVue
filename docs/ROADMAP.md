@@ -4,8 +4,8 @@
 
 **Version:** v4.0 Production Ready  
 **Last Updated:** February 18, 2026  
-**Phases Complete:** 0-6.5 complete  
-**Total Code Lines:** 25,083+ lines (Phases 0-6.5, infra included)  
+**Phases Complete:** 0-6.5 complete | 7A backend module in progress  
+**Total Code Lines:** 25,623+ lines (Phases 0-6.5 + 7A module, infra included)  
 
 ---
 
@@ -996,9 +996,9 @@ Goal: make Phase 7 safe and deployable per customer without redesign later.
 
 ---
 
-## 🌐 PHASE 7: Client Portal (Web UI) ⏳ NOT STARTED
+## 🌐 PHASE 7: Client Portal (Web UI) 🚧 IN PROGRESS
 
-**ETA:** Q4 2026 | **Estimated Lines:** 800-1000 | **Status:** `Planned`
+**ETA:** Q4 2026 | **Estimated Lines:** 800-1000 | **Status:** `7A Backend Started`
 
 💡 Thoughts:
 Portal is **customer-facing evidence viewer**, not an operator console.
@@ -1009,6 +1009,16 @@ Progressive rollout recommended:
 1. Read-only evidence portal
 2. Reports & tracking
 3. Analytics dashboards
+
+### 7A: Client Public Read-Only API (Backend Foundation)
+
+* [x] API module scaffold (`app/client_api/`)
+* [x] Tenant-authenticated client routers (`Depends(get_current_tenant)`)
+* [x] Read-only response schemas for client exposure
+* [x] Docker-aware public URL builder (`utils/url_builder.py`)
+* [x] Rate-limit dependency placeholder (`client_rate_limit()`)
+* [ ] Runtime integration of new 7A router into primary API app
+* [ ] End-to-end gateway validation for all 7A endpoints
 
 ---
 
@@ -1216,8 +1226,8 @@ You sell **Security Effectiveness Intelligence Platform**
 
 VectorVue's evolution represents a systematic transformation from a single-operator tool to an enterprise-grade campaign management platform. Phases 0-5.5 and 5.6 deliver operational cognition, database migration to PostgreSQL, and container deployment baseline. Phases 6-8 extend hardened deployment, client-facing portal workflows, and predictive analytics.
 
-**Current Status:** Phase 6 Complete ✅ | **Production Ready:** Yes | **Estimated Full Completion:** Q1 2027
+**Current Status:** Phase 6.5 Complete ✅ | Phase 7A Backend Started 🚧 | **Production Ready:** Yes | **Estimated Full Completion:** Q1 2027
 
 ---
 
-**VectorVue Roadmap** | Last Updated: February 16, 2026 | Maintained by: Internal Engineering Team
+**VectorVue Roadmap** | Last Updated: February 18, 2026 | Maintained by: Internal Engineering Team

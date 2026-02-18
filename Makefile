@@ -21,7 +21,7 @@ CUSTOMER ?= default
 TENANT_NAME ?= Default Customer
 TENANT_ID ?= auto
 
-.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy phase65-bootstrap api-up api-down api-logs api-smoke phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all phase65-migrate pg-reset pg-migrate pg-seed pg-smoke
+.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all phase65-migrate pg-reset pg-migrate pg-seed pg-smoke
 
 help:
 	@echo "VectorVue PostgreSQL operational targets"
@@ -39,6 +39,7 @@ help:
 	@echo "  make api-down   - Stop REST API stack"
 	@echo "  make api-logs   - Tail API and runtime logs"
 	@echo "  make api-smoke  - Validate API health and OpenAPI endpoint"
+	@echo "  make phase7a-check - Validate Phase 7A router/schemas/url builder modules"
 	@echo "  make phase6-up  - Generate TLS certs, build, and start Phase 6 stack"
 	@echo "  make phase6-test - Run functional, security, and performance validation"
 	@echo "  make phase65-migrate - Apply tenant isolation migration (Phase 6.5)"
@@ -95,6 +96,9 @@ api-logs:
 api-smoke:
 	$(DC) exec -T vectorvue_app python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).read().decode())"
 	$(DC) exec -T vectorvue_app python -c "import urllib.request;print('openapi_ok' if urllib.request.urlopen('http://127.0.0.1:8080/openapi.json', timeout=5).status==200 else 'openapi_fail')"
+
+phase7a-check:
+	$(PY) -m py_compile app/client_api/__init__.py app/client_api/dependencies.py app/client_api/schemas.py app/client_api/router.py utils/url_builder.py
 
 phase65-migrate:
 	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/apply_pg_sql.py \
