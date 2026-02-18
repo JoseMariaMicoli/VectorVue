@@ -333,7 +333,7 @@ class RegisterView(Container):
     CSS = """
     RegisterView { align: center middle; background: $bg-void; width: 100%; height: 100%; overflow: hidden; }
     #register-root { width: 100%; height: 100%; align: center middle; }
-    #register-container { width: 50; min-width: 42; max-width: 52; height: auto; border: heavy $p-green; background: #000000DD; padding: 1; align: center middle; }
+    #register-container { width: 46; min-width: 38; max-width: 48; height: auto; border: heavy $p-green; background: #000000DD; padding: 1; align: center middle; }
     #register-container Horizontal { height: auto; }
     .reg-title { color: $p-green; text-style: bold; margin-bottom: 1; width: 100%; content-align: center middle; }
     #reg-status { color: $r-alert; margin-top: 1; text-align: center; }
@@ -384,7 +384,7 @@ class LoginView(Container):
     CSS = """
     LoginView { align: center middle; background: $bg-void; width: 100%; height: 100%; overflow: hidden; }
     #login-root { width: 100%; height: 100%; align: center middle; }
-    #login-container { width: 50; min-width: 40; max-width: 52; height: auto; background: #161B26DD; border: heavy $steel; padding: 1; align: center middle; }
+    #login-container { width: 46; min-width: 36; max-width: 48; height: auto; background: #161B26DD; border: heavy $steel; padding: 1; align: center middle; }
     #login-container Horizontal { height: auto; }
     """
 
