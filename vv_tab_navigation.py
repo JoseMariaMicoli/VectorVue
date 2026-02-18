@@ -1,14 +1,15 @@
 """
 Copyright (c) 2026 José María Micoli
-Licensed under Apache-2.0
+Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
 
-VectorVue Tab Navigation System
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
 
-Provides visual tabs for all UI views with keyboard and mouse support.
-Operators can navigate using:
-- Keybindings (Ctrl+M, Space, etc.)
-- Mouse clicks on tabs
-- Arrow keys to move between tabs
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
 """
 
 from textual.containers import Container, Horizontal, Vertical
