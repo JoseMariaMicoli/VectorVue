@@ -11,11 +11,8 @@ Operators can navigate using:
 - Arrow keys to move between tabs
 """
 
-from textual.app import App
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static, Button, Label
-from textual.reactive import reactive
-from textual.binding import Binding
 from textual.message import Message
 
 
@@ -61,6 +58,7 @@ class TabItem(Static):
         self.tab_name = tab_name
         self.keybinding = keybinding
         self.is_active = False
+        self.add_class("tab-item")
     
     def render(self):
         """Render the tab with optional keybinding."""
@@ -68,7 +66,7 @@ class TabItem(Static):
             return f"{self.tab_name}\n[{self.keybinding}]"
         return self.tab_name
     
-    def on_press(self):
+    def on_click(self, _event):
         """Handle click."""
         self.post_message(self.Selected(self.tab_id, self.tab_name))
     
@@ -133,17 +131,18 @@ class TabGroup(Container):
                 self.tabs[tab_data["id"]] = tab
                 yield tab
     
-    def set_active_tab(self, tab_id: str):
+    def set_active_tab(self, tab_id: str | None):
         """Set active tab by ID."""
         if self.current_tab:
             self.tabs[self.current_tab].set_active(False)
+            self.current_tab = None
         if tab_id in self.tabs:
             self.tabs[tab_id].set_active(True)
             self.current_tab = tab_id
 
 
 class TabNavigationPanel(Container):
-    """Full tab navigation panel with all view categories."""
+    """Two-level nav: one row of groups and one row of tabs for selected group."""
     
     DEFAULT_CSS = """
     TabNavigationPanel {
@@ -163,12 +162,26 @@ class TabNavigationPanel(Container):
     
     def __init__(self, *, name=None, id=None, classes=None, disabled=False):
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
-        self.tab_groups = {}
+        self.group_buttons = {}
+        self.context_buttons = {}
+        self.context_button_views = {}
         self.view_mapping = {}
-        
-        # Define all tab categories
+        self.view_to_group = {}
+        self.active_group = None
+        self.active_view = None
+        self.max_tabs = 10
+        self.group_short_labels = {
+            "Core UI Navigation": "Core",
+            "Analytics Views": "Analytics",
+            "Advanced Views": "Advanced",
+            "Phase 3-5 Views": "Reporting & Team Ops",
+            "Phase 5.5 Cognition": "Cognition",
+        }
+
+        # Five top-level groups. Tabs shown in second row depend on selected group.
         self.categories = {
             "Core UI Navigation": [
+                {"id": "editor-view", "name": "Editor", "keybinding": "Esc"},
                 {"id": "fm-view", "name": "Files", "keybinding": "Space"},
                 {"id": "mitre-view", "name": "MITRE DB", "keybinding": "Ctrl+M"},
                 {"id": "campaign-view", "name": "Campaign", "keybinding": "Ctrl+K"},
@@ -179,64 +192,132 @@ class TabNavigationPanel(Container):
                 {"id": "persistence-view", "name": "Persistence", "keybinding": "Ctrl+P"},
             ],
             "Analytics Views": [
+                {"id": "graph-view", "name": "Graph", "keybinding": "Ctrl+G"},
+                {"id": "timeline-view", "name": "Timeline", "keybinding": "Ctrl+Y"},
                 {"id": "dashboard-view", "name": "Dashboard", "keybinding": "Ctrl+1"},
                 {"id": "analysis-view", "name": "Analysis", "keybinding": "Ctrl+2"},
-                {"id": "intelligence-view", "name": "Intel (legacy)", "keybinding": "Ctrl+3"},
                 {"id": "remediation-view", "name": "Remediation", "keybinding": "Ctrl+4"},
                 {"id": "capability-view", "name": "Capability", "keybinding": "Ctrl+5"},
             ],
             "Advanced Views": [
-                {"id": "collaboration-view", "name": "Collaboration", "keybinding": "Alt+1"},
-                {"id": "tasks-view", "name": "Tasks", "keybinding": "Alt+2"},
-                {"id": "behavioral-view", "name": "Analytics", "keybinding": "Alt+3"},
+                {"id": "collab-view", "name": "Collaboration", "keybinding": "Alt+1"},
+                {"id": "task-view", "name": "Tasks", "keybinding": "Alt+2"},
+                {"id": "analytics-view", "name": "Analytics", "keybinding": "Alt+3"},
                 {"id": "integration-view", "name": "Integration", "keybinding": "Alt+4"},
                 {"id": "compliance-view", "name": "Compliance", "keybinding": "Alt+5"},
                 {"id": "security-view", "name": "Security", "keybinding": "Alt+6"},
             ],
             "Phase 3-5 Views": [
                 {"id": "reporting-view", "name": "Reporting", "keybinding": "Ctrl+R"},
-                {"id": "teams-view", "name": "Teams", "keybinding": "Ctrl+T"},
+                {"id": "team-view", "name": "Teams", "keybinding": "Ctrl+T"},
+                {"id": "users-view", "name": "Users", "keybinding": "Admin"},
                 {"id": "threat-intel-view", "name": "Threat Intel", "keybinding": "Ctrl+Shift+I"},
             ],
             "Phase 5.5 Cognition": [
-                {"id": "cognition-opp-view", "name": "Opportunities", "keybinding": "Ctrl+Shift+1"},
-                {"id": "cognition-paths-view", "name": "Paths", "keybinding": "Ctrl+Shift+2"},
-                {"id": "cognition-state-view", "name": "State", "keybinding": "Ctrl+Shift+3"},
-                {"id": "cognition-pressure-view", "name": "Pressure", "keybinding": "Ctrl+Shift+4"},
-                {"id": "cognition-confidence-view", "name": "Confidence", "keybinding": "Ctrl+Shift+5"},
-                {"id": "cognition-knowledge-view", "name": "Knowledge", "keybinding": "Ctrl+Shift+6"},
-                {"id": "cognition-techniques-view", "name": "Techniques", "keybinding": "Ctrl+Shift+7"},
-                {"id": "cognition-validation-view", "name": "Validation", "keybinding": "Ctrl+Shift+8"},
-                {"id": "cognition-explain-view", "name": "Explain", "keybinding": "Ctrl+Shift+9"},
-                {"id": "cognition-dashboard-view", "name": "Dashboard", "keybinding": "Ctrl+Shift+0"},
+                {"id": "cognition-opportunities", "name": "Opportunities", "keybinding": "Ctrl+Shift+1"},
+                {"id": "cognition-paths", "name": "Paths", "keybinding": "Ctrl+Shift+2"},
+                {"id": "cognition-state", "name": "State", "keybinding": "Ctrl+Shift+3"},
+                {"id": "cognition-detection", "name": "Pressure", "keybinding": "Ctrl+Shift+4"},
+                {"id": "cognition-confidence", "name": "Confidence", "keybinding": "Ctrl+Shift+5"},
+                {"id": "cognition-knowledge", "name": "Knowledge", "keybinding": "Ctrl+Shift+6"},
+                {"id": "cognition-techniques", "name": "Techniques", "keybinding": "Ctrl+Shift+7"},
+                {"id": "cognition-validation", "name": "Validation", "keybinding": "Ctrl+Shift+8"},
+                {"id": "cognition-explain", "name": "Explain", "keybinding": "Ctrl+Shift+9"},
+                {"id": "cognition-dashboard", "name": "Dashboard", "keybinding": "Ctrl+Shift+0"},
             ],
         }
+        for group_name, tabs in self.categories.items():
+            for tab in tabs:
+                self.view_to_group[tab["id"]] = group_name
     
     def compose(self):
-        """Compose all tab groups."""
-        for group_name, tabs_data in self.categories.items():
-            tab_group = TabGroup(group_name, tabs_data)
-            self.tab_groups[group_name] = tab_group
-            
-            # Build view mapping
-            for tab in tabs_data:
-                self.view_mapping[tab["id"]] = tab["name"]
-            
-            yield tab_group
-    
-    def on_tab_item_selected(self, message: TabItem.Selected):
-        """Handle tab selection."""
-        self.post_message(self.TabSelected(message.tab_id, message.tab_name))
+        """Compose group selector row and fixed tab slots for active group."""
+        with Horizontal(id="tab-group-selector"):
+            for idx, group_name in enumerate(self.categories.keys()):
+                short_label = self.group_short_labels.get(group_name, group_name)
+                btn = Button(short_label, id=f"tab-group-btn-{idx}", classes="tab-group-btn")
+                btn.tooltip = group_name
+                self.group_buttons[group_name] = btn
+                yield btn
+
+        with Horizontal(id="tab-context-row", classes="tab-row"):
+            for idx in range(self.max_tabs):
+                btn = Button("", id=f"tab-slot-{idx}", classes="tab-view-btn")
+                btn.visible = False
+                self.context_buttons[idx] = btn
+                yield btn
+
+        yield Label("ACTIVE: NONE", id="tab-active-caption")
+
+    def on_mount(self):
+        if self.categories:
+            self.set_active_group(next(iter(self.categories.keys())))
+
+    def on_button_pressed(self, event: Button.Pressed):
+        button_id = event.button.id or ""
+        if button_id.startswith("tab-group-btn-"):
+            group_index = int(button_id.rsplit("-", 1)[-1])
+            group_name = list(self.categories.keys())[group_index]
+            self.set_active_group(group_name)
+            return
+        if button_id.startswith("tab-slot-"):
+            slot = int(button_id.rsplit("-", 1)[-1])
+            view_id = self.context_button_views.get(slot)
+            if not view_id:
+                return
+            view_name = self.view_mapping.get(view_id, view_id)
+            self.post_message(self.TabSelected(view_id, view_name))
+
+    def set_active_group(self, group_name: str):
+        """Show tabs for selected group and mark group button active."""
+        if group_name not in self.categories:
+            return
+        self.active_group = group_name
+        for name, btn in self.group_buttons.items():
+            btn.set_class(name == group_name, "active")
+        self._populate_group_slots(group_name)
+
+    def _populate_group_slots(self, group_name: str):
+        """Update fixed slots to display tabs for selected group."""
+        tabs = self.categories.get(group_name, [])
+        self.context_button_views = {}
+
+        for idx in range(self.max_tabs):
+            btn = self.context_buttons[idx]
+            if idx < len(tabs):
+                tab = tabs[idx]
+                tab_name = tab["name"]
+                view_id = tab["id"]
+                self.view_mapping[view_id] = tab_name
+                self.context_button_views[idx] = view_id
+                btn.label = tab_name
+                btn.tooltip = tab.get("keybinding") or ""
+                btn.visible = True
+                btn.remove_class("active")
+                if view_id == self.active_view:
+                    btn.add_class("active")
+            else:
+                btn.visible = False
+                btn.label = ""
+                btn.tooltip = ""
+                btn.remove_class("active")
+
+        active_label = None
+        for idx, view_id in self.context_button_views.items():
+            if view_id == self.active_view:
+                active_label = str(self.context_buttons[idx].label)
+                break
+        if active_label:
+            self.query_one("#tab-active-caption", Label).update(f"ACTIVE: {active_label}")
+        else:
+            self.query_one("#tab-active-caption", Label).update(f"GROUP: {group_name}")
     
     def set_active_view(self, view_id: str):
-        """Set active view across all groups."""
-        for group in self.tab_groups.values():
-            # Find and deactivate all tabs in this group
-            group.set_active_tab(None)
-            
-            # Find if this group has the view_id
-            if view_id in group.tabs:
-                group.set_active_tab(view_id)
+        """Set active tab and switch to its parent group if needed."""
+        self.active_view = view_id
+        group_name = self.view_to_group.get(view_id)
+        if group_name:
+            self.set_active_group(group_name)
 
 
 class TabNavigationBar(Container):

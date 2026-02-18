@@ -113,7 +113,7 @@ Screen {{
     layout: grid;
     grid-size: 2 4;
     grid-columns: 1fr 34;
-    grid-rows: 3 5 1fr 1;
+    grid-rows: 2 5 1fr 1;
 }}
 
 /* --- LOGIN SCREEN --- */
@@ -124,11 +124,11 @@ LoginView {{
 }}
 
 #login-container {{
-    width: 60;
+    width: 54;
     height: auto;
     border: heavy $steel;
     background: $bg-panel;
-    padding: 2;
+    padding: 1;
     align: center middle;
 }}
 
@@ -187,11 +187,11 @@ RegisterView {{
 }}
 
 #register-container {{
-    width: 64;
+    width: 54;
     height: auto;
     border: heavy $steel;
     background: $bg-panel;
-    padding: 2;
+    padding: 1;
     align: center middle;
 }}
 
@@ -228,7 +228,7 @@ RegisterView {{
     column-span: 2;
     background: #151922;
     border-bottom: solid $steel;
-    height: 3;
+    height: 2;
     layout: horizontal;
     align: center middle;
     padding: 0 1;
@@ -282,6 +282,8 @@ TextArea {{
     background: #12161e;
     border: solid $steel;
     padding: 0 1;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
 }}
 TextArea:focus {{
     border: heavy $p-green;
@@ -933,81 +935,87 @@ CognitionDashboardView {{
 
 /* ===== TAB NAVIGATION STYLING (Phase 5.5+) ===== */
 
-/* Tab Navigation Bar */
-#tab-nav-bar {{
+/* Tab Navigation Panel */
+#tab-nav-panel {{
     column-span: 2;
-    height: 6;
+    height: 9;
     background: $bg-panel;
     border: solid $cog-dash;
     border-bottom: solid $cog-dash;
     padding: 0;
+    overflow-y: hidden;
+    overflow-x: hidden;
 }}
 
-#tab-nav-bar Button.tab-item-compact {{
+/* Group Selector Row */
+#tab-group-selector {{
+    height: 3;
+    border-bottom: solid $steel;
+}}
+
+#tab-group-selector .tab-group-btn {{
     width: 1fr;
     min-width: 0;
-    height: 1fr;
-    min-height: 1;
+    height: 3;
+    margin: 0;
     border: none;
-    background: $bg-panel;
+    border-right: solid $steel;
+    background: #141a24;
     color: $text-main;
-    text-style: none;
     content-align: center middle;
-}}
-
-#tab-nav-bar .tab-rows {{
-    width: 100%;
-    height: 100%;
-}}
-
-#tab-nav-bar .tab-row {{
-    width: 100%;
-    height: 1fr;
-}}
-
-#tab-nav-bar Button:hover {{
-    background: $cog-path;
-    color: $text-main;
-}}
-
-#tab-nav-bar Button.active {{
-    background: $cog-opp;
-    color: $text-main;
     text-style: bold;
-    border: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }}
 
-/* Tab Item Styling */
-.tab-group-label {{
-    width: 100%;
+#tab-group-selector .tab-group-btn.active {{
+    background: $p-green;
+    color: #000000;
+    text-style: bold;
+    border-bottom: heavy $cog-dash;
+}}
+
+/* Context Tabs Row */
+.tab-row {{
+    height: 5;
+    padding: 0;
+    border-top: solid $steel;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-gutter: stable;
+}}
+
+#tab-active-caption {{
     height: 1;
-    background: $cog-dash;
+    padding: 0 1;
     color: $p-green;
+    background: #111621;
     text-style: bold;
     content-align: left middle;
-    padding-left: 1;
-    border: solid $cog-dash;
 }}
 
-.tab-item {{
-    width: 1fr;
-    height: 3;
-    border: solid $steel;
-    padding: 0 1;
+#tab-nav-panel .tab-view-btn {{
+    width: auto;
+    min-width: 10;
+    max-width: 18;
+    height: 5;
+    margin: 0;
+    border: none;
+    border-right: solid $steel;
     background: $bg-panel;
     color: $text-main;
-    content-align: center middle;
-    text-style: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }}
 
-.tab-item.active {{
+#tab-nav-panel .tab-view-btn.active {{
     background: $cog-opp;
-    border-top: heavy $cog-opp;
+    border-bottom: heavy $p-green;
     color: $text-main;
     text-style: bold;
 }}
 
-.tab-item:hover {{
+#tab-nav-panel .tab-view-btn:hover {{
     background: $cog-path;
     color: $p-green;
 }}

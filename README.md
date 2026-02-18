@@ -67,6 +67,11 @@ Unlike pentest note tools, VectorVue models the **state of an operation** and he
 
 See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentation.
 
+## Documentation
+
+- Unified docs entrypoint: [Documentation Index](docs/manuals/INDEX.md)
+- Full commercial guide: [VectorVue User Guide](docs/manuals/VECTORVUE_USER_GUIDE.md)
+
 ## Maturity Model
 
 | Stage     | Purpose              | Status |
@@ -296,4 +301,3 @@ VectorVue aims to improve security — not bypass it.
 
 ---
 ---
-

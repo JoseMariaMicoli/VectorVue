@@ -39,7 +39,7 @@ try:
     from vv_fs import FileSystemService
     from vv_file_manager import FileManagerView
     from vv_theme import CYBER_CSS, CyberColors
-    from vv_tab_navigation import TabNavigationPanel, TabNavigationBar
+    from vv_tab_navigation import TabNavigationPanel
     # ===== Phase 5.5 Cognition Layer Imports =====
     from cognition_service import CognitionService
     from vv_cognition_views import (
@@ -57,6 +57,37 @@ try:
 except ImportError as e:
     print(f"CRITICAL: Dependency missing. {e}")
     sys.exit(1)
+
+
+README_BANNER_FALLBACK = """██▒   █▓▓█████  ▄████▄  ▄▄▄█████▓ ▒█████   ██▀███      ██▒   █▓ ██▓  ██▓ ▓█████
+▓██░   █▒▓█   ▀ ▒██▀ ▀█  ▓  ██▒ ▓▒▒██▒  ██▒▓██ ▒ ██▒    ▓██░   █▒▓██▒  ██▒ ▓█   ▀
+ ▓██  █▒░▒███   ▒▓█    ▄ ▒ ▓██░ ▒░▒██░  ██▒▓██ ░▄█ ▒     ▓██  █▒░▓██░  ██▒ ▒███
+  ▒██ █░░▒▓█  ▄ ▒▓▓▄ ▄██▒░ ▓██▓ ░ ▒██   ██░▒██▀▀█▄       ▒██ █░░▒██   ██░ ▒▓█  ▄
+   ▒▀█░  ░▒████▒▒ ▓███▀ ░  ▒██▒ ░ ░ ████▓▒░░██▓ ▒██▒      ▒▀█░  ░ ████▓▒░ ░▒████▒
+   ░ ▐░  ░░ ▒░ ░░ ░▒ ▒  ░  ▒ ░░   ░ ▒░▒░▒░ ░ ▒▓ ░▒▓░      ░ ▐░  ░ ▒░▒░▒░  ░░ ▒░ ░
+   ░ ░░   ░ ░  ░  ░  ▒       ░      ░ ░ ▒░   ░▒ ░ ▒░      ░ ░░  ░ ░ ░▒░▒░   ░ ░  ░
+   ░      ░    ░    ░          ░      ░ ░ ░ ▒    ░░   ░ ░      ░        ░ ░ ▒░     ░
+          ░  ░ ░                               ░               ░ ░ ░      ░  ░
+
+                >> OPERATIONAL COGNITION PLATFORM FOR RED TEAMING <<"""
+
+
+def _load_readme_banner() -> str:
+    """Load ASCII banner from README fenced code block, fallback if unavailable."""
+    readme_path = Path(__file__).with_name("README.md")
+    try:
+        content = readme_path.read_text(encoding="utf-8")
+        chunks = content.split("```")
+        for block in chunks[1::2]:
+            banner = block.strip("\n")
+            if "OPERATIONAL COGNITION PLATFORM FOR RED TEAMING" in banner and "██" in banner:
+                return banner
+    except Exception:
+        pass
+    return README_BANNER_FALLBACK
+
+
+README_ASCII_BANNER = _load_readme_banner()
 
 # =============================================================================
 # PHASE 2: RUNTIME EXECUTOR (Background Task Management)
@@ -300,24 +331,27 @@ class RegisterView(Container):
     class BackToLogin(Message): pass
 
     CSS = """
-    RegisterView { align: center middle; background: $bg-void; height: 100%; }
-    #register-container { width: 64; height: auto; border: heavy $p-green; background: #000; padding: 2; align: center middle; }
-    .reg-title { color: $p-green; text-style: bold; margin-bottom: 2; width: 100%; content-align: center middle; }
+    RegisterView { align: center middle; background: $bg-void; width: 100%; height: 100%; overflow: hidden; }
+    #register-root { width: 100%; height: 100%; align: center middle; }
+    #register-container { width: 50; min-width: 42; max-width: 52; height: auto; border: heavy $p-green; background: #000000DD; padding: 1; align: center middle; }
+    #register-container Horizontal { height: auto; }
+    .reg-title { color: $p-green; text-style: bold; margin-bottom: 1; width: 100%; content-align: center middle; }
     #reg-status { color: $r-alert; margin-top: 1; text-align: center; }
     """
 
     def compose(self) -> ComposeResult:
-        with Container(id="register-container"):
-            yield Label("VECTORVUE — FIRST-RUN SETUP", classes="reg-title")
-            yield Label("[dim]First registered user becomes ADMIN[/]", classes="reg-title")
-            yield Input(placeholder="Username", id="reg-username")
-            yield Input(placeholder="Password (min 8 chars)", password=True, id="reg-password")
-            yield Input(placeholder="Confirm Password", password=True, id="reg-confirm")
-            yield Input(placeholder="Group name (default: 'default')", id="reg-group")
-            with Horizontal():
-                yield Button("REGISTER", id="reg-btn", variant="success")
-                yield Button("BACK TO LOGIN", id="reg-back-btn", variant="primary")
-            yield Label("", id="reg-status")
+        with Container(id="register-root"):
+            with Container(id="register-container"):
+                yield Label("VECTORVUE — FIRST-RUN SETUP", classes="reg-title")
+                yield Label("[dim]First registered user becomes ADMIN[/]", classes="reg-title")
+                yield Input(placeholder="Username", id="reg-username")
+                yield Input(placeholder="Password (min 8 chars)", password=True, id="reg-password")
+                yield Input(placeholder="Confirm Password", password=True, id="reg-confirm")
+                yield Input(placeholder="Group name (default: 'default')", id="reg-group")
+                with Horizontal():
+                    yield Button("REGISTER", id="reg-btn", variant="success")
+                    yield Button("BACK TO LOGIN", id="reg-back-btn", variant="primary")
+                yield Label("", id="reg-status")
 
     def on_mount(self): self.query_one("#reg-username").focus()
 
@@ -347,16 +381,24 @@ class LoginView(Container):
     class LoginSuccess(Message): pass
     class RegisterRequested(Message): pass
 
+    CSS = """
+    LoginView { align: center middle; background: $bg-void; width: 100%; height: 100%; overflow: hidden; }
+    #login-root { width: 100%; height: 100%; align: center middle; }
+    #login-container { width: 50; min-width: 40; max-width: 52; height: auto; background: #161B26DD; border: heavy $steel; padding: 1; align: center middle; }
+    #login-container Horizontal { height: auto; }
+    """
+
     def compose(self) -> ComposeResult:
-        with Container(id="login-container"):
-            yield Label("VECTORVUE [SECURE ACCESS]", classes="login-title")
-            yield Input(placeholder="Username", id="login-username")
-            yield Input(placeholder="Passphrase", password=True, id="login-input")
-            with Horizontal():
-                yield Button("AUTHENTICATE", id="login-btn", variant="success")
-                yield Button("REGISTER USER", id="login-register-btn", variant="primary")
-            yield Label("No account? Use REGISTER USER.", id="login-register-hint")
-            yield Label("", id="login-status")
+        with Container(id="login-root"):
+            with Container(id="login-container"):
+                yield Label("VECTORVUE [SECURE ACCESS]", classes="login-title")
+                yield Input(placeholder="Username", id="login-username")
+                yield Input(placeholder="Passphrase", password=True, id="login-input")
+                with Horizontal():
+                    yield Button("AUTHENTICATE", id="login-btn", variant="success")
+                    yield Button("REGISTER USER", id="login-register-btn", variant="primary")
+                yield Label("No account? Use REGISTER USER.", id="login-register-hint")
+                yield Label("", id="login-status")
 
     def on_mount(self): self.query_one("#login-username").focus()
 
@@ -2149,11 +2191,13 @@ class CyberTUI(App):
     #editor-toolbar { height: 3; padding: 0 1; background: #151922; border-bottom: solid #2e3440; }
     #editor-toolbar Button { width: auto; margin-right: 1; margin-bottom: 0; min-width: 10; height: 3; }
     #editor-body { height: 1fr; background: #12161e; }
-    #editor-switcher { height: 1fr; }
-    #editor-edit-pane { height: 1fr; }
-    #editor-preview-pane { height: 1fr; }
-    #editor-main { height: 1fr; width: 100%; }
-    #editor-preview { height: 1fr; width: 100%; padding: 0 1; overflow-y: auto; background: #12161e; color: #d8dee9; border: solid #2e3440; }
+    #editor-switcher { height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }
+    #editor-edit-pane { height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }
+    #editor-preview-pane { height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }
+    #editor-main { height: 1fr; width: 100%; overflow-y: auto; scrollbar-gutter: stable; }
+    #editor-preview { height: 1fr; width: 100%; padding: 0 1; overflow-y: auto; scrollbar-gutter: stable; background: #12161e; color: #d8dee9; border: solid #2e3440; }
+    #view-switcher > * { overflow-y: auto; scrollbar-gutter: stable; }
+    #login-view, #register-view { overflow-y: hidden; scrollbar-gutter: auto; }
     """
 
     BINDINGS = [
@@ -2227,8 +2271,8 @@ class CyberTUI(App):
     def compose(self) -> ComposeResult:
         yield HeaderHUD(id="hud-header")
         
-        # Add tab navigation bar at top
-        yield TabNavigationBar(id="tab-nav-bar")
+        # Add grouped tab navigation panel at top
+        yield TabNavigationPanel(id="tab-nav-panel")
         
         with ContentSwitcher(initial="login-view", id="view-switcher"):
             yield LoginView(id="login-view")
@@ -2365,9 +2409,11 @@ class CyberTUI(App):
             self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
 
     def _set_tab_bar_visibility(self, visible: bool):
-        """Show/hide top tab bar and collapse/expand its grid row."""
-        self.query_one("#tab-nav-bar").visible = visible
-        self.screen.styles.grid_rows = "3 5 1fr 1" if visible else "3 0 1fr 1"
+        """Show/hide top tab bar + right sidebar and collapse their layout tracks."""
+        self.query_one("#tab-nav-panel").visible = visible
+        self.query_one("#lateral-tools").visible = visible
+        self.screen.styles.grid_rows = "2 9 1fr 1" if visible else "2 0 1fr 1"
+        self.screen.styles.grid_columns = "1fr 34" if visible else "1fr 0"
 
     # -------------------------------------------------------------------------
     # AUTH FLOW
@@ -3131,13 +3177,10 @@ class CyberTUI(App):
     # TAB NAVIGATION HANDLERS
     # -------------------------------------------------------------------------
     
-    @on(Button.Pressed, "#tab-nav-bar Button")
-    def on_tab_navigation_bar_pressed(self, event: Button.Pressed):
-        """Handle tab bar button press."""
-        button_id = event.button.id or ""
-        if button_id.startswith("tab-"):
-            view_id = button_id.replace("tab-", "")
-            self.switch_to_view(view_id)
+    @on(TabNavigationPanel.TabSelected)
+    def on_tab_navigation_panel_selected(self, event: TabNavigationPanel.TabSelected):
+        """Handle grouped tab panel selection."""
+        self.switch_to_view(event.view_id)
     
     def switch_to_view(self, view_id: str):
         """Switch to a view by ID."""
@@ -3180,8 +3223,8 @@ class CyberTUI(App):
             
             # Update tab bar active state
             try:
-                tab_bar = self.query_one("#tab-nav-bar", TabNavigationBar)
-                tab_bar.set_active_tab(view_id)
+                tab_panel = self.query_one("#tab-nav-panel", TabNavigationPanel)
+                tab_panel.set_active_view(view_id)
             except:
                 pass
             
