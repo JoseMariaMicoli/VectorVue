@@ -11,7 +11,7 @@ You may NOT:
 ✘ Remove copyright notices
 */
 
-# VectorVue User Guide (Commercial Edition)
+# VectorVue User Guide
 
 Version: v3.8 (Phase 5.5 complete)  
 Audience: Red Team operators, security engineers, authorized penetration testers
