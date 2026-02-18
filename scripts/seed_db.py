@@ -16,6 +16,7 @@ You may NOT:
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -35,6 +36,38 @@ def ensure_login(db: Database, username: str, password: str) -> None:
     ok, msg = db.authenticate_user(username, password)
     if not ok:
         raise RuntimeError(f"unable to authenticate seed user: {msg}")
+
+
+def _role_from_name(role_name: str) -> str:
+    mapping = {
+        "viewer": Role.VIEWER,
+        "operator": Role.OPERATOR,
+        "lead": Role.LEAD,
+        "admin": Role.ADMIN,
+    }
+    key = (role_name or "").strip().lower()
+    if key not in mapping:
+        raise ValueError(f"invalid role '{role_name}' (use viewer|operator|lead|admin)")
+    return mapping[key]
+
+
+def ensure_user_credentials(db: Database, username: str, password: str, role: str) -> str:
+    """Create user if missing; verify credentials if present.
+
+    Returns a short status string for console output.
+    """
+    ok, _ = db.authenticate_user(username, password)
+    if ok:
+        return "present"
+
+    created, msg = db.register_user(username, password, role=role, group_name="default")
+    if created:
+        return "created"
+
+    # Most common failure is duplicate username with different password.
+    if "already exists" in msg.lower():
+        return "exists_with_different_password"
+    return f"error:{msg}"
 
 
 def get_or_create_campaign(db: Database, name: str, project_id: str = "DEFAULT") -> int:
@@ -294,6 +327,149 @@ def pressure_val_for_rows(cursor) -> float:
     return float(row["m"]) if row and row["m"] is not None else 0.0
 
 
+def resolve_active_tenant_id(db: Database) -> str | None:
+    """Resolve active tenant UUID for tenant-scoped client API seed data."""
+    if getattr(db, "db_backend", "").lower() != "postgres":
+        return None
+    c = db.conn.cursor()
+    try:
+        c.execute("SELECT id FROM tenants WHERE active=TRUE ORDER BY created_at ASC LIMIT 1")
+        row = c.fetchone()
+        if row and row["id"]:
+            return str(row["id"])
+    except Exception:
+        return None
+    return "00000000-0000-0000-0000-000000000001"
+
+
+def seed_client_portal_data(db: Database, campaign_ids: list[int], operator: str, tenant_id: str | None) -> None:
+    """Seed findings/reports/remediation/evidence so Phase 7 portal is not empty."""
+    if not tenant_id:
+        return
+    c = db.conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    user_id = db.current_user.id if db.current_user else None
+
+    templates = [
+        ("Weak AD Password Policy", 8.4, "T1110", "Password spraying exposed weak domain accounts."),
+        ("Unrestricted Lateral Movement Path", 7.6, "T1021", "Service account enabled broad admin pivot paths."),
+    ]
+
+    for camp in campaign_ids:
+        finding_ids: list[int] = []
+        for idx, (title, cvss, mitre, desc) in enumerate(templates, start=1):
+            scoped_title = f"{title} [campaign:{camp}]"
+            c.execute("SELECT id FROM findings WHERE title=? AND tenant_id=?", (scoped_title, tenant_id))
+            row = c.fetchone()
+            if row:
+                fid = int(row["id"])
+            else:
+                c.execute(
+                    """INSERT INTO findings
+                       (title, description, cvss_score, mitre_id, status, evidence, remediation, project_id,
+                        cvss_vector, evidence_hash, created_by, last_modified_by, assigned_to, visibility,
+                        tags, approval_status, approved_by, approval_timestamp, tenant_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        scoped_title,
+                        desc,
+                        cvss,
+                        mitre,
+                        "Open",
+                        "Seeded client evidence narrative.",
+                        "Apply least privilege and harden privileged groups.",
+                        "DEFAULT",
+                        "",
+                        hashlib.sha256(f"{scoped_title}:{tenant_id}".encode()).hexdigest(),
+                        user_id,
+                        user_id,
+                        user_id,
+                        "global",
+                        "seed,client,portal",
+                        "approved",
+                        user_id,
+                        now,
+                        tenant_id,
+                    ),
+                )
+                fid = int(c.lastrowid)
+            finding_ids.append(fid)
+
+            evidence_hash = hashlib.sha256(f"evidence:{tenant_id}:{camp}:{idx}".encode()).hexdigest()
+            c.execute(
+                """INSERT INTO evidence_items
+                   (campaign_id, finding_id, artifact_type, description, sha256_hash, collected_by,
+                    collection_method, collected_timestamp, source_host, technique_id,
+                    approval_status, approved_by, approval_timestamp, immutable, tenant_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (sha256_hash) DO NOTHING""",
+                (
+                    camp,
+                    fid,
+                    "screenshot",
+                    f"Seed evidence for finding {fid}",
+                    evidence_hash,
+                    user_id,
+                    "seed_db",
+                    now,
+                    f"seed-host-{camp}",
+                    mitre,
+                    "approved",
+                    user_id,
+                    now,
+                    1,
+                    tenant_id,
+                ),
+            )
+
+            task_title = f"Remediate finding {fid}"
+            c.execute(
+                "SELECT id FROM remediation_tasks WHERE tenant_id=? AND title=?",
+                (tenant_id, task_title),
+            )
+            if not c.fetchone():
+                c.execute(
+                    """INSERT INTO remediation_tasks (finding_id, title, status, created_at, tenant_id)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (fid, task_title, "open", now, tenant_id),
+                )
+
+        report_title = f"Client Portal Report [campaign:{camp}]"
+        c.execute(
+            "SELECT id FROM client_reports WHERE campaign_id=? AND report_title=? AND tenant_id=?",
+            (camp, report_title, tenant_id),
+        )
+        if not c.fetchone():
+            c.execute(
+                """INSERT INTO client_reports
+                   (campaign_id, client_name, report_title, report_date, generated_at, generated_by,
+                    filter_rules, include_exec_summary, include_risk_dashboard, include_metrics,
+                    branding_logo_url, footer_text, status, file_path, file_hash, created_at, tenant_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    camp,
+                    "Default Customer",
+                    report_title,
+                    now,
+                    now,
+                    operator,
+                    "{}",
+                    1,
+                    1,
+                    1,
+                    "",
+                    "Seeded by VectorVue",
+                    "finalized",
+                    "",
+                    "",
+                    now,
+                    tenant_id,
+                ),
+            )
+
+    db.conn.commit()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed VectorVue DB with realistic Phase 5.5 data.")
     parser.add_argument(
@@ -309,6 +485,12 @@ def main() -> int:
     )
     parser.add_argument("--admin-user", default="admin")
     parser.add_argument("--admin-pass", default="AdminPassw0rd!")
+    parser.add_argument("--client-user-1", default="client_viewer")
+    parser.add_argument("--client-pass-1", default="ClientView3r!")
+    parser.add_argument("--client-role-1", default="viewer")
+    parser.add_argument("--client-user-2", default="client_operator")
+    parser.add_argument("--client-pass-2", default="ClientOperat0r!")
+    parser.add_argument("--client-role-2", default="operator")
     parser.add_argument(
         "--passphrase",
         default=None,
@@ -343,6 +525,22 @@ def main() -> int:
 
         seed_campaign(db, camp1, "REDWOLF", args.admin_user, "RW-C2-01")
         seed_campaign(db, camp2, "NIGHTGLASS", args.admin_user, "NG-C2-01")
+        tenant_id = resolve_active_tenant_id(db)
+        seed_client_portal_data(db, [camp1, camp2], args.admin_user, tenant_id)
+
+        # Ensure two client users for portal/API login after reset+seed workflows.
+        client1_status = ensure_user_credentials(
+            db,
+            args.client_user_1,
+            args.client_pass_1,
+            _role_from_name(args.client_role_1),
+        )
+        client2_status = ensure_user_credentials(
+            db,
+            args.client_user_2,
+            args.client_pass_2,
+            _role_from_name(args.client_role_2),
+        )
 
         print("Seed complete.")
         print("Campaigns:")
@@ -352,6 +550,11 @@ def main() -> int:
         print("Login:")
         print(f" - username: {args.admin_user}")
         print(f" - password: {args.admin_pass}")
+        print("Client portal users:")
+        print(f" - {args.client_user_1} / {args.client_pass_1} (role={args.client_role_1}, status={client1_status})")
+        print(f" - {args.client_user_2} / {args.client_pass_2} (role={args.client_role_2}, status={client2_status})")
+        print("Tenant ID for client portal login:")
+        print(f" - {tenant_id or 'N/A (non-postgres backend)'}")
         print(f" - passphrase used for DB encryption: {encryption_passphrase}")
         return 0
     finally:
