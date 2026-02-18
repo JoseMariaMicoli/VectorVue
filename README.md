@@ -1,6 +1,18 @@
+# Copyright (c) 2026 José María Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+#
+# You may:
+# ✔ Study
+# ✔ Modify
+# ✔ Use for internal security testing
+#
+# You may NOT:
+# ✘ Offer as a commercial service
+# ✘ Sell derived competing products
+
 ## License Update Notice
 
-Starting from version 3.7.1 this project will transition to Apache-2.0.
+Starting from version 3.7.1 this project will transition to BSL.
 
 Reason:
 To allow sustainable development, support, and long-term maintenance while keeping the project open and transparent.
@@ -27,7 +39,7 @@ Previous versions remain under the original license.
 ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
 ![Evidence](https://img.shields.io/badge/Evidence-Defensible-blue)
-![License](https://img.shields.io/badge/License-Apache_2.0-green)
+![License](https://img.shields.io/badge/License-Business_Source_1.1-red)
 
 ---
 

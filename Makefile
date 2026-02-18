@@ -1,5 +1,14 @@
 # Copyright (c) 2026 José María Micoli
-# Licensed under Apache-2.0
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+#
+# You may:
+# ✔ Study
+# ✔ Modify
+# ✔ Use for internal security testing
+#
+# You may NOT:
+# ✘ Offer as a commercial service
+# ✘ Sell derived competing products
 
 PG_URL ?= postgresql://vectorvue:vectorvue@postgres:5432/vectorvue
 SQLITE_DB ?= vectorvue.db
