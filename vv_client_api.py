@@ -7,16 +7,17 @@ It serves tenant-isolated read-only endpoints for future public portal usage.
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import MetaData, Table, create_engine, select, text
+from sqlalchemy import MetaData, Table, and_, create_engine, or_, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -30,17 +31,29 @@ from app.client_api.schemas import (
     ClientRemediationTask,
     ClientReportItem,
 )
-from schemas.client_safe import ClientEvidence, ClientFinding, ClientReport
+from schemas.client_safe import ClientEvidence, ClientFinding, ClientReport, ClientThemeOut
 from security.tenant_auth import get_current_tenant
+from utils.tenant_assets import resolve_tenant_asset
 from utils.url_builder import build_public_url
 from vv_core import SessionCrypto
 from vv_core_postgres import _check_postgres, _check_redis
 
 
 APP_TITLE = "VectorVue Client API"
-APP_VERSION = "4.0"
+APP_VERSION = "4.1"
 JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = 12 * 60 * 60
+DEFAULT_THEME = {
+    "company_name": "VectorVue Customer",
+    "logo_path": "",
+    "primary_color": "#0f172a",
+    "accent_color": "#22d3ee",
+    "background_color": "#0b0e14",
+    "foreground_color": "#e5e7eb",
+    "danger_color": "#ef4444",
+    "success_color": "#22c55e",
+    "updated_at": "",
+}
 
 
 def _db_url() -> str:
@@ -82,6 +95,11 @@ class ClientAuthLoginResponse(BaseModel):
     username: str
 
 
+class RiskTrendPoint(BaseModel):
+    day: str
+    score: float
+
+
 def _get_db() -> Session:
     db = SessionLocal()
     try:
@@ -109,6 +127,60 @@ def _safe_scalar(row: Any, key: str, default: Any = None) -> Any:
         return row[key]
     except Exception:
         return default
+
+
+def _client_visible_findings_predicate(findings: Table, tenant_id: str):
+    return and_(
+        findings.c.tenant_id == tenant_id,
+        findings.c.approval_status == "approved",
+        or_(findings.c.visibility.is_(None), findings.c.visibility != "hidden"),
+    )
+
+
+def _client_visible_reports_predicate(reports: Table, tenant_id: str):
+    return and_(
+        reports.c.tenant_id == tenant_id,
+        reports.c.status.in_(("approved", "published", "final")),
+    )
+
+
+def _theme_payload(row: dict[str, Any], request: Request) -> dict[str, Any]:
+    logo_url = None
+    if _safe_scalar(row, "logo_path", ""):
+        logo_url = build_public_url("/api/v1/client/theme/logo", request)
+    return {
+        "company_name": _safe_scalar(row, "company_name", DEFAULT_THEME["company_name"]),
+        "logo_url": logo_url,
+        "colors": {
+            "primary": _safe_scalar(row, "primary_color", DEFAULT_THEME["primary_color"]),
+            "accent": _safe_scalar(row, "accent_color", DEFAULT_THEME["accent_color"]),
+            "background": _safe_scalar(row, "background_color", DEFAULT_THEME["background_color"]),
+            "foreground": _safe_scalar(row, "foreground_color", DEFAULT_THEME["foreground_color"]),
+            "danger": _safe_scalar(row, "danger_color", DEFAULT_THEME["danger_color"]),
+            "success": _safe_scalar(row, "success_color", DEFAULT_THEME["success_color"]),
+        },
+    }
+
+
+def _to_day(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(raw).date()
+    except Exception:
+        if len(raw) >= 10:
+            try:
+                return date.fromisoformat(raw[:10])
+            except Exception:
+                return None
+        return None
 
 
 def _auth_secret() -> str:
@@ -151,6 +223,30 @@ def _resolve_login_tenant(db: Session, requested_tenant_id: str | None) -> str:
         raise
 
 
+def _enforce_user_tenant_access(db: Session, user_id: int, username: str, tenant_id: str) -> None:
+    """Enforce per-user tenant access when mapping table is available and populated."""
+    try:
+        uta = _load_table("user_tenant_access")
+    except SQLAlchemyError:
+        return
+
+    total_rows = db.execute(select(text("COUNT(*)")).select_from(uta)).scalar_one()
+    if int(total_rows) == 0:
+        return
+
+    mapping = db.execute(
+        select(uta.c.id, uta.c.active).where(
+            uta.c.tenant_id == tenant_id,
+            or_(
+                uta.c.user_id == int(user_id),
+                uta.c.username == username,
+            ),
+        )
+    ).mappings().first()
+    if not mapping or not bool(mapping.get("active", False)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is not authorized for tenant")
+
+
 @app.post("/api/v1/client/auth/login", response_model=ClientAuthLoginResponse, tags=["client-auth"])
 def client_login(payload: ClientAuthLoginRequest, db: Session = Depends(_get_db)):
     username = (payload.username or "").strip()
@@ -177,6 +273,7 @@ def client_login(payload: ClientAuthLoginRequest, db: Session = Depends(_get_db)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     tenant_id = _resolve_login_tenant(db, payload.tenant_id)
+    _enforce_user_tenant_access(db, int(row["id"]), str(row["username"]), tenant_id)
     now = datetime.utcnow()
     expires_at = now.timestamp() + JWT_TTL_SECONDS
     token = jwt.encode(
@@ -233,7 +330,8 @@ def list_client_findings(
     offset = (page - 1) * page_size
 
     try:
-        total_stmt = select(text("COUNT(*)")).select_from(findings).where(findings.c.tenant_id == tenant_id)
+        visible_predicate = _client_visible_findings_predicate(findings, tenant_id)
+        total_stmt = select(text("COUNT(*)")).select_from(findings).where(visible_predicate)
         total = int(db.execute(total_stmt).scalar_one())
 
         stmt = (
@@ -245,7 +343,7 @@ def list_client_findings(
                 findings.c.approval_status,
                 findings.c.visibility.label("visibility_status"),
             )
-            .where(findings.c.tenant_id == tenant_id)
+            .where(visible_predicate)
             .order_by(findings.c.id.desc())
             .limit(page_size)
             .offset(offset)
@@ -289,7 +387,7 @@ def get_client_finding(
             findings.c.visibility.label("visibility_status"),
         ).where(
             findings.c.id == finding_id,
-            findings.c.tenant_id == tenant_id,
+            _client_visible_findings_predicate(findings, tenant_id),
         )
     ).mappings().first()
     if not row:
@@ -315,11 +413,24 @@ def list_client_evidence(
 ):
     tenant_id = str(get_current_tenant(request))
     evidence = _load_table("evidence_items")
+    findings = _load_table("findings")
     _require_tenant_column(evidence)
+    _require_tenant_column(findings)
+    visible_findings = select(findings.c.id).where(
+        _client_visible_findings_predicate(findings, tenant_id)
+    )
 
     offset = (page - 1) * page_size
 
-    total_stmt = select(text("COUNT(*)")).select_from(evidence).where(evidence.c.tenant_id == tenant_id)
+    total_stmt = (
+        select(text("COUNT(*)"))
+        .select_from(evidence)
+        .where(
+            evidence.c.tenant_id == tenant_id,
+            evidence.c.approval_status == "approved",
+            evidence.c.finding_id.in_(visible_findings),
+        )
+    )
     total = int(db.execute(total_stmt).scalar_one())
 
     stmt = (
@@ -331,7 +442,11 @@ def list_client_evidence(
             evidence.c.collected_timestamp.label("collected_at"),
             evidence.c.approval_status,
         )
-        .where(evidence.c.tenant_id == tenant_id)
+        .where(
+            evidence.c.tenant_id == tenant_id,
+            evidence.c.approval_status == "approved",
+            evidence.c.finding_id.in_(visible_findings),
+        )
         .order_by(evidence.c.id.desc())
         .limit(page_size)
         .offset(offset)
@@ -361,7 +476,12 @@ def list_client_evidence_for_finding(
 ):
     tenant_id = str(get_current_tenant(request))
     evidence = _load_table("evidence_items")
+    findings = _load_table("findings")
     _require_tenant_column(evidence)
+    _require_tenant_column(findings)
+    visible_findings = select(findings.c.id).where(
+        _client_visible_findings_predicate(findings, tenant_id)
+    )
     rows = db.execute(
         select(
             evidence.c.id,
@@ -372,6 +492,8 @@ def list_client_evidence_for_finding(
         ).where(
             evidence.c.tenant_id == tenant_id,
             evidence.c.finding_id == finding_id,
+            evidence.c.approval_status == "approved",
+            evidence.c.finding_id.in_(visible_findings),
         )
     ).mappings().all()
     items = [
@@ -398,9 +520,10 @@ def list_client_reports(
     tenant_id = str(get_current_tenant(request))
     reports = _load_table("client_reports")
     _require_tenant_column(reports)
+    report_predicate = _client_visible_reports_predicate(reports, tenant_id)
 
     offset = (page - 1) * page_size
-    total_stmt = select(text("COUNT(*)")).select_from(reports).where(reports.c.tenant_id == tenant_id)
+    total_stmt = select(text("COUNT(*)")).select_from(reports).where(report_predicate)
     total = int(db.execute(total_stmt).scalar_one())
 
     stmt = (
@@ -410,7 +533,7 @@ def list_client_reports(
             reports.c.created_at,
             reports.c.status.label("approval_status"),
         )
-        .where(reports.c.tenant_id == tenant_id)
+        .where(report_predicate)
         .order_by(reports.c.id.desc())
         .limit(page_size)
         .offset(offset)
@@ -439,10 +562,11 @@ def download_client_report(
     tenant_id = str(get_current_tenant(request))
     reports = _load_table("client_reports")
     _require_tenant_column(reports)
+    report_predicate = _client_visible_reports_predicate(reports, tenant_id)
     row = db.execute(
         select(reports.c.id, reports.c.report_title, reports.c.file_path).where(
-            reports.c.tenant_id == tenant_id,
             reports.c.id == report_id,
+            report_predicate,
         )
     ).mappings().first()
     if not row:
@@ -464,7 +588,7 @@ def risk_summary(request: Request, db: Session = Depends(_get_db)):
 
     stmt = (
         select(findings.c.cvss_score)
-        .where(findings.c.tenant_id == tenant_id)
+        .where(_client_visible_findings_predicate(findings, tenant_id))
     )
     scores = [float(r[0]) for r in db.execute(stmt).all() if r[0] is not None]
 
@@ -484,6 +608,40 @@ def risk_summary(request: Request, db: Session = Depends(_get_db)):
     )
 
 
+@app.get("/api/v1/client/risk-trend", response_model=list[RiskTrendPoint], tags=["client"])
+def risk_trend(request: Request, db: Session = Depends(_get_db)):
+    tenant_id = str(get_current_tenant(request))
+    findings = _load_table("findings")
+    _require_tenant_column(findings)
+
+    if "created_at" not in findings.c:
+        return []
+
+    rows = db.execute(
+        select(findings.c.created_at, findings.c.cvss_score).where(
+            _client_visible_findings_predicate(findings, tenant_id)
+        )
+    ).all()
+    if not rows:
+        return []
+
+    since = datetime.utcnow().date() - timedelta(days=29)
+    buckets: dict[date, list[float]] = {}
+    for created_at, cvss_score in rows:
+        day = _to_day(created_at)
+        if day is None or day < since:
+            continue
+        score = float(cvss_score) if cvss_score is not None else 0.0
+        buckets.setdefault(day, []).append(score)
+
+    points: list[RiskTrendPoint] = []
+    for day in sorted(buckets.keys()):
+        values = buckets[day]
+        avg = round(sum(values) / len(values), 2) if values else 0.0
+        points.append(RiskTrendPoint(day=day.isoformat(), score=avg))
+    return points
+
+
 @app.get("/api/v1/client/risk", response_model=RiskSummary, tags=["client"])
 def risk_summary_alias(request: Request, db: Session = Depends(_get_db)):
     return risk_summary(request, db)
@@ -495,9 +653,20 @@ def remediation_status(request: Request, db: Session = Depends(_get_db)):
 
     # Primary source: remediation_tasks table (created by Phase 6.5 migration if missing).
     remediation = _load_table("remediation_tasks")
+    findings = _load_table("findings")
     _require_tenant_column(remediation)
+    _require_tenant_column(findings)
+    visible_findings = select(findings.c.id).where(
+        _client_visible_findings_predicate(findings, tenant_id)
+    )
 
-    stmt = select(remediation.c.status).where(remediation.c.tenant_id == tenant_id)
+    stmt = select(remediation.c.status).where(
+        remediation.c.tenant_id == tenant_id,
+        or_(
+            remediation.c.finding_id.is_(None),
+            remediation.c.finding_id.in_(visible_findings),
+        ),
+    )
     statuses = [str(r[0]).lower() for r in db.execute(stmt).all() if r[0] is not None]
 
     total = len(statuses)
@@ -519,10 +688,19 @@ def remediation_status(request: Request, db: Session = Depends(_get_db)):
 def remediation_tasks(request: Request, db: Session = Depends(_get_db)):
     tenant_id = str(get_current_tenant(request))
     remediation = _load_table("remediation_tasks")
+    findings = _load_table("findings")
     _require_tenant_column(remediation)
+    _require_tenant_column(findings)
+    visible_findings = select(findings.c.id).where(
+        _client_visible_findings_predicate(findings, tenant_id)
+    )
     rows = db.execute(
         select(remediation.c.id, remediation.c.finding_id, remediation.c.title, remediation.c.status).where(
-            remediation.c.tenant_id == tenant_id
+            remediation.c.tenant_id == tenant_id,
+            or_(
+                remediation.c.finding_id.is_(None),
+                remediation.c.finding_id.in_(visible_findings),
+            ),
         )
     ).mappings().all()
     items = [
@@ -531,9 +709,79 @@ def remediation_tasks(request: Request, db: Session = Depends(_get_db)):
             finding_id=_safe_scalar(r, "finding_id"),
             title=_safe_scalar(r, "title", "Task"),
             status=_safe_scalar(r, "status", "open"),
-            priority=None,
-            due_date=None,
+            priority="medium",
+            due_date=(
+                datetime.fromisoformat(_safe_scalar(r, "created_at", "").replace("Z", ""))
+                + timedelta(days=30)
+            )
+            if _safe_scalar(r, "created_at")
+            else None,
         )
         for r in rows
     ]
     return ClientRemediationResponse(items=items)
+
+
+@app.get("/api/v1/client/theme", response_model=ClientThemeOut, tags=["client"])
+def get_client_theme(
+    request: Request,
+    response: Response,
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    try:
+        themes = _load_table("tenant_theme")
+        row = db.execute(select(themes).where(themes.c.tenant_id == tenant_id)).mappings().first()
+    except SQLAlchemyError:
+        row = None
+
+    source = dict(DEFAULT_THEME)
+    if row:
+        source.update(dict(row))
+
+    payload = _theme_payload(source, request)
+    etag_source = f"{tenant_id}:{source.get('updated_at', '')}:{source.get('logo_path', '')}:{payload['colors']}"
+    etag = '"' + hashlib.sha256(etag_source.encode("utf-8")).hexdigest() + '"'
+    incoming = request.headers.get("if-none-match", "")
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "private, max-age=300"
+    if incoming == etag:
+        return JSONResponse(status_code=304, content=None, headers={"ETag": etag, "Cache-Control": "private, max-age=300"})
+    return payload
+
+
+@app.get("/api/v1/client/theme/logo", tags=["client"])
+def get_client_theme_logo(
+    request: Request,
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    try:
+        themes = _load_table("tenant_theme")
+        row = db.execute(
+            select(themes.c.logo_path).where(themes.c.tenant_id == tenant_id)
+        ).mappings().first()
+    except SQLAlchemyError:
+        row = None
+
+    logo_name = _safe_scalar(row, "logo_path", "") if row else ""
+    if not logo_name:
+        raise HTTPException(status_code=404, detail="Logo not configured")
+
+    try:
+        logo_path = resolve_tenant_asset(tenant_id, logo_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid logo path") from exc
+
+    if not logo_path.exists() or not logo_path.is_file():
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    suffix = logo_path.suffix.lower()
+    media_type = "application/octet-stream"
+    if suffix in {".png"}:
+        media_type = "image/png"
+    elif suffix in {".jpg", ".jpeg"}:
+        media_type = "image/jpeg"
+    elif suffix == ".svg":
+        media_type = "image/svg+xml"
+    return FileResponse(path=str(logo_path), media_type=media_type)

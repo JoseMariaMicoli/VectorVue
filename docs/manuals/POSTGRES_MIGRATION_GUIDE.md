@@ -1,6 +1,6 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# PostgreSQL Migration and Docker Deployment Guide (v4.0)
+# PostgreSQL Migration and Docker Deployment Guide (v4.1)
 
 ## Scope
 

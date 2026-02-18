@@ -58,4 +58,19 @@ export type RemediationTask = {
   title: string;
   status: string;
   priority?: string | null;
+  owner?: string | null;
+  due_date?: string | null;
+};
+
+export type ClientTheme = {
+  company_name: string;
+  logo_url?: string | null;
+  colors: {
+    primary: string;
+    accent: string;
+    background: string;
+    foreground: string;
+    danger: string;
+    success: string;
+  };
 };
