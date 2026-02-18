@@ -78,6 +78,7 @@ Thumbs.db
 example.md
 docs/dev-log/
 .github/ 
+config/
 
 # Phase 6 deployment generated artifacts
 deploy/certs/
