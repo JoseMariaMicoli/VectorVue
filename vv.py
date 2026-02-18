@@ -2228,7 +2228,7 @@ class HeaderHUD(Static):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield Label("VECTORVUE v3.9", classes="hud-title")
+            yield Label("VECTORVUE v4.0", classes="hud-title")
             yield Label(f"OPERATION: {self.operation_name}", id="hud-op-lbl", classes="hud-op")
             yield Input(value="DEFAULT", id="hud-project-input", classes="hud-input", disabled=True)
             yield Label(f"// BUFFER: {self.current_file}", id="hud-file-lbl", classes="hud-file")

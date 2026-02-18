@@ -1,10 +1,10 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v3.9 Troubleshooting Guide
+# VectorVue v4.0 Troubleshooting Guide
 
-![Version](https://img.shields.io/badge/Version-v3.9-39FF14) ![Phase](https://img.shields.io/badge/Phase-6_Complete-39FF14)
+![Version](https://img.shields.io/badge/Version-v4.0-39FF14) ![Phase](https://img.shields.io/badge/Phase-6_Complete-39FF14)
 
-Common issues and solutions for VectorVue v3.9 red team campaign management platform with Operational Cognition support.
+Common issues and solutions for VectorVue v4.0 red team campaign management platform with Operational Cognition support.
 
 ---
 

@@ -1,6 +1,6 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue PostgreSQL Usage Guide (v3.9)
+# VectorVue PostgreSQL Usage Guide (v4.0)
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@
 
 ## Scope
 
-This runbook provides production-style operational steps for using VectorVue v3.9 with PostgreSQL in Docker, including migration, reset, seeding, verification, and recovery workflows.
+This runbook provides production-style operational steps for using VectorVue v4.0 with PostgreSQL in Docker, including migration, reset, seeding, verification, and recovery workflows.
 
 ## Prerequisites
 
