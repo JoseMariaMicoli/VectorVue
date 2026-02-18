@@ -46,6 +46,7 @@ services:
       VV_RUN_MODE: api
       VV_REPORTS_DIR: /var/lib/vectorvue/reports
       VV_LOG_DIR: /var/lib/vectorvue/logs
+      VV_CLIENT_JWT_SECRET: change-me-phase7b-client-jwt-secret
       TERM: xterm-256color
       COLORTERM: truecolor
       FORCE_COLOR: "1"
@@ -67,6 +68,38 @@ services:
       retries: 5
       start_period: 20s
     command: ["python", "-m", "uvicorn", "vv_client_api:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
+
+  vectorvue_portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://vectorvue_app:8080
+    image: vectorvue-portal:phase7b
+    container_name: vectorvue_portal
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      vectorvue_app:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: http://vectorvue_app:8080
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NODE_ENV: production
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /app/.next/cache:size=128m,nosuid,nodev
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/login >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 25s
 
   vectorvue_runtime:
     image: vectorvue:phase6
@@ -159,6 +192,8 @@ services:
     restart: unless-stopped
     depends_on:
       vectorvue_app:
+        condition: service_healthy
+      vectorvue_portal:
         condition: service_healthy
     ports:
       - "80:80"

@@ -38,6 +38,9 @@ build/
 dist/
 *.egg-info/
 pip-wheel-metadata/
+portal/.next/
+portal/node_modules/
+portal/.turbo/
 
 # Database runtime files
 vectorvue.db

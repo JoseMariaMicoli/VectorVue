@@ -6,24 +6,41 @@ It serves tenant-isolated read-only endpoints for future public portal usage.
 
 from __future__ import annotations
 
+import base64
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+import jwt
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from api_contract.client_api_models import Paginated, RemediationStatus, RiskSummary
+from app.client_api.schemas import (
+    ClientEvidenceGalleryItem,
+    ClientEvidenceGalleryResponse,
+    ClientFindingDetail,
+    ClientRemediationResponse,
+    ClientRemediationTask,
+    ClientReportItem,
+)
 from schemas.client_safe import ClientEvidence, ClientFinding, ClientReport
 from security.tenant_auth import get_current_tenant
+from utils.url_builder import build_public_url
+from vv_core import SessionCrypto
 from vv_core_postgres import _check_postgres, _check_redis
 
 
 APP_TITLE = "VectorVue Client API"
 APP_VERSION = "4.0"
+JWT_ALGORITHM = "HS256"
+JWT_TTL_SECONDS = 12 * 60 * 60
 
 
 def _db_url() -> str:
@@ -32,13 +49,15 @@ def _db_url() -> str:
         url = make_url(env_url)
         if url.get_backend_name() == "postgresql" and url.drivername != "postgresql+psycopg":
             url = url.set(drivername="postgresql+psycopg")
-        return str(url)
+        return url.render_as_string(hide_password=False)
     user = os.environ.get("VV_DB_USER", os.environ.get("POSTGRES_USER", "vectorvue"))
     password = os.environ.get("VV_DB_PASSWORD", os.environ.get("POSTGRES_PASSWORD", "strongpassword"))
     host = os.environ.get("VV_DB_HOST", "postgres")
     port = os.environ.get("VV_DB_PORT", "5432")
     name = os.environ.get("VV_DB_NAME", os.environ.get("POSTGRES_DB", "vectorvue_db"))
-    return str(make_url(f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"))
+    return make_url(f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}").render_as_string(
+        hide_password=False
+    )
 
 
 engine = create_engine(_db_url(), pool_pre_ping=True, future=True)
@@ -47,6 +66,20 @@ metadata = MetaData()
 
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+
+
+class ClientAuthLoginRequest(BaseModel):
+    username: str
+    password: str
+    tenant_id: str | None = None
+
+
+class ClientAuthLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    tenant_id: str
+    username: str
 
 
 def _get_db() -> Session:
@@ -76,6 +109,94 @@ def _safe_scalar(row: Any, key: str, default: Any = None) -> Any:
         return row[key]
     except Exception:
         return default
+
+
+def _auth_secret() -> str:
+    secret = os.environ.get("VV_CLIENT_JWT_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="VV_CLIENT_JWT_SECRET is not configured",
+        )
+    return secret
+
+
+def _resolve_login_tenant(db: Session, requested_tenant_id: str | None) -> str:
+    try:
+        tenants = _load_table("tenants")
+        if requested_tenant_id:
+            row = db.execute(
+                select(tenants.c.id, tenants.c.active).where(tenants.c.id == requested_tenant_id)
+            ).mappings().first()
+            if not row:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown tenant_id")
+            if not bool(row["active"]):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant is inactive")
+            return str(row["id"])
+
+        rows = db.execute(select(tenants.c.id).where(tenants.c.active.is_(True))).mappings().all()
+        if len(rows) == 1:
+            return str(rows[0]["id"])
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tenant_id is required for multi-tenant login",
+        )
+    except SQLAlchemyError as exc:
+        # Clear signal for operators when Phase 6.5 schema is missing after reset/seed.
+        if "relation \"tenants\" does not exist" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Tenant schema missing. Run make phase65-migrate and retry.",
+            ) from exc
+        raise
+
+
+@app.post("/api/v1/client/auth/login", response_model=ClientAuthLoginResponse, tags=["client-auth"])
+def client_login(payload: ClientAuthLoginRequest, db: Session = Depends(_get_db)):
+    username = (payload.username or "").strip()
+    password = payload.password or ""
+    if not username or not password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="username and password are required")
+
+    users = _load_table("users")
+    row = db.execute(
+        select(users.c.id, users.c.username, users.c.password_hash, users.c.salt, users.c.role)
+        .where(users.c.username == username)
+        .limit(1)
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    try:
+        user_salt = base64.b64decode(str(row["salt"]))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Stored credential salt is invalid") from exc
+
+    crypto = SessionCrypto()
+    if not crypto.verify_password(password, str(row["password_hash"]), user_salt):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    tenant_id = _resolve_login_tenant(db, payload.tenant_id)
+    now = datetime.utcnow()
+    expires_at = now.timestamp() + JWT_TTL_SECONDS
+    token = jwt.encode(
+        {
+            "sub": str(row["username"]),
+            "tenant_id": tenant_id,
+            "role": str(row.get("role", "viewer")),
+            "iat": int(now.timestamp()),
+            "exp": int(expires_at),
+            "iss": "vectorvue-client-api",
+        },
+        _auth_secret(),
+        algorithm=JWT_ALGORITHM,
+    )
+    return ClientAuthLoginResponse(
+        access_token=token,
+        expires_in=JWT_TTL_SECONDS,
+        tenant_id=tenant_id,
+        username=str(row["username"]),
+    )
 
 
 @app.get("/", tags=["system"])
@@ -147,6 +268,44 @@ def list_client_findings(
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
 
+@app.get("/api/v1/client/findings/{finding_id}", response_model=ClientFindingDetail, tags=["client"])
+def get_client_finding(
+    finding_id: int,
+    request: Request,
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    findings = _load_table("findings")
+    _require_tenant_column(findings)
+    row = db.execute(
+        select(
+            findings.c.id,
+            findings.c.title,
+            findings.c.description,
+            findings.c.status,
+            findings.c.cvss_score,
+            findings.c.mitre_id,
+            findings.c.approval_status,
+            findings.c.visibility.label("visibility_status"),
+        ).where(
+            findings.c.id == finding_id,
+            findings.c.tenant_id == tenant_id,
+        )
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return ClientFindingDetail(
+        id=int(row["id"]),
+        title=str(row["title"]),
+        description=_safe_scalar(row, "description"),
+        status=_safe_scalar(row, "status", "Open"),
+        cvss_score=float(row["cvss_score"]) if row["cvss_score"] is not None else None,
+        mitre_id=_safe_scalar(row, "mitre_id"),
+        visibility_status=_safe_scalar(row, "visibility_status", "restricted"),
+        approval_status=_safe_scalar(row, "approval_status", "pending"),
+    )
+
+
 @app.get("/api/v1/client/evidence", response_model=Paginated[ClientEvidence], tags=["client"])
 def list_client_evidence(
     request: Request,
@@ -194,7 +353,42 @@ def list_client_evidence(
     return Paginated[ClientEvidence](items=items, page=page, page_size=page_size, total=total)
 
 
-@app.get("/api/v1/client/reports", response_model=Paginated[ClientReport], tags=["client"])
+@app.get("/api/v1/client/evidence/{finding_id}", response_model=ClientEvidenceGalleryResponse, tags=["client"])
+def list_client_evidence_for_finding(
+    finding_id: int,
+    request: Request,
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    evidence = _load_table("evidence_items")
+    _require_tenant_column(evidence)
+    rows = db.execute(
+        select(
+            evidence.c.id,
+            evidence.c.finding_id,
+            evidence.c.artifact_type,
+            evidence.c.description,
+            evidence.c.approval_status,
+        ).where(
+            evidence.c.tenant_id == tenant_id,
+            evidence.c.finding_id == finding_id,
+        )
+    ).mappings().all()
+    items = [
+        ClientEvidenceGalleryItem(
+            id=int(r["id"]),
+            finding_id=int(r["finding_id"]) if r["finding_id"] is not None else finding_id,
+            artifact_type=_safe_scalar(r, "artifact_type", "artifact"),
+            description=_safe_scalar(r, "description"),
+            approval_status=_safe_scalar(r, "approval_status", "pending"),
+            download_url=build_public_url(f"/api/v1/client/evidence/{finding_id}?evidence_id={int(r['id'])}", request),
+        )
+        for r in rows
+    ]
+    return ClientEvidenceGalleryResponse(finding_id=finding_id, items=items)
+
+
+@app.get("/api/v1/client/reports", response_model=Paginated[ClientReportItem], tags=["client"])
 def list_client_reports(
     request: Request,
     page: int = Query(default=1, ge=1),
@@ -224,17 +418,42 @@ def list_client_reports(
     rows = db.execute(stmt).mappings().all()
 
     items = [
-        ClientReport(
+        ClientReportItem(
             id=int(r["id"]),
             title=_safe_scalar(r, "title", "Untitled report"),
-            created_at=None,
-            summary=None,
-            approval_status=_safe_scalar(r, "approval_status", "draft"),
-            visibility_status="customer_visible",
+            report_date=None,
+            status=_safe_scalar(r, "approval_status", "draft"),
+            download_url=build_public_url(f"/api/v1/client/reports/{int(r['id'])}/download", request),
         )
         for r in rows
     ]
-    return Paginated[ClientReport](items=items, page=page, page_size=page_size, total=total)
+    return Paginated[ClientReportItem](items=items, page=page, page_size=page_size, total=total)
+
+
+@app.get("/api/v1/client/reports/{report_id}/download", tags=["client"])
+def download_client_report(
+    report_id: int,
+    request: Request,
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    reports = _load_table("client_reports")
+    _require_tenant_column(reports)
+    row = db.execute(
+        select(reports.c.id, reports.c.report_title, reports.c.file_path).where(
+            reports.c.tenant_id == tenant_id,
+            reports.c.id == report_id,
+        )
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+    file_path = _safe_scalar(row, "file_path", "")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Report file unavailable")
+    p = Path(file_path)
+    if not p.exists() or not p.is_file():
+        raise HTTPException(status_code=404, detail="Report file missing")
+    return FileResponse(path=str(p), filename=f"{_safe_scalar(row, 'report_title', 'report')}.pdf")
 
 
 @app.get("/api/v1/client/risk-summary", response_model=RiskSummary, tags=["client"])
@@ -265,6 +484,11 @@ def risk_summary(request: Request, db: Session = Depends(_get_db)):
     )
 
 
+@app.get("/api/v1/client/risk", response_model=RiskSummary, tags=["client"])
+def risk_summary_alias(request: Request, db: Session = Depends(_get_db)):
+    return risk_summary(request, db)
+
+
 @app.get("/api/v1/client/remediation-status", response_model=RemediationStatus, tags=["client"])
 def remediation_status(request: Request, db: Session = Depends(_get_db)):
     tenant_id = str(get_current_tenant(request))
@@ -289,3 +513,27 @@ def remediation_status(request: Request, db: Session = Depends(_get_db)):
         completed_tasks=completed,
         blocked_tasks=blocked,
     )
+
+
+@app.get("/api/v1/client/remediation", response_model=ClientRemediationResponse, tags=["client"])
+def remediation_tasks(request: Request, db: Session = Depends(_get_db)):
+    tenant_id = str(get_current_tenant(request))
+    remediation = _load_table("remediation_tasks")
+    _require_tenant_column(remediation)
+    rows = db.execute(
+        select(remediation.c.id, remediation.c.finding_id, remediation.c.title, remediation.c.status).where(
+            remediation.c.tenant_id == tenant_id
+        )
+    ).mappings().all()
+    items = [
+        ClientRemediationTask(
+            id=int(r["id"]),
+            finding_id=_safe_scalar(r, "finding_id"),
+            title=_safe_scalar(r, "title", "Task"),
+            status=_safe_scalar(r, "status", "open"),
+            priority=None,
+            due_date=None,
+        )
+        for r in rows
+    ]
+    return ClientRemediationResponse(items=items)
