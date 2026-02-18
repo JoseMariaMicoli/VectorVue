@@ -1,0 +1,45 @@
+# Copyright (c) 2026 José María Micoli
+# Licensed under Apache-2.0
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: vectorvue
+      POSTGRES_USER: vectorvue
+      POSTGRES_PASSWORD: vectorvue
+    ports:
+      - "5433:5432"
+    volumes:
+      - vectorvue_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vectorvue -d vectorvue"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  vectorvue:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VV_DB_BACKEND: postgres
+      VV_DB_HOST: postgres
+      VV_DB_PORT: "5432"
+      VV_DB_NAME: vectorvue
+      VV_DB_USER: vectorvue
+      VV_DB_PASSWORD: vectorvue
+      VV_DB_URL: postgresql://vectorvue:vectorvue@postgres:5432/vectorvue
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./:/app
+    healthcheck:
+      test: ["CMD-SHELL", "python -m py_compile vv.py vv_core.py >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  vectorvue_pg_data:

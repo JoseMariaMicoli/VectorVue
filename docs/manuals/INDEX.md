@@ -40,6 +40,10 @@ This is the single entrypoint for all VectorVue documentation in v3.8.
 ## Documentation Governance
 
 - [Documentation Policy](./DOCUMENTATION_POLICY.md)
+- [PostgreSQL Migration Guide](./POSTGRES_MIGRATION_GUIDE.md)
+- [PostgreSQL Usage Guide](./POSTGRES_USAGE_GUIDE.md)
+- [PostgreSQL Audit Report](./POSTGRES_AUDIT_REPORT.md)
+- [PostgreSQL Regression Checklist](./POSTGRES_REGRESSION_CHECKLIST.md)
 
 ## Document Matrix
 
@@ -50,6 +54,10 @@ This is the single entrypoint for all VectorVue documentation in v3.8.
 | `OPERATOR_MANUAL.md` | Active operators | Operational workflows by phase |
 | `TROUBLESHOOTING_GUIDE.md` | Operators/Admins | Error resolution and diagnostics |
 | `ARCHITECTURE_SPEC.md` | Engineers/Architects | Internal architecture and data model |
+| `POSTGRES_MIGRATION_GUIDE.md` | DevOps/Platform Engineers | SQLite→PostgreSQL and Docker migration |
+| `POSTGRES_USAGE_GUIDE.md` | Operators/DevOps | Day-2 runbook for PostgreSQL backend operations |
+| `POSTGRES_AUDIT_REPORT.md` | Engineering Leads/Auditors | Method-level migration risk and validation focus |
+| `POSTGRES_REGRESSION_CHECKLIST.md` | QA/Engineering | End-to-end no-regression verification checklist |
 | `TAB_NAVIGATION_GUIDE.md` | All users | Visual navigation model and keybindings |
 | `ROADMAP.md` | Leads/Engineering | Current and planned capabilities |
 

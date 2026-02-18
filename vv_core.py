@@ -16,6 +16,7 @@ import sqlite3
 import math
 import os
 import sys
+import re
 import base64
 import hashlib
 import hmac
@@ -29,6 +30,17 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from vv_fs import FileSystemService
+
+try:
+    import psycopg
+    from psycopg import sql as psql
+    from psycopg.rows import dict_row
+    PSYCOPG_AVAILABLE = True
+except ImportError:
+    psycopg = None
+    psql = None
+    dict_row = None
+    PSYCOPG_AVAILABLE = False
 
 # --- CRYPTOGRAPHY LAYER ---
 try:
@@ -66,6 +78,219 @@ Evidence:
 ## 5. Appendices
 
 """
+
+
+def _translate_sql_to_postgres(query: str) -> str:
+    """Translate sqlite-flavored SQL into postgres-friendly SQL."""
+    q = query
+
+    if re.search(r"\bINSERT\s+OR\s+IGNORE\s+INTO\b", q, flags=re.IGNORECASE):
+        # sqlite: INSERT OR IGNORE INTO ... VALUES (...)
+        # postgres equivalent: INSERT INTO ... VALUES (...) ON CONFLICT DO NOTHING
+        q = re.sub(r"\bINSERT\s+OR\s+IGNORE\s+INTO\b", "INSERT INTO", q, flags=re.IGNORECASE)
+        if "ON CONFLICT" not in q.upper():
+            q = f"{q} ON CONFLICT DO NOTHING"
+
+    # sqlite placeholders -> psycopg placeholders
+    q = q.replace("?", "%s")
+    return q
+
+
+def _split_sql_statements(sql_blob: str) -> list[str]:
+    """Split SQL script into statements, respecting quotes and dollar-quoted bodies."""
+    statements: list[str] = []
+    buf: list[str] = []
+    i = 0
+    n = len(sql_blob)
+    in_single = False
+    in_double = False
+    in_line_comment = False
+    in_block_comment = False
+    dollar_tag: str | None = None
+
+    while i < n:
+        ch = sql_blob[i]
+        nxt = sql_blob[i + 1] if i + 1 < n else ""
+
+        if in_line_comment:
+            buf.append(ch)
+            if ch == "\n":
+                in_line_comment = False
+            i += 1
+            continue
+
+        if in_block_comment:
+            buf.append(ch)
+            if ch == "*" and nxt == "/":
+                buf.append(nxt)
+                i += 2
+                in_block_comment = False
+            else:
+                i += 1
+            continue
+
+        if dollar_tag:
+            if sql_blob.startswith(dollar_tag, i):
+                buf.append(dollar_tag)
+                i += len(dollar_tag)
+                dollar_tag = None
+            else:
+                buf.append(ch)
+                i += 1
+            continue
+
+        if not in_single and not in_double:
+            if ch == "-" and nxt == "-":
+                buf.append(ch)
+                buf.append(nxt)
+                i += 2
+                in_line_comment = True
+                continue
+            if ch == "/" and nxt == "*":
+                buf.append(ch)
+                buf.append(nxt)
+                i += 2
+                in_block_comment = True
+                continue
+            if ch == "$":
+                m = re.match(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$", sql_blob[i:])
+                if m:
+                    tag = m.group(0)
+                    buf.append(tag)
+                    i += len(tag)
+                    dollar_tag = tag
+                    continue
+
+        if ch == "'" and not in_double:
+            in_single = not in_single
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            buf.append(ch)
+            i += 1
+            continue
+
+        if ch == ";" and not in_single and not in_double and not dollar_tag:
+            stmt = "".join(buf).strip()
+            if stmt:
+                statements.append(stmt)
+            buf = []
+            i += 1
+            continue
+
+        buf.append(ch)
+        i += 1
+
+    tail = "".join(buf).strip()
+    if tail:
+        statements.append(tail)
+    return statements
+
+
+class CompatRow(dict):
+    """Dict row that also supports sqlite-style integer indexing."""
+
+    def __init__(self, row_dict: dict, columns: list[str]):
+        super().__init__(row_dict or {})
+        self._columns = columns or list((row_dict or {}).keys())
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return dict.__getitem__(self, self._columns[key])
+        return dict.__getitem__(self, key)
+
+
+class PostgresCursorCompat:
+    """Cursor adapter that mimics the sqlite cursor contract used by vv_core."""
+
+    def __init__(self, conn, cursor):
+        self._conn = conn
+        self._cursor = cursor
+        self.lastrowid = None
+
+    def execute(self, query, params=None):
+        translated = _translate_sql_to_postgres(query)
+        try:
+            if params is None:
+                self._cursor.execute(translated)
+            else:
+                self._cursor.execute(translated, params)
+            self.lastrowid = None
+            if translated.lstrip().upper().startswith("INSERT"):
+                try:
+                    self._cursor.execute("SELECT LASTVAL() AS id")
+                    row = self._cursor.fetchone()
+                    self.lastrowid = row["id"] if isinstance(row, dict) else None
+                except Exception:
+                    self.lastrowid = None
+            return self
+        except Exception as exc:
+            if hasattr(self._conn, "_conn"):
+                try:
+                    self._conn._conn.rollback()
+                except Exception:
+                    pass
+            # Preserve existing sqlite-specific exception handling paths.
+            if PSYCOPG_AVAILABLE and isinstance(exc, psycopg.IntegrityError):
+                raise sqlite3.IntegrityError(str(exc)) from exc
+            raise
+
+    def executemany(self, query, params_seq):
+        translated = _translate_sql_to_postgres(query)
+        try:
+            self._cursor.executemany(translated, params_seq)
+            return self
+        except Exception as exc:
+            if hasattr(self._conn, "_conn"):
+                try:
+                    self._conn._conn.rollback()
+                except Exception:
+                    pass
+            if PSYCOPG_AVAILABLE and isinstance(exc, psycopg.IntegrityError):
+                raise sqlite3.IntegrityError(str(exc)) from exc
+            raise
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        if isinstance(row, dict):
+            cols = [d.name for d in (self._cursor.description or [])]
+            return CompatRow(row, cols)
+        return row
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        if not rows:
+            return []
+        if isinstance(rows[0], dict):
+            cols = [d.name for d in (self._cursor.description or [])]
+            return [CompatRow(r, cols) for r in rows]
+        return rows
+
+    def __getattr__(self, item):
+        return getattr(self._cursor, item)
+
+
+class PostgresConnectionCompat:
+    """Connection adapter to expose sqlite-like cursor/fetch behavior."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return PostgresCursorCompat(self, self._conn.cursor(row_factory=dict_row))
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
 
 # =============================================================================
 # RBAC
@@ -851,10 +1076,45 @@ class Database:
 
     def __init__(self, crypto_manager: Optional[SessionCrypto] = None):
         self.crypto = crypto_manager
-        self.conn = sqlite3.connect(self.DB_NAME, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
+        self.db_backend = os.environ.get("VV_DB_BACKEND", "sqlite").strip().lower()
+        if self.db_backend == "postgres":
+            if not PSYCOPG_AVAILABLE:
+                raise RuntimeError("VV_DB_BACKEND=postgres requires psycopg. Install with: pip install psycopg[binary]")
+            db_url = os.environ.get("VV_DB_URL")
+            if not db_url:
+                pg_user = os.environ.get("VV_DB_USER", "vectorvue")
+                pg_pass = os.environ.get("VV_DB_PASSWORD", "vectorvue")
+                pg_host = os.environ.get("VV_DB_HOST", "127.0.0.1")
+                pg_port = os.environ.get("VV_DB_PORT", "5432")
+                pg_name = os.environ.get("VV_DB_NAME", "vectorvue")
+                db_url = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_name}"
+            raw_conn = psycopg.connect(db_url, autocommit=False)
+            self.conn = PostgresConnectionCompat(raw_conn)
+        else:
+            self.conn = sqlite3.connect(self.DB_NAME, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
         self.current_user: Optional[User] = None
-        self._run_migrations()
+        self.session_file = os.environ.get("VV_SESSION_FILE", self.SESSION_FILE)
+        if self.db_backend == "postgres":
+            self._run_postgres_migrations()
+        else:
+            self._run_migrations()
+
+    def _run_postgres_migrations(self):
+        """Initialize postgres schema from generated SQL schema file."""
+        schema_path = Path("sql/postgres_schema.sql")
+        if not schema_path.exists():
+            raise RuntimeError(
+                "Missing postgres schema at sql/postgres_schema.sql. "
+                "Generate it with scripts/export_pg_schema.py."
+            )
+        raw_conn = self.conn._conn if hasattr(self.conn, "_conn") else self.conn
+        sql_blob = schema_path.read_text(encoding="utf-8")
+        statements = _split_sql_statements(sql_blob)
+        with raw_conn.cursor() as cur:
+            for stmt in statements:
+                cur.execute(stmt)
+        self.conn.commit()
 
     # -------------------------------------------------------------------------
     # SCHEMA & MIGRATIONS
@@ -1965,13 +2225,19 @@ class Database:
         payload = {"user_id": user_id, "token": token, "expires_at": expires_at}
         if self.crypto and self.crypto._raw_key:
             payload = self.crypto.sign_session_file(payload)
-        with open(self.SESSION_FILE, "w") as f:
-            json.dump(payload, f)
+        try:
+            with open(self.session_file, "w") as f:
+                json.dump(payload, f)
+        except PermissionError:
+            fallback = f"/tmp/{Path(self.session_file).name}"
+            self.session_file = fallback
+            with open(self.session_file, "w") as f:
+                json.dump(payload, f)
 
     def resume_session(self) -> bool:
-        if not os.path.exists(self.SESSION_FILE): return False
+        if not os.path.exists(self.session_file): return False
         try:
-            with open(self.SESSION_FILE, "r") as f: payload = json.load(f)
+            with open(self.session_file, "r") as f: payload = json.load(f)
             if self.crypto and self.crypto._raw_key:
                 payload_copy = dict(payload)
                 if not self.crypto.verify_session_file(payload_copy): return False
@@ -1997,7 +2263,7 @@ class Database:
             c = self.conn.cursor()
             c.execute("DELETE FROM sessions WHERE user_id=?", (self.current_user.id,))
             self.conn.commit()
-        if os.path.exists(self.SESSION_FILE): os.remove(self.SESSION_FILE)
+        if os.path.exists(self.session_file): os.remove(self.session_file)
         self.current_user = None
 
     def list_users(self) -> List[User]:
@@ -5510,10 +5776,19 @@ class Database:
             severity = "LOW"
         
         try:
-            c.execute("""INSERT OR REPLACE INTO finding_summaries 
+            c.execute("""INSERT INTO finding_summaries
                         (finding_id, summary_text, impact_assessment, remediation_steps,
                          cvss_31_vector, cvss_31_score, severity_rating, affected_assets, created_at, updated_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         ON CONFLICT(finding_id) DO UPDATE SET
+                           summary_text=excluded.summary_text,
+                           impact_assessment=excluded.impact_assessment,
+                           remediation_steps=excluded.remediation_steps,
+                           cvss_31_vector=excluded.cvss_31_vector,
+                           cvss_31_score=excluded.cvss_31_score,
+                           severity_rating=excluded.severity_rating,
+                           affected_assets=excluded.affected_assets,
+                           updated_at=excluded.updated_at""",
                      (finding_id, summary_text, "", remediation_steps or "",
                       cvss_31_vector or "", cvss_score, severity, affected_assets or "", ts, ts))
             self.conn.commit()
