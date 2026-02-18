@@ -1,18 +1,8 @@
-# Copyright (c) 2026 José María Micoli
-# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
-#
-# You may:
-# ✔ Study
-# ✔ Modify
-# ✔ Use for internal security testing
-#
-# You may NOT:
-# ✘ Offer as a commercial service
-# ✘ Sell derived competing products
+<!-- Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'} -->
 
 ## License Update Notice
 
-Starting from version 3.7.1 this project will transition to BSL.
+Starting from version 3.8.0 this project will transition to BSL.
 
 Reason:
 To allow sustainable development, support, and long-term maintenance while keeping the project open and transparent.
