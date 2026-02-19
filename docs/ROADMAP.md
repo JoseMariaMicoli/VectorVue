@@ -905,16 +905,6 @@ Observe → Simulate → Execute → Evaluate → Adapt
 
 ---
 
-Perfecto — ahora sí estamos alineando **el roadmap técnico con el modelo de negocio real** (multi-tenant por compañía, portal solo lectura, y Phase 8 comercializable como analytics defensivo).
-
-A continuación te dejo el roadmap completo **sin omitir nada del original**, pero modificado coherentemente:
-
----
-
-# 🧭 ROADMAP ACTUALIZADO
-
----
-
 ## 🧱 PHASE 6.5: Client Isolation & Pre-Portal Preparation ✅ COMPLETE
 
 **ETA:** Completed February 18, 2026 | **Estimated Lines:** 350-500 | **Status:** `Implemented`
