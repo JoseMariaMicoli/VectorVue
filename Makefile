@@ -48,12 +48,16 @@ PANEL2_CLIENT_ROLE_1 ?= viewer
 PANEL2_CLIENT_USER_2 ?= globex_operator
 PANEL2_CLIENT_PASS_2 ?= GlobexOperat0r!
 PANEL2_CLIENT_ROLE_2 ?= operator
+PANEL1_PORTAL_HOST ?= acme.vectorvue.local
+PANEL2_PORTAL_HOST ?= globex.vectorvue.local
+PORTAL_PROTO ?= https
 
-.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy customer-deploy-isolated phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all phase65-migrate phase7d-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
+.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy customer-deploy-isolated phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
 
 help:
 	@echo "VectorVue PostgreSQL operational targets"
 	@echo "  make pg-reset   - Drop/recreate PostgreSQL public schema"
+	@echo "  make pg-schema-bootstrap - Apply base PostgreSQL schema SQL (idempotent)"
 	@echo "  make pg-migrate - Migrate SQLite to PostgreSQL (truncate target first)"
 	@echo "  make pg-seed    - Backward-compatible alias for make seed-clients"
 	@echo "  make seed-clients - Seed multi-tenant client/demo users + campaigns"
@@ -90,6 +94,7 @@ help:
 	@echo "  SQLITE_DB=vectorvue.db SCHEMA_SQL=sql/postgres_schema.sql"
 	@echo "  CUSTOMER=acme TENANT_NAME='ACME Corp' TENANT_ID=auto"
 	@echo "  PANEL1_TENANT_NAME='ACME Industries' PANEL2_TENANT_NAME='Globex Corporation'"
+	@echo "  PANEL1_PORTAL_HOST=acme.vectorvue.local PANEL2_PORTAL_HOST=globex.vectorvue.local"
 	@echo "  HTTP_HOST_PORT=8080 HTTPS_HOST_PORT=8443 POSTGRES_HOST_PORT=5543"
 
 deploy: api-up phase65-migrate phase7d-migrate api-smoke
@@ -168,7 +173,12 @@ portal-start:
 
 phase7b-check: portal-install portal-build
 
-phase65-migrate:
+pg-schema-bootstrap:
+	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/apply_pg_sql.py \
+		--pg-url $(PG_URL) \
+		--sql $(SCHEMA_SQL)
+
+phase65-migrate: pg-schema-bootstrap
 	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/apply_pg_sql.py \
 		--pg-url $(PG_URL) \
 		--sql sql/phase65_tenant_migration.sql
@@ -252,12 +262,16 @@ print-access-matrix:
 	@echo " - operator: $(OPERATOR_USER) / $(OPERATOR_PASS) (OPERATOR)"
 	@echo "Client Panel 1 ($(PANEL1_TENANT_NAME)):"
 	@echo " - tenant_id: $(PANEL1_TENANT_ID)"
+	@echo " - portal_url: $(PORTAL_PROTO)://$(PANEL1_PORTAL_HOST)/login"
 	@echo " - user1: $(PANEL1_CLIENT_USER_1) / $(PANEL1_CLIENT_PASS_1) ($(PANEL1_CLIENT_ROLE_1))"
 	@echo " - user2: $(PANEL1_CLIENT_USER_2) / $(PANEL1_CLIENT_PASS_2) ($(PANEL1_CLIENT_ROLE_2))"
 	@echo "Client Panel 2 ($(PANEL2_TENANT_NAME)):"
 	@echo " - tenant_id: $(PANEL2_TENANT_ID)"
+	@echo " - portal_url: $(PORTAL_PROTO)://$(PANEL2_PORTAL_HOST)/login"
 	@echo " - user1: $(PANEL2_CLIENT_USER_1) / $(PANEL2_CLIENT_PASS_1) ($(PANEL2_CLIENT_ROLE_1))"
 	@echo " - user2: $(PANEL2_CLIENT_USER_2) / $(PANEL2_CLIENT_PASS_2) ($(PANEL2_CLIENT_ROLE_2))"
+	@echo "Fallback host:"
+	@echo " - portal_url: $(PORTAL_PROTO)://127.0.0.1/login"
 	@echo "==============================="
 
 pg-smoke:

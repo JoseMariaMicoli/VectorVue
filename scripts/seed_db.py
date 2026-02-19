@@ -428,12 +428,55 @@ def seed_client_portal_data(
     now = datetime.now(timezone.utc).isoformat()
     user_id = db.current_user.id if db.current_user else None
 
-    templates = [
+    shared_templates = [
         ("Weak AD Password Policy", 8.4, "T1110", "Password spraying exposed weak domain accounts."),
         ("Unrestricted Lateral Movement Path", 7.6, "T1021", "Service account enabled broad admin pivot paths."),
+        ("Domain Controller Audit Gaps", 7.2, "T1005", "Critical security events were not consistently forwarded."),
+        ("Endpoint EDR Tamper Surface", 8.7, "T1562", "EDR policy exclusions allowed defense evasion paths."),
+        ("Shared Local Admin Credential Reuse", 9.1, "T1550", "Local admin credential reuse enabled rapid lateral spread."),
+        ("Weak Backup Repository Segmentation", 8.0, "T1490", "Backup services were reachable from user VLAN segments."),
+        ("Stale Privileged Accounts Active", 7.5, "T1078", "Dormant privileged identities remained enabled."),
+        ("Insecure GPO Script Path", 8.3, "T1059", "Startup scripts were writable by non-admin principals."),
     ]
 
-    for camp in campaign_ids:
+    campaign_profile_templates = [
+        [
+            ("Public VPN Portal Brute-Forceable", 7.9, "T1110", "Rate limits and MFA controls were inconsistently enforced."),
+            ("Legacy External Appliance Firmware", 8.1, "T1190", "Unpatched edge appliance exposed known exploit chain."),
+            ("Open Redirect in SSO Flow", 6.9, "T1189", "SSO redirect logic enabled credential interception scenarios."),
+            ("Web Upload Content Validation Weakness", 7.4, "T1505", "Uploaded payloads bypassed extension validation."),
+            ("Phishing-Resistant MFA Coverage Gap", 8.2, "T1566", "High-value users were exempted from strong MFA."),
+            ("Unaudited API Token Sprawl", 7.8, "T1552", "Long-lived API tokens lacked owner and rotation metadata."),
+            ("Exposed CI Build Secrets", 8.6, "T1552", "Pipeline logs leaked service credentials to non-privileged users."),
+            ("Public Object Storage Misconfiguration", 7.7, "T1530", "Sensitive exports were reachable without signed URLs."),
+            ("Legacy Email Gateway Bypass", 7.1, "T1566", "Mail filtering policy exceptions allowed payload delivery."),
+            ("Password Reset Workflow Enumeration", 6.8, "T1589", "Account recovery endpoint leaked valid user identifiers."),
+            ("Outdated VPN Client Certificate Policy", 7.3, "T1556", "Certificate validation rules allowed weak client trust."),
+            ("Unrestricted Helpdesk Reset Actions", 8.0, "T1078", "Helpdesk workflow could reset privileged accounts without approval."),
+            ("Cloud Console Session Timeout Gap", 7.0, "T1539", "Long-lived browser sessions increased takeover blast radius."),
+            ("Third-Party SSO Trust Drift", 7.6, "T1556", "External identity trust mappings were not periodically validated."),
+        ],
+        [
+            ("Kerberos Delegation Misconfiguration", 8.2, "T1558", "Constrained delegation boundaries were bypassable."),
+            ("Excessive Service Account Privileges", 8.1, "T1078", "Service principals had unnecessary privileged rights."),
+            ("Tier-0 Admin Workstation Exposure", 8.9, "T1021", "Privileged admin logons occurred on non-hardened hosts."),
+            ("AD CS Template Abuse Path", 9.0, "T1552", "Certificate template ACLs enabled privilege escalation."),
+            ("Unconstrained Delegation Hosts Present", 8.5, "T1558", "Legacy unconstrained delegation remained enabled on servers."),
+            ("LAPS Deployment Coverage Gap", 7.6, "T1078", "Local admin password rotation was not uniformly enforced."),
+            ("Privileged Group Nesting Sprawl", 8.0, "T1098", "Nested groups obscured effective privileged access paths."),
+            ("RDP Exposure From User VLAN", 7.8, "T1021", "Direct RDP paths enabled noisy but viable pivot opportunities."),
+            ("Backup Admin Account Reuse", 8.4, "T1078", "Backup administrators reused credentials across environments."),
+            ("GMSA Scope Misconfiguration", 7.7, "T1078", "Group managed service account scopes exceeded workload boundaries."),
+            ("DCSync Guardrail Weakness", 9.2, "T1003", "Directory replication permissions enabled credential theft risk."),
+            ("Tiering Boundary Firewall Drift", 7.4, "T1562", "Policy drift opened cross-tier management channels."),
+            ("SIEM Correlation Rule Blind Spot", 7.1, "T1059", "Multi-stage attack telemetry was not correlated into incidents."),
+            ("Persistence Artifact Cleanup Gap", 6.9, "T1053", "Expired persistence artifacts remained active in scheduled tasks."),
+        ],
+    ]
+
+    for camp_idx, camp in enumerate(campaign_ids):
+        profile_templates = campaign_profile_templates[camp_idx % len(campaign_profile_templates)]
+        templates = profile_templates + shared_templates
         finding_ids: list[int] = []
         for idx, (title, cvss, mitre, desc) in enumerate(templates, start=1):
             scoped_title = f"{title} [campaign:{camp}]"
@@ -473,51 +516,81 @@ def seed_client_portal_data(
                 fid = int(c.lastrowid)
             finding_ids.append(fid)
 
-            evidence_hash = hashlib.sha256(f"evidence:{tenant_id}:{camp}:{idx}".encode()).hexdigest()
-            c.execute(
-                """INSERT INTO evidence_items
-                   (campaign_id, finding_id, artifact_type, description, sha256_hash, collected_by,
-                    collection_method, collected_timestamp, source_host, technique_id,
-                    approval_status, approved_by, approval_timestamp, immutable, tenant_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT (sha256_hash) DO NOTHING""",
-                (
-                    camp,
-                    fid,
-                    "screenshot",
-                    f"Seed evidence for finding {fid}",
-                    evidence_hash,
-                    user_id,
-                    "seed_db",
-                    now,
-                    f"seed-host-{camp}",
-                    mitre,
-                    "approved",
-                    user_id,
-                    now,
-                    1,
-                    tenant_id,
-                ),
-            )
-
-            task_title = f"Remediate finding {fid}"
-            c.execute(
-                "SELECT id FROM remediation_tasks WHERE tenant_id=? AND title=?",
-                (tenant_id, task_title),
-            )
-            if not c.fetchone():
+            evidence_templates = [
+                ("screenshot", "Operator screenshot showing exploit path validation."),
+                ("pcap", "Captured network telemetry supporting lateral movement narrative."),
+                ("log", "Security control logs correlated to the observed adversary technique."),
+            ]
+            for ev_idx, (artifact_type, ev_desc) in enumerate(evidence_templates, start=1):
+                evidence_hash = hashlib.sha256(
+                    f"evidence:{tenant_id}:{camp}:{idx}:{ev_idx}:{artifact_type}".encode()
+                ).hexdigest()
                 c.execute(
-                    """INSERT INTO remediation_tasks (finding_id, title, status, created_at, tenant_id)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (fid, task_title, "open", now, tenant_id),
+                    """INSERT INTO evidence_items
+                       (campaign_id, finding_id, artifact_type, description, sha256_hash, collected_by,
+                        collection_method, collected_timestamp, source_host, technique_id,
+                        approval_status, approved_by, approval_timestamp, immutable, tenant_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT (sha256_hash) DO NOTHING""",
+                    (
+                        camp,
+                        fid,
+                        artifact_type,
+                        f"{ev_desc} (finding={fid}, sample={ev_idx})",
+                        evidence_hash,
+                        user_id,
+                        "seed_db",
+                        now,
+                        f"seed-host-{camp}",
+                        mitre,
+                        "approved",
+                        user_id,
+                        now,
+                        1,
+                        tenant_id,
+                    ),
                 )
 
-        report_title = f"Client Portal Report [campaign:{camp}]"
-        c.execute(
-            "SELECT id FROM client_reports WHERE campaign_id=? AND report_title=? AND tenant_id=?",
-            (camp, report_title, tenant_id),
-        )
-        if not c.fetchone():
+            task_templates = [
+                (f"Remediate finding {fid} - identity controls", "open"),
+                (f"Remediate finding {fid} - segmentation hardening", "in_progress"),
+            ]
+            for task_title, task_status in task_templates:
+                c.execute(
+                    "SELECT id FROM remediation_tasks WHERE tenant_id=? AND title=?",
+                    (tenant_id, task_title),
+                )
+                if not c.fetchone():
+                    c.execute(
+                        """INSERT INTO remediation_tasks (finding_id, title, status, created_at, tenant_id)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (fid, task_title, task_status, now, tenant_id),
+                    )
+
+        if camp_idx % len(campaign_profile_templates) == 0:
+            report_templates = [
+                ("Executive Summary - Initial Access Focus", "final"),
+                ("Perimeter Attack Surface Detail", "approved"),
+                ("Identity Control Hardening Plan", "published"),
+                ("Risk Trend Quarterly Pack", "final"),
+                ("External Exposure Validation Pack", "published"),
+            ]
+        else:
+            report_templates = [
+                ("Executive Summary - Lateral Movement Focus", "final"),
+                ("Privilege Escalation Detail", "approved"),
+                ("Remediation Progress Matrix", "published"),
+                ("Risk Trend Quarterly Pack", "final"),
+                ("Tier-0 Protection Deep Dive", "approved"),
+            ]
+        for report_suffix, report_status in report_templates:
+            report_title = f"{report_suffix} [campaign:{camp}]"
+            c.execute(
+                "SELECT id FROM client_reports WHERE campaign_id=? AND report_title=? AND tenant_id=?",
+                (camp, report_title, tenant_id),
+            )
+            if c.fetchone():
+                continue
             c.execute(
                 """INSERT INTO client_reports
                    (campaign_id, client_name, report_title, report_date, generated_at, generated_by,
@@ -537,7 +610,7 @@ def seed_client_portal_data(
                     1,
                     "",
                     "Seeded by VectorVue",
-                    "final",
+                    report_status,
                     "",
                     "",
                     now,

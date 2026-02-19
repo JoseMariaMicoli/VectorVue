@@ -9,6 +9,18 @@ from pathlib import Path
 import psycopg
 
 
+def _normalize_hash_comments(sql_blob: str) -> str:
+    """Convert shell-style # comments to SQL -- comments for compatibility."""
+    out_lines: list[str] = []
+    for line in sql_blob.splitlines():
+        if line.lstrip().startswith("#"):
+            indent = line[: len(line) - len(line.lstrip())]
+            out_lines.append(f"{indent}-- {line.lstrip()[1:].lstrip()}")
+        else:
+            out_lines.append(line)
+    return "\n".join(out_lines)
+
+
 def _split_sql_statements(sql_blob: str) -> list[str]:
     """Split SQL script into statements while respecting quoted blocks."""
     statements: list[str] = []
@@ -115,7 +127,7 @@ def main() -> int:
     if not sql_path.exists():
         raise FileNotFoundError(f"SQL file not found: {sql_path}")
 
-    sql_blob = sql_path.read_text(encoding="utf-8")
+    sql_blob = _normalize_hash_comments(sql_path.read_text(encoding="utf-8"))
     statements = _split_sql_statements(sql_blob)
 
     with psycopg.connect(args.pg_url, autocommit=False) as conn:

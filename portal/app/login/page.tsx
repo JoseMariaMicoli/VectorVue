@@ -21,11 +21,11 @@ function renderError(code?: string): string | null {
 
 export default function LoginPage({ searchParams }: LoginPageProps) {
   if (cookies().get('vv_access_token')?.value) {
-    redirect('/portal/findings');
+    redirect('/portal/overview');
   }
   const host = headers().get('x-forwarded-host') ?? headers().get('host');
   const mappedTenant = resolveTenantFromHost(host);
-  const redirectPath = searchParams?.redirect ?? '/portal/findings';
+  const redirectPath = searchParams?.redirect ?? '/portal/overview';
   const error = renderError(searchParams?.error) ?? (!mappedTenant ? 'This host is not mapped to a tenant.' : null);
 
   return (
