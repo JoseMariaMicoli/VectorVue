@@ -10,7 +10,8 @@ Use this index by role and task, not by internal phase names.
 ### Client Stakeholder (Portal User)
 1. [CLIENT_PORTAL_MANUAL.md](./CLIENT_PORTAL_MANUAL.md)
 2. [DEMO_ACCESS_MATRIX.md](./DEMO_ACCESS_MATRIX.md)
-3. [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)
+3. [PHASE8_CLIENT_ANALYTICS_MANUAL.md](./PHASE8_CLIENT_ANALYTICS_MANUAL.md)
+4. [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)
 
 ### Security Operator / Delivery Team
 1. [GETTING_STARTED.md](./GETTING_STARTED.md)
@@ -21,8 +22,9 @@ Use this index by role and task, not by internal phase names.
 ### API / Integration Engineer
 1. [CLIENT_API_MANUAL.md](./CLIENT_API_MANUAL.md)
 2. [PORTAL_TELEMETRY_MANUAL.md](./PORTAL_TELEMETRY_MANUAL.md)
-3. [POSTGRES_USAGE_GUIDE.md](./POSTGRES_USAGE_GUIDE.md)
-4. [Deployment.md](./Deployment.md)
+3. [PHASE8_CLIENT_ANALYTICS_MANUAL.md](./PHASE8_CLIENT_ANALYTICS_MANUAL.md)
+4. [POSTGRES_USAGE_GUIDE.md](./POSTGRES_USAGE_GUIDE.md)
+5. [Deployment.md](./Deployment.md)
 
 ### Platform Engineer / SRE
 1. [Deployment.md](./Deployment.md)
@@ -38,6 +40,7 @@ Use this index by role and task, not by internal phase names.
 - Deploy and harden stack: [Deployment.md](./Deployment.md)
 - Telemetry analytics SQL (MTTA/MTTR): [PHASE7E_TELEMETRY_QUERIES.sql](./PHASE7E_TELEMETRY_QUERIES.sql)
 - Telemetry behavior and privacy model: [PORTAL_TELEMETRY_MANUAL.md](./PORTAL_TELEMETRY_MANUAL.md)
+- Phase 8 commercial analytics (portal + API): [PHASE8_CLIENT_ANALYTICS_MANUAL.md](./PHASE8_CLIENT_ANALYTICS_MANUAL.md)
 
 ## Navigation and UX
 
@@ -55,5 +58,5 @@ Use this index by role and task, not by internal phase names.
 ## Version Scope
 
 - Current: **v4.1**
-- Implemented product capabilities: operator platform + client portal + telemetry dataset pipeline
-- Planned: **Phase 8** (see roadmap)
+- Implemented product capabilities: operator platform + client portal + telemetry dataset pipeline + commercial analytics
+- Current release includes **Phase 8** client analytics and explainable ML outputs

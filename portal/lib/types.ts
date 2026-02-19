@@ -74,3 +74,11 @@ export type ClientTheme = {
     success: string;
   };
 };
+
+export type ClientMLInsight = {
+  score: number;
+  confidence: number;
+  explanation: string;
+  model_version: string;
+  generated_at: string;
+};

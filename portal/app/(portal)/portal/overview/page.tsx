@@ -15,7 +15,7 @@ import RiskCard from '@/components/RiskCard';
 import TrendChart from '@/components/TrendChart';
 import { Card } from '@/components/ui/card';
 import { trackDashboardView } from '@/lib/telemetry';
-import type { ClientFinding, ClientReport, Paginated, RemediationTask, RiskSummary } from '@/lib/types';
+import type { ClientFinding, ClientMLInsight, ClientReport, Paginated, RemediationTask, RiskSummary } from '@/lib/types';
 
 type TrendPoint = { day: string; score: number };
 type RemediationResponse = { items: RemediationTask[] };
@@ -65,6 +65,10 @@ export default function OverviewPage() {
   const [reports, setReports] = useState<ClientReport[]>([]);
   const [remediation, setRemediation] = useState<RemediationTask[]>([]);
   const [remediationSummary, setRemediationSummary] = useState<RemediationSummary | null>(null);
+  const [securityScore, setSecurityScore] = useState<ClientMLInsight | null>(null);
+  const [residualRisk, setResidualRisk] = useState<ClientMLInsight | null>(null);
+  const [detectionGaps, setDetectionGaps] = useState<ClientMLInsight | null>(null);
+  const [anomalies, setAnomalies] = useState<ClientMLInsight | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,13 +82,17 @@ export default function OverviewPage() {
     async function run() {
       try {
         setLoading(true);
-        const [riskRes, trendRes, findingsRes, reportsRes, remediationRes, remediationStatusRes] = await Promise.all([
+        const [riskRes, trendRes, findingsRes, reportsRes, remediationRes, remediationStatusRes, mlSecurityRes, mlRiskRes, mlGapsRes, mlAnomaliesRes] = await Promise.all([
           fetch('/api/proxy/risk', { credentials: 'include', cache: 'no-store' }),
           fetch('/api/proxy/risk-trend', { credentials: 'include', cache: 'no-store' }),
           fetch('/api/proxy/findings?page=1&page_size=200', { credentials: 'include', cache: 'no-store' }),
           fetch('/api/proxy/reports?page=1&page_size=200', { credentials: 'include', cache: 'no-store' }),
           fetch('/api/proxy/remediation', { credentials: 'include', cache: 'no-store' }),
-          fetch('/api/proxy/remediation-status', { credentials: 'include', cache: 'no-store' })
+          fetch('/api/proxy/remediation-status', { credentials: 'include', cache: 'no-store' }),
+          fetch('/api/proxy/ml/security-score', { credentials: 'include', cache: 'no-store' }),
+          fetch('/api/proxy/ml/risk', { credentials: 'include', cache: 'no-store' }),
+          fetch('/api/proxy/ml/detection-gaps', { credentials: 'include', cache: 'no-store' }),
+          fetch('/api/proxy/ml/anomalies', { credentials: 'include', cache: 'no-store' })
         ]);
 
         if (!riskRes.ok) throw new Error(`Risk API ${riskRes.status}`);
@@ -108,6 +116,10 @@ export default function OverviewPage() {
         setReports(reportsData.items ?? []);
         setRemediation(remediationData.items ?? []);
         setRemediationSummary(remediationStatusData);
+        setSecurityScore(mlSecurityRes.ok ? ((await mlSecurityRes.json()) as ClientMLInsight) : null);
+        setResidualRisk(mlRiskRes.ok ? ((await mlRiskRes.json()) as ClientMLInsight) : null);
+        setDetectionGaps(mlGapsRes.ok ? ((await mlGapsRes.json()) as ClientMLInsight) : null);
+        setAnomalies(mlAnomaliesRes.ok ? ((await mlAnomaliesRes.json()) as ClientMLInsight) : null);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'Failed to load overview');
       } finally {
@@ -191,6 +203,13 @@ export default function OverviewPage() {
         <RiskCard label="Total Findings" value={findings.length} tone={(risk.critical + risk.high) > 0 ? 'high' : 'neutral'} />
         <RiskCard label="Active Remediation" value={(remediationSummary?.open_tasks ?? 0) + (remediationSummary?.in_progress_tasks ?? 0)} tone="high" />
         <RiskCard label="Published Reports" value={reports.length} />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <RiskCard label="ML Security Score" value={securityScore ? securityScore.score.toFixed(2) : 'N/A'} tone="neutral" />
+        <RiskCard label="ML Residual Risk" value={residualRisk ? residualRisk.score.toFixed(2) : 'N/A'} tone="high" />
+        <RiskCard label="ML Detection Coverage" value={detectionGaps ? detectionGaps.score.toFixed(2) : 'N/A'} tone="neutral" />
+        <RiskCard label="ML Baseline Anomaly" value={anomalies ? anomalies.score.toFixed(2) : 'N/A'} tone={anomalies && anomalies.score >= 0.6 ? 'critical' : 'neutral'} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

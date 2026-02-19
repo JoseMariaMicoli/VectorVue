@@ -53,6 +53,7 @@ Output location: `deploy/certs/`.
 - `server.crt` + `server.key`: nginx TLS termination (and optional PostgreSQL TLS)
 - `ca.crt`: trust anchor
 - `client.crt` + `client.key`: Phase 7/7.5.0 mTLS test client
+- `client.crt` + `client.key`: portal/API mTLS and analytics integration tests
 
 Certificates are mounted into containers read-only.
 
@@ -65,6 +66,7 @@ make deploy
 Services:
 - `vectorvue_app`: FastAPI client-safe REST API (`vv_client_api.py`) on `:8080`
 - `vectorvue_runtime`: RuntimeExecutor background worker (`vv_core_postgres.py --mode service`)
+- `vectorvue_ml_worker`: asynchronous training/inference/retraining worker (Phase 8)
 - `postgres`: primary database, SSL enabled, WAL archive enabled
 - `redis`: cache/task coordination backend
 - `nginx`: TLS 1.3 reverse proxy and secure headers

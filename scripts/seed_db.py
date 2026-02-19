@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import sys
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -414,19 +415,26 @@ def resolve_active_tenant_id(db: Database) -> str | None:
     return "00000000-0000-0000-0000-000000000001"
 
 
+def _to_json(payload: dict) -> str:
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
+
 def seed_client_portal_data(
     db: Database,
     campaign_ids: list[int],
     operator: str,
     tenant_id: str | None,
     client_name: str,
-) -> None:
+) -> dict[str, list[int]]:
     """Seed findings/reports/remediation/evidence so Phase 7 portal is not empty."""
     if not tenant_id:
-        return
+        return {"finding_ids": [], "report_ids": [], "remediation_ids": []}
     c = db.conn.cursor()
     now = datetime.now(timezone.utc).isoformat()
     user_id = db.current_user.id if db.current_user else None
+    seeded_finding_ids: list[int] = []
+    seeded_report_ids: list[int] = []
+    seeded_remediation_ids: list[int] = []
 
     shared_templates = [
         ("Weak AD Password Policy", 8.4, "T1110", "Password spraying exposed weak domain accounts."),
@@ -515,6 +523,7 @@ def seed_client_portal_data(
                 )
                 fid = int(c.lastrowid)
             finding_ids.append(fid)
+            seeded_finding_ids.append(fid)
 
             evidence_templates = [
                 ("screenshot", "Operator screenshot showing exploit path validation."),
@@ -560,12 +569,16 @@ def seed_client_portal_data(
                     "SELECT id FROM remediation_tasks WHERE tenant_id=? AND title=?",
                     (tenant_id, task_title),
                 )
-                if not c.fetchone():
+                existing_task = c.fetchone()
+                if existing_task:
+                    seeded_remediation_ids.append(int(existing_task["id"]))
+                else:
                     c.execute(
                         """INSERT INTO remediation_tasks (finding_id, title, status, created_at, tenant_id)
                            VALUES (?, ?, ?, ?, ?)""",
                         (fid, task_title, task_status, now, tenant_id),
                     )
+                    seeded_remediation_ids.append(int(c.lastrowid))
 
         if camp_idx % len(campaign_profile_templates) == 0:
             report_templates = [
@@ -617,6 +630,351 @@ def seed_client_portal_data(
                     tenant_id,
                 ),
             )
+            seeded_report_ids.append(int(c.lastrowid))
+
+    db.conn.commit()
+    return {
+        "finding_ids": sorted(set(seeded_finding_ids)),
+        "report_ids": sorted(set(seeded_report_ids)),
+        "remediation_ids": sorted(set(seeded_remediation_ids)),
+    }
+
+
+def seed_phase8_analytics_data(
+    db: Database,
+    tenant_id: str | None,
+    campaign_ids: list[int],
+    portal_seed: dict[str, list[int]],
+) -> None:
+    """Seed telemetry + analytics schema to make Phase 8 dashboards immediately useful."""
+    if not tenant_id or getattr(db, "db_backend", "").lower() != "postgres":
+        return
+
+    finding_ids = portal_seed.get("finding_ids", [])
+    report_ids = portal_seed.get("report_ids", [])
+    remediation_ids = portal_seed.get("remediation_ids", [])
+    if not finding_ids and not report_ids and not remediation_ids:
+        return
+
+    c = db.conn.cursor()
+    user_id = db.current_user.id if db.current_user else None
+    now = datetime.now(timezone.utc)
+    ts = lambda dt: dt.astimezone(timezone.utc).isoformat()
+
+    c.execute("SELECT COUNT(*) AS n FROM client_activity_events WHERE tenant_id=?", (tenant_id,))
+    client_event_count = int(c.fetchone()["n"])
+    if client_event_count < 180:
+        for idx, finding_id in enumerate(finding_ids[:32]):
+            base_ts = now - timedelta(hours=72 - idx)
+            severity = "critical" if idx % 5 == 0 else "high" if idx % 3 == 0 else "medium"
+            c.execute(
+                """INSERT INTO client_activity_events
+                   (id, tenant_id, user_id, event_type, object_type, object_id, severity, timestamp, metadata_json)
+                   VALUES (?, ?, ?, 'FINDING_VIEWED', 'finding', ?, ?, ?, ?::jsonb)""",
+                (
+                    str(uuid.uuid4()),
+                    tenant_id,
+                    user_id,
+                    str(finding_id),
+                    severity,
+                    ts(base_ts),
+                    _to_json({"source": "seed_db", "phase": "7.5.0"}),
+                ),
+            )
+            if idx % 2 == 0:
+                c.execute(
+                    """INSERT INTO client_activity_events
+                       (id, tenant_id, user_id, event_type, object_type, object_id, severity, timestamp, metadata_json)
+                       VALUES (?, ?, ?, 'FINDING_ACKNOWLEDGED', 'finding', ?, ?, ?, ?::jsonb)""",
+                    (
+                        str(uuid.uuid4()),
+                        tenant_id,
+                        user_id,
+                        str(finding_id),
+                        severity,
+                        ts(base_ts + timedelta(minutes=20 + idx)),
+                        _to_json({"source": "seed_db", "phase": "7.5.0"}),
+                    ),
+                )
+
+        for idx, remediation_id in enumerate(remediation_ids[:28]):
+            opened_ts = now - timedelta(hours=58 - idx)
+            c.execute(
+                """INSERT INTO client_activity_events
+                   (id, tenant_id, user_id, event_type, object_type, object_id, severity, timestamp, metadata_json)
+                   VALUES (?, ?, ?, 'REMEDIATION_OPENED', 'remediation', ?, NULL, ?, ?::jsonb)""",
+                (
+                    str(uuid.uuid4()),
+                    tenant_id,
+                    user_id,
+                    str(remediation_id),
+                    ts(opened_ts),
+                    _to_json({"status": "in_progress", "source": "seed_db"}),
+                ),
+            )
+            if idx % 3 != 0:
+                c.execute(
+                    """INSERT INTO client_activity_events
+                       (id, tenant_id, user_id, event_type, object_type, object_id, severity, timestamp, metadata_json)
+                       VALUES (?, ?, ?, 'REMEDIATION_COMPLETED', 'remediation', ?, NULL, ?, ?::jsonb)""",
+                    (
+                        str(uuid.uuid4()),
+                        tenant_id,
+                        user_id,
+                        str(remediation_id),
+                        ts(opened_ts + timedelta(hours=8 + (idx % 4) * 3)),
+                        _to_json({"status": "completed", "source": "seed_db"}),
+                    ),
+                )
+
+        for idx, report_id in enumerate(report_ids[:20]):
+            c.execute(
+                """INSERT INTO client_activity_events
+                   (id, tenant_id, user_id, event_type, object_type, object_id, severity, timestamp, metadata_json)
+                   VALUES (?, ?, ?, 'REPORT_DOWNLOADED', 'report', ?, NULL, ?, ?::jsonb)""",
+                (
+                    str(uuid.uuid4()),
+                    tenant_id,
+                    user_id,
+                    str(report_id),
+                    ts(now - timedelta(hours=36 - idx)),
+                    _to_json({"format": "pdf", "source": "seed_db"}),
+                ),
+            )
+
+        for idx, dashboard in enumerate(["overview", "risk", "remediation", "analytics"] * 6):
+            c.execute(
+                """INSERT INTO client_activity_events
+                   (id, tenant_id, user_id, event_type, object_type, object_id, severity, timestamp, metadata_json)
+                   VALUES (?, ?, ?, 'DASHBOARD_VIEWED', 'dashboard', ?, NULL, ?, ?::jsonb)""",
+                (
+                    str(uuid.uuid4()),
+                    tenant_id,
+                    user_id,
+                    dashboard,
+                    ts(now - timedelta(hours=30 - idx)),
+                    _to_json({"source": "seed_db"}),
+                ),
+            )
+
+    c.execute("SELECT COUNT(*) AS n FROM analytics.events WHERE tenant_id=?", (tenant_id,))
+    analytics_event_count = int(c.fetchone()["n"])
+    if analytics_event_count < 300:
+        analytics_event_types = [
+            "CAMPAIGN_CREATED",
+            "FINDING_CREATED",
+            "DETECTION_LOGGED",
+            "COMMAND_EXECUTED",
+            "OPERATOR_ACTION",
+            "SESSION_OPENED",
+        ]
+        for idx in range(260):
+            campaign = campaign_ids[idx % max(1, len(campaign_ids))]
+            finding = finding_ids[idx % max(1, len(finding_ids))] if finding_ids else None
+            event_type = analytics_event_types[idx % len(analytics_event_types)]
+            entity_type = "campaign" if idx % 2 == 0 else "finding"
+            entity_id = str(campaign if entity_type == "campaign" or finding is None else finding)
+            payload = {
+                "source": "seed_db",
+                "event_index": idx,
+                "severity": "critical" if idx % 7 == 0 else "high" if idx % 3 == 0 else "medium",
+                "campaign_id": campaign,
+                "operator": "redteam_admin",
+            }
+            c.execute(
+                """INSERT INTO analytics.events
+                   (id, tenant_id, event_type, entity_type, entity_id, timestamp, payload, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?)""",
+                (
+                    str(uuid.uuid4()),
+                    tenant_id,
+                    event_type,
+                    entity_type,
+                    entity_id,
+                    ts(now - timedelta(hours=120 - idx)),
+                    _to_json(payload),
+                    ts(now - timedelta(hours=120 - idx)),
+                ),
+            )
+
+    model_specs = {
+        "control_effectiveness": {"algorithm": "RandomForestClassifier", "score": 0.78, "confidence": 0.83},
+        "residual_risk": {"algorithm": "GradientBoostingRegressor", "score": 0.62, "confidence": 0.79},
+        "detection_coverage": {"algorithm": "RandomForestClassifier", "score": 0.71, "confidence": 0.8},
+        "baseline_behavior": {"algorithm": "IsolationForest", "score": 0.21, "confidence": 0.76},
+        "defense_improvement_projection": {"algorithm": "GradientBoostingRegressor", "score": 0.34, "confidence": 0.74},
+        "next_step_prediction": {"algorithm": "RandomForestClassifier", "score": 0.82, "confidence": 0.77},
+        "path_success_probability": {"algorithm": "RandomForestClassifier", "score": 0.74, "confidence": 0.75},
+        "operator_efficiency_score": {"algorithm": "GradientBoostingRegressor", "score": 0.69, "confidence": 0.72},
+    }
+    model_version = "phase8-demo-v1"
+    model_ids: dict[str, int] = {}
+
+    for task, spec in model_specs.items():
+        c.execute(
+            """INSERT INTO analytics.models
+               (tenant_id, task, version, dataset_hash, algorithm, hyperparameters, metrics, stage, created_at)
+               VALUES (?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, 'production', ?)
+               ON CONFLICT (tenant_id, task, version) DO UPDATE SET
+                 algorithm=EXCLUDED.algorithm,
+                 hyperparameters=EXCLUDED.hyperparameters,
+                 metrics=EXCLUDED.metrics,
+                 stage='production'""",
+            (
+                tenant_id,
+                task,
+                model_version,
+                hashlib.sha256(f"{tenant_id}:{task}:{model_version}".encode()).hexdigest(),
+                spec["algorithm"],
+                _to_json({"n_estimators": 120, "max_depth": 8, "seed": 42}),
+                _to_json({"f1": 0.79, "precision": 0.81, "recall": 0.76, "mae": 0.24}),
+                ts(now),
+            ),
+        )
+        c.execute(
+            "SELECT id FROM analytics.models WHERE tenant_id=? AND task=? AND version=? LIMIT 1",
+            (tenant_id, task, model_version),
+        )
+        model_row = c.fetchone()
+        if not model_row:
+            raise RuntimeError(f"unable to load seeded model id for task '{task}'")
+        model_ids[task] = int(model_row["id"])
+
+    def _insert_prediction(task: str, entity_id: str, score: float, confidence: float) -> None:
+        model_id = model_ids[task]
+        c.execute(
+            "SELECT 1 FROM analytics.predictions WHERE tenant_id=? AND model_id=? AND entity_id=? LIMIT 1",
+            (tenant_id, model_id, entity_id),
+        )
+        if c.fetchone():
+            return
+        c.execute(
+            """INSERT INTO analytics.predictions
+               (tenant_id, model_id, entity_id, prediction, explanation, created_at)
+               VALUES (?, ?, ?, ?::jsonb, ?::jsonb, ?)""",
+            (
+                tenant_id,
+                model_id,
+                entity_id,
+                _to_json({"score": score, "confidence": confidence}),
+                _to_json(
+                    {
+                        "top_factors": [
+                            {"feature": "detection_rate", "impact": 0.31},
+                            {"feature": "mean_time_to_detect", "impact": 0.23},
+                            {"feature": "privilege_escalation_count", "impact": 0.18},
+                        ]
+                    }
+                ),
+                ts(now),
+            ),
+        )
+
+    _insert_prediction(
+        "control_effectiveness",
+        tenant_id,
+        float(model_specs["control_effectiveness"]["score"]),
+        float(model_specs["control_effectiveness"]["confidence"]),
+    )
+    _insert_prediction(
+        "residual_risk",
+        tenant_id,
+        float(model_specs["residual_risk"]["score"]),
+        float(model_specs["residual_risk"]["confidence"]),
+    )
+    _insert_prediction(
+        "detection_coverage",
+        tenant_id,
+        float(model_specs["detection_coverage"]["score"]),
+        float(model_specs["detection_coverage"]["confidence"]),
+    )
+    _insert_prediction(
+        "baseline_behavior",
+        tenant_id,
+        float(model_specs["baseline_behavior"]["score"]),
+        float(model_specs["baseline_behavior"]["confidence"]),
+    )
+    _insert_prediction(
+        "defense_improvement_projection",
+        tenant_id,
+        float(model_specs["defense_improvement_projection"]["score"]),
+        float(model_specs["defense_improvement_projection"]["confidence"]),
+    )
+    for campaign_id in campaign_ids:
+        _insert_prediction(
+            "next_step_prediction",
+            str(campaign_id),
+            float(model_specs["next_step_prediction"]["score"]),
+            float(model_specs["next_step_prediction"]["confidence"]),
+        )
+        _insert_prediction(
+            "path_success_probability",
+            str(campaign_id),
+            float(model_specs["path_success_probability"]["score"]),
+            float(model_specs["path_success_probability"]["confidence"]),
+        )
+        _insert_prediction(
+            "operator_efficiency_score",
+            str(campaign_id),
+            float(model_specs["operator_efficiency_score"]["score"]),
+            float(model_specs["operator_efficiency_score"]["confidence"]),
+        )
+
+    for task, model_id in model_ids.items():
+        c.execute(
+            "SELECT 1 FROM analytics.model_health WHERE tenant_id=? AND model_id=? LIMIT 1",
+            (tenant_id, model_id),
+        )
+        if c.fetchone():
+            continue
+        c.execute(
+            """INSERT INTO analytics.model_health
+               (tenant_id, model_id, feature_drift_score, prediction_drift_score, alert_triggered, recorded_at, details)
+               VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)""",
+            (
+                tenant_id,
+                model_id,
+                0.11 if task != "baseline_behavior" else 0.18,
+                0.09 if task != "baseline_behavior" else 0.22,
+                task == "baseline_behavior",
+                ts(now),
+                _to_json({"task": task, "threshold": 0.25}),
+            ),
+        )
+
+    c.execute(
+        """INSERT INTO analytics.tenant_security_summary
+           (tenant_id, security_posture, trend, maturity_level, updated_at, generated_by_model_version)
+           VALUES (?, ?::jsonb, ?::jsonb, ?, ?, ?)
+           ON CONFLICT (tenant_id) DO UPDATE SET
+             security_posture=EXCLUDED.security_posture,
+             trend=EXCLUDED.trend,
+             maturity_level=EXCLUDED.maturity_level,
+             updated_at=EXCLUDED.updated_at,
+             generated_by_model_version=EXCLUDED.generated_by_model_version""",
+        (
+            tenant_id,
+            _to_json(
+                {
+                    "score": 0.73,
+                    "confidence": 0.81,
+                    "high_risk_findings": max(2, len(finding_ids) // 6),
+                    "open_remediation": max(3, len(remediation_ids) // 4),
+                }
+            ),
+            _to_json(
+                {
+                    "direction": "improving",
+                    "weekly_delta": 0.06,
+                    "mtta_hours": 5.2,
+                    "mttr_hours": 16.8,
+                }
+            ),
+            "advanced",
+            ts(now),
+            model_version,
+        ),
+    )
 
     db.conn.commit()
 
@@ -687,6 +1045,7 @@ def main() -> int:
         ensure_login(db, args.global_admin_user, args.global_admin_pass)
         lead_status = ensure_user_credentials(db, args.operator_lead_user, args.operator_lead_pass, Role.LEAD)
         operator_status = ensure_user_credentials(db, args.operator_user, args.operator_pass, Role.OPERATOR)
+        ensure_login(db, args.global_admin_user, args.global_admin_pass)
 
         panel1_tenant_id = ensure_tenant(db, args.panel1_tenant_id, args.panel1_tenant_name)
         panel2_tenant_id = ensure_tenant(db, args.panel2_tenant_id, args.panel2_tenant_name)
@@ -705,14 +1064,20 @@ def main() -> int:
             camp_id = get_or_create_campaign(db, campaign_name, tenant_id=panel1_tenant_id)
             seed_campaign(db, camp_id, op_name, args.global_admin_user, c2_name)
             seeded_panel1_ids.append(camp_id)
-        seed_client_portal_data(db, seeded_panel1_ids, args.global_admin_user, panel1_tenant_id, args.panel1_tenant_name)
+        panel1_portal_seed = seed_client_portal_data(
+            db, seeded_panel1_ids, args.global_admin_user, panel1_tenant_id, args.panel1_tenant_name
+        )
+        seed_phase8_analytics_data(db, panel1_tenant_id, seeded_panel1_ids, panel1_portal_seed)
 
         seeded_panel2_ids: list[int] = []
         for campaign_name, op_name, c2_name in panel2_campaigns:
             camp_id = get_or_create_campaign(db, campaign_name, tenant_id=panel2_tenant_id)
             seed_campaign(db, camp_id, op_name, args.global_admin_user, c2_name)
             seeded_panel2_ids.append(camp_id)
-        seed_client_portal_data(db, seeded_panel2_ids, args.global_admin_user, panel2_tenant_id, args.panel2_tenant_name)
+        panel2_portal_seed = seed_client_portal_data(
+            db, seeded_panel2_ids, args.global_admin_user, panel2_tenant_id, args.panel2_tenant_name
+        )
+        seed_phase8_analytics_data(db, panel2_tenant_id, seeded_panel2_ids, panel2_portal_seed)
 
         panel1_client1_status = ensure_user_credentials(
             db,

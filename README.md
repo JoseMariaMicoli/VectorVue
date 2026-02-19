@@ -25,7 +25,7 @@ Previous versions remain under the original license.
 
 ![Status](https://img.shields.io/badge/Status-Operational-39FF14)
 ![Version](https://img.shields.io/badge/Version-4.1-00FFFF)
-![Maturity](https://img.shields.io/badge/Maturity-Phase_7.5.0_Complete-39FF14)
+![Maturity](https://img.shields.io/badge/Maturity-Phase_8_Commercial_Analytics_Complete-39FF14)
 ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
 ![Evidence](https://img.shields.io/badge/Evidence-Defensible-blue)
@@ -76,6 +76,7 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 - Demo users, URLs, and live walkthrough: [Demo Access Matrix](docs/manuals/DEMO_ACCESS_MATRIX.md)
 - API integration runbook: [Client API Manual](docs/manuals/CLIENT_API_MANUAL.md)
 - Telemetry operations and privacy model: [Portal Telemetry Manual](docs/manuals/PORTAL_TELEMETRY_MANUAL.md)
+- Phase 8 client analytics workflows: [Phase 8 Client Analytics Manual](docs/manuals/PHASE8_CLIENT_ANALYTICS_MANUAL.md)
 - Deployment and hardening: [Deployment Guide](docs/manuals/Deployment.md)
 - PostgreSQL operations: [PostgreSQL Usage Guide](docs/manuals/POSTGRES_USAGE_GUIDE.md)
 - Full product guide: [VectorVue User Guide](docs/manuals/VECTORVUE_USER_GUIDE.md)
@@ -106,6 +107,10 @@ polling notifications, multilingual toggle (EN/ES), and brandable UI variables.
 **Phase 7.5.0 — Portal Usage Telemetry (complete)** ✅
 Client telemetry now captures finding views/acknowledgements, remediation actions, report downloads,
 and dashboard consultation frequency for Phase 8 defensive-effectiveness model datasets.
+**Phase 8 — Advanced ML / Analytics (complete)** ✅
+Phase 8 includes tenant-isolated analytics schema, feature store materialization, model registry,
+ml-worker queues, explainable predictions (SHAP), manual promotion workflow, and client-facing
+analytics endpoints integrated in the portal.
 
 ## Multi-Tenant Demo Seed (v4.1)
 
@@ -160,6 +165,7 @@ make seed-clients
 4. Login with viewer account from `docs/manuals/DEMO_ACCESS_MATRIX.md`.
 5. Walk pages in order:
    - `Overview`
+   - `Analytics`
    - `Findings`
    - `Reports`
    - `Remediation`
@@ -360,7 +366,7 @@ Phase 5.5 — Operational cognition ✅ **COMPLETE**
 Phase 6 — Deployment & hardening ✅ **COMPLETE**
 Phase 7 — Client portal (web UI) ✅ **COMPLETE**
 Phase 7.5.0 — Portal usage telemetry ✅ **COMPLETE**
-Phase 8 — Supervised autonomy & analytics
+Phase 8 — Advanced ML / analytics ✅ **COMPLETE**
 
 ---
 
