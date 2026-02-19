@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Jose Maria Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 """Tenant-aware data models for Phase 6.5.
 
 This module is additive and does not modify existing operator-centric storage logic.

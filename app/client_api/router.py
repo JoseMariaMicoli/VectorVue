@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Jose Maria Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 """Phase 7A tenant-isolated public client read-only API router."""
 
 from __future__ import annotations

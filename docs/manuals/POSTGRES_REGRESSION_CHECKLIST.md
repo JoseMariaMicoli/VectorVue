@@ -1,47 +1,44 @@
-<sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
 # PostgreSQL Regression Checklist
 
-## Platform Boot
+Use this checklist before release cutover and after major migrations.
 
-- [ ] `docker compose up -d postgres` reports healthy
-- [ ] `VV_DB_BACKEND=postgres` app launch succeeds
-- [ ] Login/register/auth canary behavior unchanged
+## 1. Platform Boot
 
-## Campaign and Operations
+- [ ] `make deploy` completes without errors
+- [ ] `vectorvue_app` health endpoint reports healthy
+- [ ] login and token issuance operate normally
 
-- [ ] Campaign create/select/list works
-- [ ] Asset and credential CRUD works
-- [ ] Session lifecycle events populate correctly
-- [ ] Detection timeline queries render without SQL errors
-- [ ] Objective and persistence views update correctly
+## 2. Core Workflows
 
-## Cognition Layer (Phase 5.5)
+- [ ] campaign data loads and tenant scoping is correct
+- [ ] findings and evidence APIs return expected payloads
+- [ ] remediation and risk endpoints return expected payloads
+- [ ] report listing and download paths are functional
 
-- [ ] Opportunities, paths, state, pressure, confidence tabs load
-- [ ] Recommendation scoring and explainability remain deterministic
-- [ ] Replay and tempo metrics populate with campaign telemetry
+## 3. Analytics and Workers
 
-## Reporting and Exports
+- [ ] ML worker is running and queue listener is active
+- [ ] analytics endpoints return score/confidence/explanation contract
+- [ ] no cross-tenant analytics leakage observed
 
-- [ ] Markdown export works
-- [ ] MITRE Navigator JSON export works
-- [ ] PDF/HTML generation completes without DB syntax issues
+## 4. Compliance Assurance
 
-## Security and Audit
+- [ ] compliance workers are running
+- [ ] `/compliance/frameworks` returns signed response envelope
+- [ ] framework score/report endpoints return valid dataset hash
+- [ ] audit window endpoint returns expected counts
 
-- [ ] Audit log inserts continue for mutations
-- [ ] Immutable evidence update/delete protections enforced
-- [ ] HMAC/SHA256 integrity checks return expected results
-- [ ] RBAC checks still block unauthorized actions
+## 5. Data Integrity
 
-## Integrations and Runtime
+- [ ] immutable compliance event behavior enforced
+- [ ] hash-chain validation succeeds for sampled tenant
+- [ ] evidence export package checksums verify
 
-- [ ] Background scheduled tasks execute
-- [ ] Webhook queue processing works
-- [ ] Retention policy execution works
+## 6. Security Controls
 
-## Concurrency
+- [ ] RBAC enforcement works by role
+- [ ] tenant claim enforcement blocks unauthorized scope access
+- [ ] telemetry ingestion respects privacy constraints
 
-- [ ] Multi-operator lock workflows behave correctly
-- [ ] No deadlocks under parallel session activity

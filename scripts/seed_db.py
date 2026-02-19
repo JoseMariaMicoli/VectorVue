@@ -979,6 +979,146 @@ def seed_phase8_analytics_data(
     db.conn.commit()
 
 
+def seed_phase9_compliance_data(
+    db: Database,
+    tenant_id: str | None,
+    campaign_ids: list[int],
+) -> None:
+    """Seed Phase 9 compliance records so demo tenants are audit-ready immediately."""
+    if not tenant_id or getattr(db, "db_backend", "").lower() != "postgres":
+        return
+    if not campaign_ids:
+        return
+
+    # Lazy import keeps script usable even if compliance modules are unavailable.
+    from services.compliance_scoring import compute_continuous_compliance_score
+    from services.control_evaluator import evaluate_control
+    from services.evidence_engine import append_compliance_event
+    from services.framework_mapper import ensure_framework_catalog
+    from workers.observation_worker import derive_observations_for_tenant
+
+    ensure_framework_catalog()
+    c = db.conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    user_id = db.current_user.id if db.current_user else None
+
+    # Add scoped assets and boundaries for applicability/attestation evidence.
+    for camp in campaign_ids:
+        for idx, (asset_name, asset_type, criticality, env, process_name) in enumerate(
+            [
+                (f"tenant-{tenant_id[:8]}-idm-{camp}", "identity", "critical", "prod", "identity-access"),
+                (f"tenant-{tenant_id[:8]}-api-{camp}", "service", "high", "prod", "digital-channels"),
+                (f"tenant-{tenant_id[:8]}-core-net-{camp}", "network", "high", "staging", "network-segmentation"),
+                (f"tenant-{tenant_id[:8]}-erp-{camp}", "system", "critical", "prod", "financial-reporting"),
+            ],
+            start=1,
+        ):
+            c.execute(
+                """UPDATE assets
+                   SET type=?, criticality=?, business_process=?, in_scope=TRUE, tenant_id=?
+                   WHERE tenant_id=? AND name=? AND environment=?""",
+                (asset_type, criticality, process_name, tenant_id, tenant_id, asset_name, env),
+            )
+            if c.rowcount == 0:
+                c.execute(
+                    """INSERT INTO assets (tenant_id, name, type, criticality, environment, business_process, in_scope)
+                       VALUES (?, ?, ?, ?, ?, ?, TRUE)""",
+                    (tenant_id, asset_name, asset_type, criticality, env, process_name),
+                )
+
+            c.execute(
+                """INSERT INTO system_boundaries (tenant_id, description, created_at)
+                   SELECT ?, ?, ?
+                   WHERE NOT EXISTS (
+                     SELECT 1 FROM system_boundaries
+                     WHERE tenant_id=? AND description=?
+                   )""",
+                (
+                    tenant_id,
+                    f"Boundary {idx} for campaign {camp}: {process_name} ({env})",
+                    now,
+                    tenant_id,
+                    f"Boundary {idx} for campaign {camp}: {process_name} ({env})",
+                ),
+            )
+    db.conn.commit()
+
+    # Seed ownership, policy, and attestations for all controls.
+    c.execute("SELECT id, code FROM controls ORDER BY id")
+    controls = [(int(r["id"]), str(r["code"])) for r in c.fetchall()]
+    c.execute("SELECT code FROM frameworks WHERE active=TRUE ORDER BY code")
+    frameworks = [str(r["code"]) for r in c.fetchall()]
+
+    if user_id is not None:
+        for control_id, control_code in controls:
+            c.execute(
+                """INSERT INTO control_owners
+                   (tenant_id, control_id, user_id, responsibility, acknowledged_at, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (tenant_id, control_id, user_id) DO UPDATE SET
+                     responsibility=EXCLUDED.responsibility,
+                     acknowledged_at=EXCLUDED.acknowledged_at""",
+                (
+                    tenant_id,
+                    control_id,
+                    user_id,
+                    f"Accountable owner for {control_code}",
+                    now,
+                    now,
+                ),
+            )
+            c.execute(
+                """INSERT INTO control_policies
+                   (control_id, expected_frequency, failure_threshold, observation_window_days, required_coverage_percent, sampling_method, created_at)
+                   VALUES (?, 3, 0.25, 30, 70, 'full', ?)
+                   ON CONFLICT (control_id) DO UPDATE SET
+                     expected_frequency=EXCLUDED.expected_frequency,
+                     failure_threshold=EXCLUDED.failure_threshold,
+                     observation_window_days=EXCLUDED.observation_window_days,
+                     required_coverage_percent=EXCLUDED.required_coverage_percent,
+                     sampling_method=EXCLUDED.sampling_method""",
+                (control_id, now),
+            )
+
+        c.execute(
+            """INSERT INTO control_attestations (owner_id, attested_at, comment)
+               SELECT co.id, ?, ?
+               FROM control_owners co
+               WHERE co.tenant_id=?
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM control_attestations ca
+                   WHERE ca.owner_id=co.id
+               )""",
+            (now, "Seeded attestation for demo readiness", tenant_id),
+        )
+    db.conn.commit()
+
+    # Build observations from Phase 7/8 activity and evaluate control state.
+    derive_observations_for_tenant(tenant_id=tenant_id, lookback_hours=240)
+    for framework in frameworks:
+        c.execute(
+            """SELECT c.id
+               FROM frameworks f
+               JOIN control_mappings cm ON cm.framework_id=f.id
+               JOIN controls c ON c.id=cm.control_id
+               WHERE f.code=?
+               ORDER BY c.id""",
+            (framework,),
+        )
+        framework_controls = [int(r["id"]) for r in c.fetchall()]
+        for control_id in framework_controls:
+            evaluation = evaluate_control(control_id=control_id, tenant_id=tenant_id, period_days=30)
+            append_compliance_event(
+                tenant_id=tenant_id,
+                framework=framework,
+                control_id=control_id,
+                status=str(evaluation["state"]),
+                payload={"source": "seed_db", "evaluation": evaluation["details"]},
+            )
+        compute_continuous_compliance_score(tenant_id=tenant_id, framework=framework, period_days=30)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed VectorVue DB with realistic Phase 5.5 data.")
     parser.add_argument(
@@ -1068,6 +1208,7 @@ def main() -> int:
             db, seeded_panel1_ids, args.global_admin_user, panel1_tenant_id, args.panel1_tenant_name
         )
         seed_phase8_analytics_data(db, panel1_tenant_id, seeded_panel1_ids, panel1_portal_seed)
+        seed_phase9_compliance_data(db, panel1_tenant_id, seeded_panel1_ids)
 
         seeded_panel2_ids: list[int] = []
         for campaign_name, op_name, c2_name in panel2_campaigns:
@@ -1078,6 +1219,7 @@ def main() -> int:
             db, seeded_panel2_ids, args.global_admin_user, panel2_tenant_id, args.panel2_tenant_name
         )
         seed_phase8_analytics_data(db, panel2_tenant_id, seeded_panel2_ids, panel2_portal_seed)
+        seed_phase9_compliance_data(db, panel2_tenant_id, seeded_panel2_ids)
 
         panel1_client1_status = ensure_user_credentials(
             db,

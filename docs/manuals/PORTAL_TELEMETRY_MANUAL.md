@@ -1,29 +1,31 @@
-<sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
 # VectorVue Portal Telemetry Manual
 
-## Purpose
+This manual defines how client portal telemetry is captured for security intelligence and assurance analytics.
 
-This manual explains portal usage telemetry for defensive intelligence.
-It is not marketing analytics.
+## 1. Purpose
 
-Primary outcomes:
-- measure time to acknowledge risk
-- measure time to remediate
-- measure dashboard and report consultation behavior
-- prepare clean datasets for defensive effectiveness models
+Telemetry supports:
 
-## Privacy Guarantees
+- time-to-acknowledge measurement
+- remediation latency measurement
+- dashboard/report consultation analysis
+- defensive effectiveness model datasets
 
-Telemetry excludes:
+This is not marketing telemetry.
+
+## 2. Privacy Constraints
+
+Telemetry does not store:
+
 - IP addresses
 - user-agent strings
 - keystrokes or typed content
 
-Telemetry includes only workflow actions:
-- page-level and object-level security operations behavior
+Telemetry stores only security workflow actions.
 
-## Event Types
+## 3. Event Types
 
 - `FINDING_VIEWED`
 - `FINDING_ACKNOWLEDGED`
@@ -32,75 +34,51 @@ Telemetry includes only workflow actions:
 - `REPORT_DOWNLOADED`
 - `DASHBOARD_VIEWED`
 
-## Data Model
+## 4. Storage Model
 
 Table: `client_activity_events`
 
-Fields:
-- `id` (uuid)
+Core fields:
+
+- `id`
 - `tenant_id`
 - `user_id` (nullable)
 - `event_type`
-- `object_type` (`finding|report|dashboard|remediation`)
+- `object_type`
 - `object_id`
-- `severity` (nullable snapshot)
+- `severity` (nullable)
 - `timestamp`
 - `metadata_json`
 
-Index:
-- `(tenant_id, timestamp desc)`
+Primary index:
 
-## Runtime Flow
+- `(tenant_id, timestamp DESC)`
 
-1. Portal UI calls `/api/proxy/events`.
-2. Proxy forwards request to `/api/v1/client/events`.
-3. API validates JWT tenant context.
-4. API validates event type/object type.
-5. API applies basic rate limiting.
-6. API sanitizes metadata (drops restricted keys).
-7. API inserts asynchronously in background task.
-8. API returns quickly (`202 Accepted`) without blocking UI.
+## 5. Runtime Flow
 
-Phase 8 linkage:
-9. Telemetry events feed tenant-isolated analytics datasets.
-10. Defensive models consume those datasets for security score, residual risk, and detection gap projections.
+1. Portal calls telemetry endpoint.
+2. API validates tenant auth and event schema.
+3. API applies basic rate limiting.
+4. API sanitizes metadata.
+5. Event is inserted asynchronously.
+6. API returns `202 Accepted` quickly.
 
-## Operational Steps
-
-### Enable telemetry schema
+## 6. Operational Commands
 
 ```bash
 make phase7e-migrate
 make phase8-migrate
-```
-
-### Seed demo and generate events
-
-```bash
 make seed-clients
 ```
 
-Then use portal pages as a normal client:
-- open dashboards
-- open findings
-- open remediation page
-- download reports
-- open analytics page and run simulation
+## 7. Analytics Usage
 
-### Validate event ingestion
+Telemetry data can be used to compute:
 
-```sql
-SELECT tenant_id, event_type, object_type, COUNT(*) AS total
-FROM client_activity_events
-GROUP BY tenant_id, event_type, object_type
-ORDER BY tenant_id, event_type, object_type;
-```
+- MTTA (Mean Time to Acknowledge)
+- MTTR (Mean Time to Remediate)
+- risk awareness behavior
+- defensive responsiveness indicators
 
-## Analytics Queries
+Reference SQL: `docs/manuals/PHASE7E_TELEMETRY_QUERIES.sql`
 
-Use:
-- `docs/manuals/PHASE7E_TELEMETRY_QUERIES.sql`
-
-Included metrics:
-- MTTA (mean time to acknowledge)
-- MTTR (mean time to remediate)

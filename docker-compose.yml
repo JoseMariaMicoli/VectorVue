@@ -90,7 +90,7 @@ services:
       NEXT_PUBLIC_API_URL: http://vectorvue_app:8080
       NEXT_PUBLIC_BRAND_NAME: VectorVue Client Portal
       NEXT_PUBLIC_BRAND_ACCENT: "#22d3ee"
-      VV_TENANT_HOST_MAP: "acme.vectorvue.local=10000000-0000-0000-0000-000000000001|ACME Industries,globex.vectorvue.local=20000000-0000-0000-0000-000000000002|Globex Corporation,vectorvue.local=10000000-0000-0000-0000-000000000001|ACME Industries"
+      VV_TENANT_HOST_MAP: "${VV_TENANT_HOST_MAP:-acme.vectorvue.local=10000000-0000-0000-0000-000000000001|ACME Industries,globex.vectorvue.local=20000000-0000-0000-0000-000000000002|Globex Corporation,vectorvue.local=10000000-0000-0000-0000-000000000001|ACME Industries}"
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
       NODE_ENV: production
@@ -177,6 +177,61 @@ services:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /run:size=16m,nosuid,nodev
     command: ["python", "-m", "analytics.worker"]
+
+  vectorvue_compliance_observation_worker:
+    image: vectorvue:phase6
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_compliance_observation_worker"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      VV_DB_BACKEND: postgres
+      VV_DB_URL: postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
+      VV_REDIS_URL: redis://:strongpassword@redis:6379/0
+      VV_COMPLIANCE_WORKER_LOG_LEVEL: INFO
+    volumes:
+      - vectorvue_logs:/var/lib/vectorvue/logs
+      - vectorvue_tmp:/var/lib/vectorvue/tmp
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /run:size=16m,nosuid,nodev
+    command: ["python", "-m", "workers.observation_worker"]
+
+  vectorvue_compliance_daily_worker:
+    image: vectorvue:phase6
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_compliance_daily_worker"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      VV_DB_BACKEND: postgres
+      VV_DB_URL: postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
+      VV_REDIS_URL: redis://:strongpassword@redis:6379/0
+      VV_COMPLIANCE_WORKER_LOG_LEVEL: INFO
+      VV_COMPLIANCE_SIGNING_KEY: change-me-phase9-compliance-signing-key
+    volumes:
+      - vectorvue_logs:/var/lib/vectorvue/logs
+      - vectorvue_tmp:/var/lib/vectorvue/tmp
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /run:size=16m,nosuid,nodev
+    command: ["python", "-m", "workers.daily_compliance_job"]
 
   postgres:
     image: postgres:16

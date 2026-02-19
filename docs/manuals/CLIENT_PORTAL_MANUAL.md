@@ -1,188 +1,122 @@
-<sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v4.1 Client Portal Manual
+# VectorVue Client Portal Manual
 
-## Scope
+This guide is written for client stakeholders using the portal for security transparency, remediation follow-up, and executive reporting.
 
-This manual explains exactly how a client user logs in and uses every portal page.
-It is intentionally workflow-first and avoids internal engineering naming.
+## 1. Login and Access
 
-The portal is read-only and designed for:
-- security transparency with customers
-- evidence review
-- remediation follow-up
-- report consumption
-- risk communication
-
-## Access
-
-### Prerequisites
-1. Platform stack is up (`make deploy`).
-2. Demo or production users exist (`make seed-clients` for demo).
-3. Correct tenant host is configured.
-
-### Login Procedure (Step-by-Step)
-1. Open the tenant login URL:
+1. Open your tenant URL:
    - `https://acme.vectorvue.local/login`
    - `https://globex.vectorvue.local/login`
-   - fallback: `https://127.0.0.1/login`
-2. Confirm tenant label shown on the login page.
-3. Enter username and password.
-4. Click `Login`.
-5. Verify successful redirect to `/portal/overview`.
+2. Confirm tenant label on screen.
+3. Enter credentials.
+4. Verify redirect to `Overview`.
 
-If login fails, follow the troubleshooting section at the end.
+If login fails, see [Troubleshooting Guide](./TROUBLESHOOTING_GUIDE.md).
 
-## Portal Pages
+## 2. Portal Navigation
 
-### 1) Overview (`/portal/overview`)
+Recommended order for routine review:
 
-Use this page for executive and operational snapshot.
+1. Overview
+2. Analytics
+3. Findings
+4. Remediation
+5. Reports
+6. Risk
 
-Steps:
-1. Open `Overview` from the sidebar.
-2. Read top KPI cards:
-   - overall risk score
-   - total findings
-   - active remediation
-   - published reports
-3. Review bar chart `Findings by Campaign`.
-4. Review bar chart `Remediation by Status`.
-5. Review risk trend chart.
-6. Review `Operational Timeline` list for latest activity.
+## 3. Page-by-Page Workflows
 
-Expected outcome:
-- fast understanding of current client security state.
+### 3.1 Overview
 
-### 2) Findings (`/portal/findings`)
+Use for quick posture review.
 
-Use this page for triage and evidence navigation.
+Check:
 
-Steps:
-1. Open `Findings` from the sidebar.
-2. Use severity dropdown to filter (`All`, `Critical`, `High`, `Medium`, `Low`).
-3. Click `Export JSON` or `Export CSV` when needed.
-4. Click `View` on a finding row.
-5. In detail page, review:
-   - description
-   - CVSS
-   - evidence gallery
-   - timeline visualization
+- total findings
+- high-risk findings
+- active remediation count
+- current risk trend
 
-Expected outcome:
-- identify high-risk findings and inspect proof rapidly.
+### 3.2 Analytics
 
-### 3) Analytics (`/portal/analytics`)
+Use for explainable security intelligence.
 
-Use this page for advanced analytics and executive-grade intelligence.
+Check:
 
-Steps:
-1. Open `Analytics` from the sidebar.
-2. Review top ML cards:
-   - security score
-   - residual risk
-   - detection coverage
-   - anomaly baseline
-   - operator suggestion score
-3. Review `Phase 8 Score Comparison (Bar)` chart.
-4. Review `Latest Explanations` to understand top drivers in plain language.
-5. Review `Model Timeline` and verify `model_version` + `generated_at`.
-6. Click `Run Hardening Simulation` to generate a projection for defense improvements.
+- security score
+- residual risk
+- detection coverage
+- anomaly indicator
+- model version and generation timestamp
 
-Expected outcome:
-- communicate predictive and explainable security insights without exposing internal model details.
+### 3.3 Findings
 
-### 4) Reports (`/portal/reports`)
+Use for technical review and prioritization.
 
-Use this page to consume formal deliverables.
+Actions:
 
-Steps:
-1. Open `Reports` from the sidebar.
-2. Check each report card status.
-3. Click `Download PDF` for presentation and sign-off workflows.
-4. Click `Download HTML` for browser-native sharing and review.
+- filter by severity
+- open finding detail and evidence
+- export JSON/CSV when required
 
-Expected outcome:
-- retrieve approved reporting artifacts with minimal friction.
+### 3.4 Remediation
 
-### 5) Risk (`/portal/risk`)
+Use for closure tracking.
 
-Use this page for risk communication and trend analysis.
+Check each task for:
 
-Steps:
-1. Open `Risk` from the sidebar.
-2. Review:
-   - overall score
-   - critical/high counts
-   - severity distribution chart
-   - 30-day trend
-   - remediation summary cards
+- owner
+- due date
+- status
+- verification state
 
-Expected outcome:
-- communicate security posture over time to stakeholders.
+### 3.5 Reports
 
-### 6) Remediation (`/portal/remediation`)
+Use for formal deliverables.
 
-Use this page for closure tracking.
+Actions:
 
-Steps:
-1. Open `Remediation` from the sidebar.
-2. Review each task row:
-   - task title
-   - priority
-   - owner
-   - due date
-   - verification state
-   - status badge
-3. Use row status to prioritize follow-up meetings.
+- download PDF for executive circulation
+- download HTML for technical review
 
-Expected outcome:
-- maintain visible remediation accountability.
+### 3.6 Risk
 
-## Day-to-Day Workflow (Recommended)
+Use for strategic communication.
 
-1. Start in `Overview` for status snapshot.
-2. Move to `Analytics` for explainable ML posture and simulation.
-3. Move to `Findings` and filter `Critical` and `High`.
-4. Open each critical finding and validate evidence.
-5. Check `Remediation` to confirm ownership and status.
-6. Download latest reports from `Reports`.
-7. End in `Risk` to confirm trend direction before stakeholder updates.
+Check:
 
-## Client-Facing Features
+- current posture score
+- severity distribution
+- trend direction
 
-- Findings severity filter and deterministic sorting
-- Findings export (JSON/CSV)
-- Finding detail with evidence gallery + timeline
-- Report downloads (PDF/HTML)
-- Risk charts (distribution + trend)
-- Advanced analytics page (scores, confidence, explanation, model version)
-- Defensive simulation action for what-if planning
-- Remediation status tracking
-- Notification center
-- Language toggle (EN/ES)
-- Tenant branding support
+## 4. Compliance and Assurance View
 
-## Security Model
+Client portal workflows support compliance evidence generation by recording security workflow behavior such as:
 
-- JWT stored in secure `httpOnly` cookie (`vv_access_token`)
-- Tenant-scoped session and data access
-- Read-only portal behavior for clients
-- Middleware protection for `/portal/*` routes
+- finding views and acknowledgements
+- remediation open/completion actions
+- report downloads
+- dashboard consultations
 
-## Docker and Proxy Notes
+This telemetry is security-focused and excludes marketing tracking behavior.
 
-- Public entrypoint is nginx on `443` and `80`.
-- Use `https://<host>/...`, not container ports.
-- Portal fetches use relative paths and proxy-aware routing.
+## 5. Export and Sharing Best Practices
 
-## Troubleshooting
+- Use report exports for formal stakeholder updates.
+- Use findings CSV for remediation planning sessions.
+- Share risk trend and analytics scores with board-level summaries.
 
-- If login fails after reset/seed, run:
-  - `make phase65-migrate`
-  - `make phase7e-migrate`
-  - `make phase8-migrate`
-  - `make seed-clients`
-- If pages are stale, hard refresh browser (`Ctrl+Shift+R`).
-- If host is not recognized, verify tenant host mapping in deployment env.
-- If reports do not download, verify report visibility/status in API data.
+## 6. Privacy and Security Notes
+
+- Session auth is tenant-scoped.
+- Portal access is read-only for client users.
+- No cross-tenant data exposure is allowed.
+
+## 7. Quick Troubleshooting
+
+- Stale UI data: hard refresh browser
+- Login issues: revalidate credentials and tenant URL
+- Missing reports: verify report publication status with delivery team
+- API/portal outage: contact platform operator

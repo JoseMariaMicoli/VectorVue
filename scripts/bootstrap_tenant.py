@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Jose Maria Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 """Bootstrap tenant metadata for per-customer deployments."""
 
 from __future__ import annotations
