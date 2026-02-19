@@ -1108,79 +1108,207 @@ Progressive rollout recommended:
 
 ---
 
-## 🧠 PHASE 8: Advanced ML / Analytics ⏳ NOT STARTED
+# 🧠 PHASE 8 — Advanced ML / Analytics (PATCHED)
 
-**ETA:** Q1 2027 | **Estimated Lines:** 500-900 | **Status:** `Commercial Feature`
-
-💡 Thoughts:
-Now the platform produces **two classes of models**:
-
-### Internal Models
-
-Offensive cognition models (improve operator effectiveness)
-
-### Commercial Models
-
-Defensive effectiveness models (customer-sellable analytics)
+**ETA:** Q1 2027
+**Estimated Lines:** 900–1600
+**Status:** Commercial Differentiator Feature
+**Infra:** Async ML workers + feature store + versioned models + explainability
 
 ---
 
-### 8.1 Offensive Cognition Models (Internal)
+## 🏗️ 8.0 ML Platform Foundations (REQUIRED)
 
-* [ ] Attack graph analysis
-* [ ] Next-step prediction
-* [ ] Operator assistance suggestions
-* [ ] Campaign strategy inference
-* [ ] Engagement optimization
+> This is mandatory. Without it, none of the ML features are production-safe in multi-tenant SaaS.
 
-### 8.2 Defensive Effectiveness Models (Commercial)
+### Data Pipeline
 
-* [ ] Control effectiveness scoring
+* [ ] Export events from operational DB → analytics schema
+* [ ] Immutable append-only event tables
+* [ ] Feature materialization jobs
+* [ ] Sliding window aggregations (1h / 24h / 7d / 30d)
+* [ ] Strict tenant-isolated datasets
+* [ ] PII stripping / anonymization layer
+* [ ] Backfill historical data processor
+* [ ] Data validation checks (schema + null + range)
+* [ ] Late event handling
+
+### Feature Store
+
+* [ ] PostgreSQL online feature tables
+* [ ] Parquet cold storage
+* [ ] Feature versioning
+* [ ] Feature freshness tracking
+* [ ] Training vs inference consistency guard
+* [ ] Point-in-time feature retrieval
+* [ ] Dataset reproducibility hash
+
+### Model Lifecycle / MLOps
+
+* [ ] Model registry table
+* [ ] Model versioning
+* [ ] Dataset hash tracking
+* [ ] Hyperparameter tracking
+* [ ] Promotion stages: experimental → staging → production
+* [ ] Canary deployment
+* [ ] Rollback support
+* [ ] Shadow evaluation support
+* [ ] Automatic retraining policy
+* [ ] Manual approval workflow
+
+### Workers
+
+* [ ] Dedicated ML worker container
+* [ ] Training job queue
+* [ ] Inference job queue
+* [ ] Periodic retraining queue
+* [ ] CPU execution support
+* [ ] Optional GPU execution support
+
+### Observability (CRITICAL)
+
+* [ ] Model performance metrics (accuracy, precision, recall)
+* [ ] Data drift detection
+* [ ] Feature distribution monitoring
+* [ ] Prediction distribution monitoring
+* [ ] Alert on degraded models
+* [ ] Training vs production metric comparison
+
+### Explainability
+
+* [ ] SHAP explanations per prediction
+* [ ] Feature importance tracking
+* [ ] Human readable explanation generator
+* [ ] Stored explanation artifacts
+
+---
+
+## 🧠 8.1 Offensive Cognition Models (Internal Only)
+
+Goal: Assist red team operator decisions
+
+* [ ] Attack graph builder (from campaign events)
+* [ ] Next step prediction model
+* [ ] Technique recommendation engine
+* [ ] Path success probability estimator
+* [ ] Engagement efficiency scoring
+* [ ] Operator assistance hints in UI
+
+Outputs:
+
+* predicted_next_action
+* probable_success_rate
+* recommended_vector
+* suggested_strategy
+
+---
+
+## 🛡️ 8.2 Defensive Effectiveness Models (Commercial)
+
+Goal: Sellable customer analytics
+
+* [ ] Control effectiveness scoring model
 * [ ] Detection coverage estimation
 * [ ] Security maturity scoring
 * [ ] Residual risk estimation
-* [ ] Improvement projection
+* [ ] Improvement potential scoring
 
-### 8.3 Behavioral Anomaly Learning
+Outputs:
 
-* [ ] Normal pattern baseline
-* [ ] Anomaly scoring
-* [ ] Trend detection
-* [ ] Outlier identification
+* security_score
+* detection_gap_score
+* residual_risk_score
+* improvement_priority
+
+---
+
+## 📈 8.3 Behavioral Anomaly Learning
+
+* [ ] Baseline behavior profile per tenant
+* [ ] Time-series anomaly scoring
+* [ ] Campaign anomaly detection
+* [ ] Sudden detection drop alerts
 * [ ] Pattern clustering
+* [ ] Behavioral drift tracking
 
-### 8.4 Remediation Intelligence
+Algorithms:
 
-* [ ] Finding-to-remediation mapping
-* [ ] Prioritization suggestions
-* [ ] Feasibility assessment
-* [ ] Cost estimation
-* [ ] Effectiveness prediction
+* Isolation Forest
+* DBSCAN
+* Statistical deviation models
 
-### 8.5 Organizational Security Analytics (Sellable)
+Outputs:
 
-* [ ] Campaign clustering
+* anomaly_score
+* abnormal_campaign_flag
+* unusual_detection_pattern
+
+---
+
+## 🧰 8.4 Remediation Intelligence
+
+* [ ] Finding → remediation mapping
+* [ ] Remediation prioritization model
+* [ ] Feasibility estimator
+* [ ] Cost estimation model
+* [ ] Expected risk reduction model
+
+Outputs:
+
+* remediation_priority
+* estimated_effort
+* expected_risk_reduction
+* recommended_fix_order
+
+---
+
+## 🏢 8.5 Organizational Security Analytics (Sellable Reports)
+
+* [ ] Campaign clustering by behavior
 * [ ] Defense performance over time
 * [ ] Security posture trajectory
-* [ ] Benchmark scoring
-* [ ] Executive-level reporting
+* [ ] Benchmark scoring vs peers (anonymized tenants)
+* [ ] Executive metrics generation
+* [ ] Quarterly trend report generator
 
-### 8.6 Predictive Intelligence
+Outputs:
 
-* [ ] Attack likelihood modeling
-* [ ] Defense effectiveness prediction
+* security_posture_trend
+* benchmark_percentile
+* maturity_level
+* executive_summary
+
+---
+
+## 🔮 8.6 Predictive Intelligence
+
+* [ ] Attack likelihood prediction
+* [ ] Detection success probability prediction
 * [ ] Remediation outcome forecasting
-* [ ] Risk projection
-* [ ] Scenario simulation
+* [ ] Risk projection model
+* [ ] Scenario simulation engine
+* [ ] “What-if” defense planning tool
 
-### Key Technologies
+Outputs:
 
-* Python ML pipeline
+* predicted_attack_probability
+* predicted_detection_rate
+* projected_risk_after_fix
+* recommended_defense_investment
+
+---
+
+## 🧩 Technology Stack
+
+* Python ML pipelines
 * scikit-learn
-* PyTorch (optional deep models)
+* Optional PyTorch (advanced models)
 * pandas / polars
-* Feature store (PostgreSQL + parquet)
+* PostgreSQL feature store
+* Parquet cold storage
 * SHAP explainability
+* Async workers (RQ/Celery equivalent)
+* Docker ML worker service
 
 ---
 
