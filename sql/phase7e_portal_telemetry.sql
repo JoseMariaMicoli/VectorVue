@@ -1,3 +1,6 @@
+-- Copyright (c) 2026 Jose Maria Micoli
+-- Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 -- Phase 7E: Client portal usage telemetry for defensive intelligence datasets.
 
 CREATE TABLE IF NOT EXISTS client_activity_events (

@@ -1,62 +1,55 @@
-<sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v4.1 Documentation Index
+# VectorVue Documentation Index
 
-This is the single entrypoint for all VectorVue documentation in v4.1.
-Use this index by role and task, not by internal phase names.
+This is the official documentation entrypoint for production and commercial usage.
 
-## Start Here by Role
+Use documents by operational role and task. Internal phase names are intentionally minimized in operator-facing material.
 
-### Client Stakeholder (Portal User)
-1. [CLIENT_PORTAL_MANUAL.md](./CLIENT_PORTAL_MANUAL.md)
-2. [DEMO_ACCESS_MATRIX.md](./DEMO_ACCESS_MATRIX.md)
-3. [PHASE8_CLIENT_ANALYTICS_MANUAL.md](./PHASE8_CLIENT_ANALYTICS_MANUAL.md)
-4. [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)
+## Role-Based Navigation
 
-### Security Operator / Delivery Team
-1. [GETTING_STARTED.md](./GETTING_STARTED.md)
-2. [OPERATOR_MANUAL.md](./OPERATOR_MANUAL.md)
-3. [VECTORVUE_USER_GUIDE.md](./VECTORVUE_USER_GUIDE.md)
-4. [DEMO_ACCESS_MATRIX.md](./DEMO_ACCESS_MATRIX.md)
+### 1. Client Stakeholder / Portal User
 
-### API / Integration Engineer
-1. [CLIENT_API_MANUAL.md](./CLIENT_API_MANUAL.md)
-2. [PORTAL_TELEMETRY_MANUAL.md](./PORTAL_TELEMETRY_MANUAL.md)
-3. [PHASE8_CLIENT_ANALYTICS_MANUAL.md](./PHASE8_CLIENT_ANALYTICS_MANUAL.md)
-4. [POSTGRES_USAGE_GUIDE.md](./POSTGRES_USAGE_GUIDE.md)
-5. [Deployment.md](./Deployment.md)
+1. [Client Portal Manual](./CLIENT_PORTAL_MANUAL.md)
+2. [Demo Access Matrix](./DEMO_ACCESS_MATRIX.md)
+3. [Troubleshooting Guide](./TROUBLESHOOTING_GUIDE.md)
 
-### Platform Engineer / SRE
-1. [Deployment.md](./Deployment.md)
-2. [POSTGRES_MIGRATION_GUIDE.md](./POSTGRES_MIGRATION_GUIDE.md)
-3. [POSTGRES_USAGE_GUIDE.md](./POSTGRES_USAGE_GUIDE.md)
-4. [POSTGRES_REGRESSION_CHECKLIST.md](./POSTGRES_REGRESSION_CHECKLIST.md)
+### 2. Security Operator / Delivery Team
 
-## Quick Tasks
+1. [Getting Started](./GETTING_STARTED.md)
+2. [Operator Manual](./OPERATOR_MANUAL.md)
+3. [VectorVue User Guide](./VECTORVUE_USER_GUIDE.md)
+4. [Portal Telemetry Manual](./PORTAL_TELEMETRY_MANUAL.md)
 
-- Portal login and navigation: [CLIENT_PORTAL_MANUAL.md](./CLIENT_PORTAL_MANUAL.md)
-- Seed demo accounts and URLs: [DEMO_ACCESS_MATRIX.md](./DEMO_ACCESS_MATRIX.md)
-- API login and endpoint calls: [CLIENT_API_MANUAL.md](./CLIENT_API_MANUAL.md)
-- Deploy and harden stack: [Deployment.md](./Deployment.md)
-- Telemetry analytics SQL (MTTA/MTTR): [PHASE7E_TELEMETRY_QUERIES.sql](./PHASE7E_TELEMETRY_QUERIES.sql)
-- Telemetry behavior and privacy model: [PORTAL_TELEMETRY_MANUAL.md](./PORTAL_TELEMETRY_MANUAL.md)
-- Phase 8 commercial analytics (portal + API): [PHASE8_CLIENT_ANALYTICS_MANUAL.md](./PHASE8_CLIENT_ANALYTICS_MANUAL.md)
+### 3. API / Integration Engineer
 
-## Navigation and UX
+1. [Client API Manual](./CLIENT_API_MANUAL.md)
+2. [Client Analytics Manual](./PHASE8_CLIENT_ANALYTICS_MANUAL.md)
+3. [Compliance API Specification](../COMPLIANCE_API_SPEC.md)
+4. [PostgreSQL Usage Guide](./POSTGRES_USAGE_GUIDE.md)
 
-- [Tab Navigation Guide](../TAB_NAVIGATION_GUIDE.md)
-- [Tab Quick Reference](../TAB_QUICK_REFERENCE.txt)
+### 4. Auditor / Governance / Risk
 
-## Product Planning and Governance
+1. [Auditor Guide](../AUDITOR_GUIDE.md)
+2. [Compliance API Specification](../COMPLIANCE_API_SPEC.md)
+3. [Architecture Specification](./ARCHITECTURE_SPEC.md)
+4. [User Policy](./USER_POLICY.md)
 
-- Product roadmap (internal planning): [../ROADMAP.md](../ROADMAP.md)
-- Architecture specification: [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md)
-- Documentation policy: [DOCUMENTATION_POLICY.md](./DOCUMENTATION_POLICY.md)
-- User policy: [USER_POLICY.md](./USER_POLICY.md)
-- PostgreSQL audit report: [POSTGRES_AUDIT_REPORT.md](./POSTGRES_AUDIT_REPORT.md)
+### 5. Platform Engineering / SRE
 
-## Version Scope
+1. [Deployment](./Deployment.md)
+2. [PostgreSQL Migration Guide](./POSTGRES_MIGRATION_GUIDE.md)
+3. [PostgreSQL Regression Checklist](./POSTGRES_REGRESSION_CHECKLIST.md)
+4. [Documentation Policy](./DOCUMENTATION_POLICY.md)
 
-- Current: **v4.1**
-- Implemented product capabilities: operator platform + client portal + telemetry dataset pipeline + commercial analytics
-- Current release includes **Phase 8** client analytics and explainable ML outputs
+## Common Operational Tasks
+
+- Deploy platform: `make deploy`
+- Seed commercial demo data: `make seed-clients`
+- Verify API health: `make api-smoke`
+- Validate PostgreSQL migrations: `make pg-schema-bootstrap`
+- Apply compliance schema only: `make phase9-migrate`
+
+## Product Planning Reference
+
+- [Roadmap](../ROADMAP.md)

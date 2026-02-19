@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Copyright (c) 2026 Jose Maria Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 set -euo pipefail
 
 CERT_DIR="${1:-deploy/certs}"

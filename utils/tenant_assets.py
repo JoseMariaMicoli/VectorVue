@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Jose Maria Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 """Tenant asset path resolver for Phase 7D white-label portal."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+-- Copyright (c) 2026 Jose Maria Micoli
+-- Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 -- Phase 7D dynamic tenant branding schema (white-label portal).
 
 CREATE TABLE IF NOT EXISTS tenant_theme (
