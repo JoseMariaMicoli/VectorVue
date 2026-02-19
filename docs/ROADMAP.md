@@ -25,6 +25,8 @@ VectorVue is evolving from a single-operator red team notebook into an enterpris
 - **Phase 7:** Client Portal (Web UI, read-only views, remediation tracking)
 - **Phase 7.5.0:** Portal Usage Telemetry (defensive-intelligence event capture for Phase 8 model data)
 - **Phase 8:** ML/Analytics (Attack prediction, anomaly learning) ✅ Delivered
+- **Phase 9:** Compliance & Regulatory Assurance (audit evidence, ISO/SOC2/HIPAA/Financial readiness)
+
 
 ---
 
@@ -1322,18 +1324,69 @@ Outputs:
 
 ---
 
-## 9.0 Control Context Foundation (NEW — REQUIRED FOR AUDIT VALIDITY)
+Perfect — below is a **clean consolidated Phase 9** (no duplication, no overlapping sections, consistent numbering, same style as your roadmap, checkboxes preserved, and audit-grade logic ordered correctly).
 
-### Organizational Scope Modeling
+This merges your two versions into **one coherent implementation roadmap**.
 
-* [ ] `assets` table (system, service, identity, network)
+---
+
+# 🛡️ PHASE 9: Continuous Compliance & Regulatory Assurance ⏳ PLANNED
+
+**Status:** Planned
+**Estimated Lines:** 3,500 – 5,000
+**Tables:** ~18 new
+**Views:** 0 (Headless Engine)
+**APIs:** Compliance & Auditor API
+**Depends On:** Phase 0–8 telemetry
+
+💡 Thoughts:
+Phases 0–8 generate operational security reality.
+Phase 9 converts that reality into **auditable control effectiveness evidence** for ISO 27001, SOC 2, HIPAA, Financial and Healthcare regulatory environments across US/EU/LATAM.
+
+No new security testing features are introduced — this phase formalizes existing telemetry into defensible third-party verification artifacts.
+
+---
+
+## Purpose
+
+VectorVue continuously produces:
+
+* Control evidence
+* Policy enforcement records
+* Operational assurance metrics
+* Regulatory attestation artifacts
+
+This enables auditors to validate compliance using platform-generated evidence rather than interviews and screenshots.
+
+---
+
+## Architectural Principle
+
+| Platform Capability      | Compliance Meaning      |
+| ------------------------ | ----------------------- |
+| Immutable evidence chain | Non-repudiation         |
+| Detection tracking       | Monitoring controls     |
+| Attack simulation        | Control effectiveness   |
+| Telemetry analytics      | Continuous assurance    |
+| Tenant isolation         | Data segregation        |
+| Approval workflows       | Change management       |
+| Operator attribution     | Accountability          |
+| Timeline replay          | Forensic reconstruction |
+
+---
+
+# 9.0 Control Context Foundation (Audit Validity Layer)
+
+## Organizational Scope Modeling
+
+* [ ] `assets` table (system/service/identity/network)
 * [ ] Asset criticality classification
-* [ ] Environment classification (prod / staging / dev)
+* [ ] Environment classification (prod/staging/dev)
 * [ ] Business process linkage
 * [ ] Compliance scope tagging per tenant
 * [ ] System boundary definition
 
-### Control Ownership & Accountability
+## Control Ownership & Accountability
 
 * [ ] `control_owners` table
 * [ ] Owner assignment per control
@@ -1342,7 +1395,7 @@ Outputs:
 * [ ] Review attestation logs
 * [ ] Approval tracking
 
-### Policy & Frequency Definition
+## Policy & Frequency Definition
 
 * [ ] `control_policies` table
 * [ ] Expected execution frequency
@@ -1351,32 +1404,34 @@ Outputs:
 * [ ] Observation windows
 * [ ] Sampling policies
 
-### Control State Derivation
+## Control State Derivation
 
-* [ ] observation → control evaluation engine
+* [ ] Observation → control evaluation engine
 * [ ] Control effectiveness classification
-* [ ] Degraded / operating / failed states
+* [ ] Operating / degraded / failed states
 * [ ] Continuous status tracking
 * [ ] Control regression detection
 
 ---
 
-## 9.1 Compliance Evidence Engine (Core Layer)
+# 9.1 Compliance Evidence Engine
 
 * [ ] Immutable `compliance_events` append-only log
 * [ ] Evidence normalization schema
 * [ ] Evidence hash chain integrity
 * [ ] Timestamp signing
-* [ ] Evidence reproducibility dataset hash
+* [ ] Dataset reproducibility hash
 * [ ] Period snapshots
-* [ ] Tenant isolated storage
-* [ ] Retention policy per regulation
+* [ ] Tenant-isolated storage
+* [ ] Retention policies per regulation
 * [ ] Export bundles (ZIP + JSON + index)
 * [ ] Auditor verification checksum
 
 ---
 
-## 9.2 Universal Control Mapping Framework
+# 9.2 Control Mapping & Continuous Validation
+
+## Universal Control Mapping
 
 * [ ] `control_frameworks` table
 * [ ] `controls` table
@@ -1384,12 +1439,23 @@ Outputs:
 * [ ] Many-to-many event ↔ control mapping
 * [ ] Control inheritance
 * [ ] Applicability rules engine
-* [ ] Environment-aware control evaluation
-* [ ] Continuous control degradation alerts
+* [ ] Environment-aware evaluation
+* [ ] Continuous degradation alerts
+
+## Continuous Control Validation (CCV)
+
+* [ ] Detection capability validation
+* [ ] Alert triage measurement
+* [ ] Response time verification
+* [ ] Privilege escalation prevention checks
+* [ ] Lateral movement containment measurement
+* [ ] Monitoring coverage gap detection
 
 ---
 
-## 9.3 ISO 27001 Automation
+# 9.3 Regulatory Framework Automation
+
+## ISO 27001
 
 * [ ] Annex A mapping
 * [ ] Statement of Applicability generator
@@ -1403,40 +1469,44 @@ Outputs:
 * Control effectiveness report
 * Audit readiness report
 
----
+## SOC 2
 
-## 9.4 SOC 2 Automation
-
-* [ ] Trust Services Criteria mapping
+* [ ] Trust Service Criteria mapping
 * [ ] Observation window tracking
 * [ ] Exception tracking
 * [ ] Operating effectiveness timeline
 * [ ] Auditor evidence package
 
----
-
-## 9.5 HIPAA & Healthcare
+## HIPAA & Healthcare
 
 * [ ] HIPAA Security Rule safeguards validation
 * [ ] HITECH breach indicators
 * [ ] ePHI exposure likelihood
 * [ ] ISO 27799 healthcare mapping
-* [ ] Clinical system access monitoring
+* [ ] Clinical system access monitoring validation
 
----
-
-## 9.6 Financial Regulations (US/EU/LATAM)
+## Financial Regulations (US/EU/LATAM)
 
 * [ ] SOX ITGC mapping
 * [ ] GLBA safeguards
 * [ ] FFIEC controls
 * [ ] DORA resilience controls
-* [ ] GDPR Art 32 security measures
+* [ ] GDPR Art 32 safeguards
 * [ ] LATAM financial baseline mapping
 
 ---
 
-## 9.7 Continuous Compliance Scoring
+# 9.4 Policy State & Compliance Scoring
+
+## Regulatory Policy State Engine
+
+* [ ] Policy definition storage
+* [ ] Expected vs observed comparison
+* [ ] Drift detection
+* [ ] Continuous assurance alerts
+* [ ] Historical posture tracking
+
+## Continuous Compliance Score
 
 * [ ] Framework score
 * [ ] Coverage %
@@ -1446,23 +1516,90 @@ Outputs:
 
 ---
 
-## 9.8 Auditor Portal
+# 9.5 Auditor Access & Evidence API
+
+## Auditor Access
 
 * [ ] Auditor role
-* [ ] Time bounded sessions
+* [ ] Time-bounded sessions
 * [ ] Evidence verification endpoint
 * [ ] Integrity verification endpoint
-* [ ] Audit log
+* [ ] Audit access log
+
+## Compliance API
+
+* [ ] `/compliance/frameworks`
+* [ ] `/compliance/controls`
+* [ ] `/compliance/evidence`
+* [ ] `/compliance/attestations`
+* [ ] `/compliance/audit-window`
+* [ ] `/compliance/score`
+
+Read-only, signed responses, tenant-scoped.
 
 ---
 
-## 9.9 Scheduled Deliverables
+# 9.6 Scheduled Deliverables
 
 * [ ] Monthly compliance snapshot
 * [ ] Quarterly audit package
 * [ ] Executive summary
 * [ ] Control failure alerts
 * [ ] Remediation linkage
+
+---
+
+# Database Additions (Approximate)
+
+* compliance_controls
+* control_mappings
+* control_evidence_links
+* compliance_scores
+* audit_windows
+* attestation_records
+* policy_definitions
+* policy_drift_events
+* continuous_validation_results
+* auditor_exports
+* regulatory_profiles
+* control_history
+* evidence_signatures
+* control_effectiveness_metrics
+* compliance_frameworks
+* assurance_timeline
+* compliance_events
+* compliance_snapshots
+
+---
+
+# Deliverables
+
+* `vv_compliance_engine.py`
+* `vv_control_mapper.py`
+* `vv_evidence_builder.py`
+* `vv_attestation.py`
+* `vv_policy_state.py`
+* `vv_continuous_validation.py`
+* `api/compliance_routes.py`
+* `schemas/compliance_models.py`
+* `docs/COMPLIANCE_API_SPEC.md`
+* `docs/AUDITOR_GUIDE.md`
+
+---
+
+## No UI by Design
+
+This phase is headless.
+Consumed by auditors, regulators, GRC platforms, and enterprise risk tooling.
+
+---
+
+## Strategic Result
+
+After Phase 9:
+
+> VectorVue no longer only tests security —
+> it continuously proves security to third parties.
 
 ---
 
@@ -1484,6 +1621,11 @@ Outputs:
 * Client portal deployed
 * Historical portal-usage datasets accumulated
 * Defensive analytics dataset validated
+
+### Phase 8 → 9
+
+**Phase 0-8 → Generate security reality**
+**Phase 9 → Certify security reality**
 
 ---
 
