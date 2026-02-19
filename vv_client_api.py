@@ -900,7 +900,12 @@ def download_client_report(
     p = Path(file_path)
     if not p.exists() or not p.is_file():
         raise HTTPException(status_code=404, detail="Report file missing")
-    return FileResponse(path=str(p), filename=f"{_safe_scalar(row, 'report_title', 'report')}.pdf")
+    media_type = "application/pdf" if p.suffix.lower() == ".pdf" else "application/octet-stream"
+    return FileResponse(
+        path=str(p),
+        filename=f"{_safe_scalar(row, 'report_title', 'report')}.pdf",
+        media_type=media_type,
+    )
 
 
 @app.get("/api/v1/client/risk-summary", response_model=RiskSummary, tags=["client"])
@@ -1018,7 +1023,13 @@ def remediation_tasks(request: Request, db: Session = Depends(_get_db)):
         _client_visible_findings_predicate(findings, tenant_id)
     )
     rows = db.execute(
-        select(remediation.c.id, remediation.c.finding_id, remediation.c.title, remediation.c.status).where(
+        select(
+            remediation.c.id,
+            remediation.c.finding_id,
+            remediation.c.title,
+            remediation.c.status,
+            remediation.c.created_at,
+        ).where(
             remediation.c.tenant_id == tenant_id,
             or_(
                 remediation.c.finding_id.is_(None),
@@ -1034,10 +1045,10 @@ def remediation_tasks(request: Request, db: Session = Depends(_get_db)):
             status=_safe_scalar(r, "status", "open"),
             priority="medium",
             due_date=(
-                datetime.fromisoformat(_safe_scalar(r, "created_at", "").replace("Z", ""))
+                datetime.combine(_to_day(_safe_scalar(r, "created_at")), datetime.min.time(), tzinfo=timezone.utc)
                 + timedelta(days=30)
             )
-            if _safe_scalar(r, "created_at")
+            if _to_day(_safe_scalar(r, "created_at"))
             else None,
         )
         for r in rows

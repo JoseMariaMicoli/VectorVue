@@ -136,3 +136,9 @@ CREATE INDEX IF NOT EXISTS idx_reports_tenant_id ON reports (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_remediation_tasks_tenant_id ON remediation_tasks (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_user_tenant_access_tenant_id ON user_tenant_access (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_user_tenant_access_username ON user_tenant_access (username);
+CREATE INDEX IF NOT EXISTS idx_findings_tenant_approval_visibility_id
+    ON findings (tenant_id, approval_status, visibility, id DESC);
+CREATE INDEX IF NOT EXISTS idx_client_reports_tenant_status_id
+    ON client_reports (tenant_id, status, id DESC);
+CREATE INDEX IF NOT EXISTS idx_remediation_tasks_tenant_status_id
+    ON remediation_tasks (tenant_id, status, id DESC);

@@ -319,8 +319,9 @@ def download_report(
         raise HTTPException(status_code=404, detail="Report file missing")
 
     filename = f"{_safe_text(row.get('report_title'), 'report')}.pdf"
+    media_type = "application/pdf" if p.suffix.lower() == ".pdf" else "application/octet-stream"
     _ = build_public_url(request.url.path, request)
-    return FileResponse(path=str(p), filename=filename, media_type="application/octet-stream")
+    return FileResponse(path=str(p), filename=filename, media_type=media_type)
 
 
 @router.get("/risk", response_model=RiskSummary)

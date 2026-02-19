@@ -6,8 +6,11 @@
 from __future__ import annotations
 
 import os
+import time
+from collections import defaultdict, deque
+from threading import Lock
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -33,6 +36,10 @@ def _db_url() -> str:
 
 engine = create_engine(_db_url(), pool_pre_ping=True, future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+_rate_lock = Lock()
+_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+_rate_window_seconds = 60
+_rate_max_requests = 240
 
 
 def get_db() -> Session:
@@ -44,6 +51,13 @@ def get_db() -> Session:
 
 
 def client_rate_limit(_request: Request) -> None:
-    """Rate-limit dependency placeholder for future implementation."""
-
-    return None
+    """Basic in-memory per-client IP limiter to protect read-only client endpoints."""
+    host = (_request.client.host if _request.client else "unknown").strip()
+    now = time.time()
+    with _rate_lock:
+        bucket = _rate_buckets[host]
+        while bucket and now - bucket[0] > _rate_window_seconds:
+            bucket.popleft()
+        if len(bucket) >= _rate_max_requests:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        bucket.append(now)
