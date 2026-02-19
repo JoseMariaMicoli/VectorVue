@@ -212,6 +212,8 @@ class TabNavigationPanel(Container):
                 {"id": "reporting-view", "name": "Reporting", "keybinding": "Ctrl+R"},
                 {"id": "team-view", "name": "Teams", "keybinding": "Ctrl+T"},
                 {"id": "users-view", "name": "Users", "keybinding": "Admin"},
+                {"id": "onboarding-view", "name": "Onboarding", "keybinding": "Ctrl+Shift+W"},
+                {"id": "help-view", "name": "Help", "keybinding": "Ctrl+H"},
                 {"id": "threat-intel-view", "name": "Threat Intel", "keybinding": "Ctrl+Shift+I"},
             ],
             "Phase 5.5 Cognition": [

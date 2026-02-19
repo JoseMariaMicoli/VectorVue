@@ -26,6 +26,18 @@ Recommended local host mapping:
 
 ## Step 1: Deploy Services
 
+Recommended guided flow:
+
+```bash
+make wizard
+```
+
+Select:
+- `1` for full commercial deploy
+- `4` for demo seeding
+
+Direct command path:
+
 ```bash
 make deploy
 ```
@@ -104,6 +116,16 @@ make phase79-real-smoke \
   TENANT_ADMIN_PASS='RealCorpAdm1n!'
 ```
 
+Guided alternative:
+
+```bash
+make wizard
+```
+
+Select:
+- `3` to bootstrap a real tenant
+- `5` to run real scenario validation
+
 ## Optional: Fully Isolated Client Portal Stack
 
 ```bash
@@ -113,6 +135,33 @@ make customer-deploy-portal-isolated \
   TENANT_NAME="RealCorp Manufacturing" \
   TENANT_PORTAL_HOST=realcorp.vectorvue.local
 ```
+
+Guided alternative:
+
+```bash
+make wizard
+```
+
+Select option `2`.
+
+## Optional: TUI Onboarding Wizard (Admin)
+
+Use this when you want an in-app onboarding flow.
+
+1. Start TUI:
+
+```bash
+make run-tui
+```
+
+2. Login with an admin account.
+3. Open onboarding wizard with `Ctrl+Shift+W` or `ONBOARD WIZARD` in sidebar.
+4. Enter tenant and portal/company data:
+- tenant id and name
+- portal host
+- company name + colors
+- tenant admin and client credentials
+5. Click `CREATE TENANT + USERS`.
 
 ## Recommended First Walkthrough
 

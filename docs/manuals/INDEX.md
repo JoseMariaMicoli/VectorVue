@@ -44,8 +44,10 @@ Use documents by operational role and task. Internal phase names are intentional
 
 ## Common Operational Tasks
 
+- Guided deployment/bootstrap menu: `make wizard`
 - Deploy platform: `make deploy`
 - Seed commercial demo data: `make seed-clients`
+- Start TUI onboarding flow: `make run-tui` then `Ctrl+Shift+W`
 - Verify API health: `make api-smoke`
 - Validate PostgreSQL migrations: `make pg-schema-bootstrap`
 - Apply compliance schema only: `make phase9-migrate`

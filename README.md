@@ -25,13 +25,24 @@ VectorVue is designed for commercial security delivery.
 
 ## Quick Start (Commercial Demo)
 
-1. Deploy platform stack:
+1. Guided setup (recommended):
+
+```bash
+make wizard
+```
+
+Use menu option:
+- `1` for full commercial deploy
+- `2` for isolated customer portal deploy
+- `4` for demo seed data
+
+2. Deploy platform stack (direct command path):
 
 ```bash
 make deploy
 ```
 
-2. Seed realistic demo data:
+3. Seed realistic demo data:
 
 ```bash
 make seed-clients
@@ -68,12 +79,12 @@ make customer-deploy-portal-isolated \
   TENANT_PORTAL_HOST=realcorp.vectorvue.local
 ```
 
-3. Open tenant portals:
+4. Open tenant portals:
 
 - `https://acme.vectorvue.local/login`
 - `https://globex.vectorvue.local/login`
 
-4. Validate API and service health:
+5. Validate API and service health:
 
 ```bash
 make api-smoke
@@ -90,6 +101,18 @@ Recommended paths by role:
 - Integration Teams: [Client API Manual](docs/manuals/CLIENT_API_MANUAL.md)
 - Auditors and Compliance Teams: [Compliance API Spec](docs/COMPLIANCE_API_SPEC.md), [Auditor Guide](docs/AUDITOR_GUIDE.md)
 - Platform Engineering: [Deployment](docs/manuals/Deployment.md), [PostgreSQL Usage Guide](docs/manuals/POSTGRES_USAGE_GUIDE.md)
+
+## TUI Onboarding Wizard
+
+For admin users in the TUI:
+
+1. Run TUI: `make run-tui`
+2. Login as admin.
+3. Open onboarding wizard:
+- `Ctrl+Shift+W`, or
+- Sidebar button `ONBOARD WIZARD`
+4. Fill tenant, company, branding, and user fields.
+5. Submit `CREATE TENANT + USERS`.
 
 ## Security and Privacy Principles
 

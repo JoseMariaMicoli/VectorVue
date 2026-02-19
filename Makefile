@@ -61,7 +61,7 @@ TENANT_OPERATOR_USER ?=
 TENANT_OPERATOR_PASS ?=
 TENANT_OPERATOR_ROLE ?= operator
 
-.PHONY: help venv-rebuild run-tui run-local-postgres deploy commercial-deploy customer-deploy customer-deploy-isolated customer-deploy-portal-isolated tenant-bootstrap-real phase79-real-smoke phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
+.PHONY: help wizard venv-rebuild run-tui run-local-postgres deploy commercial-deploy customer-deploy customer-deploy-isolated customer-deploy-portal-isolated tenant-bootstrap-real phase79-real-smoke phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
 
 help:
 	@echo "VectorVue PostgreSQL operational targets"
@@ -75,6 +75,7 @@ help:
 	@echo "  make venv-rebuild - Delete venv, recreate it, and install requirements"
 	@echo "  make run-tui    - Run interactive TUI in Docker (PostgreSQL backend)"
 	@echo "  make run-local-postgres - Run local Python TUI against Docker PostgreSQL"
+	@echo "  make wizard     - Interactive guided deploy/bootstrap wizard"
 	@echo "  make deploy     - Build/start full stack + tenant/theme migrations + API smoke test"
 	@echo "  make commercial-deploy - Deploy + print access matrix for commercial demos"
 	@echo "  make customer-deploy - Deploy stack scoped by COMPOSE project name per customer"
@@ -112,6 +113,76 @@ help:
 	@echo "  PANEL1_TENANT_NAME='ACME Industries' PANEL2_TENANT_NAME='Globex Corporation'"
 	@echo "  PANEL1_PORTAL_HOST=acme.vectorvue.local PANEL2_PORTAL_HOST=globex.vectorvue.local"
 	@echo "  HTTP_HOST_PORT=8080 HTTPS_HOST_PORT=8443 POSTGRES_HOST_PORT=5543"
+
+wizard:
+	@set -eu; \
+	printf "\n=== VectorVue Guided Wizard ===\n"; \
+	printf "1) Commercial deploy (stack + migrations + smoke + access matrix)\n"; \
+	printf "2) Isolated customer portal deploy (tenant + users + host mapping)\n"; \
+	printf "3) Bootstrap real tenant users only (no dummy campaigns)\n"; \
+	printf "4) Seed multi-tenant demo dataset\n"; \
+	printf "5) Run real scenario validation (Phase 7-9 smoke)\n"; \
+	printf "Select [1-5]: "; \
+	read -r choice; \
+	case "$$choice" in \
+		1) \
+			$(MAKE) commercial-deploy; \
+			;; \
+		2) \
+			printf "Customer slug [acme]: "; read -r customer; customer="$${customer:-acme}"; \
+			printf "Tenant name [ACME Corp]: "; read -r tenant_name; tenant_name="$${tenant_name:-ACME Corp}"; \
+			printf "Tenant ID (UUID) [30000000-0000-0000-0000-000000000003]: "; read -r tenant_id; tenant_id="$${tenant_id:-30000000-0000-0000-0000-000000000003}"; \
+			printf "Portal host [acme.vectorvue.local]: "; read -r portal_host; portal_host="$${portal_host:-acme.vectorvue.local}"; \
+			printf "Tenant admin user [tenant_admin]: "; read -r admin_user; admin_user="$${admin_user:-tenant_admin}"; \
+			printf "Tenant admin pass [TenantAdm1n!]: "; read -r admin_pass; admin_pass="$${admin_pass:-TenantAdm1n!}"; \
+			printf "Client user [tenant_viewer]: "; read -r client_user; client_user="$${client_user:-tenant_viewer}"; \
+			printf "Client pass [TenantView3r!]: "; read -r client_pass; client_pass="$${client_pass:-TenantView3r!}"; \
+			printf "Client role [viewer]: "; read -r client_role; client_role="$${client_role:-viewer}"; \
+			$(MAKE) customer-deploy-portal-isolated \
+				CUSTOMER="$$customer" \
+				TENANT_NAME="$$tenant_name" \
+				TENANT_ID="$$tenant_id" \
+				TENANT_PORTAL_HOST="$$portal_host" \
+				TENANT_ADMIN_USER="$$admin_user" \
+				TENANT_ADMIN_PASS="$$admin_pass" \
+				TENANT_CLIENT_USER="$$client_user" \
+				TENANT_CLIENT_PASS="$$client_pass" \
+				TENANT_CLIENT_ROLE="$$client_role"; \
+			;; \
+		3) \
+			printf "Tenant name [New Customer]: "; read -r tenant_name; tenant_name="$${tenant_name:-New Customer}"; \
+			printf "Tenant ID [auto]: "; read -r tenant_id; tenant_id="$${tenant_id:-auto}"; \
+			printf "Tenant admin user [tenant_admin]: "; read -r admin_user; admin_user="$${admin_user:-tenant_admin}"; \
+			printf "Tenant admin pass [TenantAdm1n!]: "; read -r admin_pass; admin_pass="$${admin_pass:-TenantAdm1n!}"; \
+			printf "Client user [tenant_viewer]: "; read -r client_user; client_user="$${client_user:-tenant_viewer}"; \
+			printf "Client pass [TenantView3r!]: "; read -r client_pass; client_pass="$${client_pass:-TenantView3r!}"; \
+			printf "Client role [viewer]: "; read -r client_role; client_role="$${client_role:-viewer}"; \
+			$(MAKE) tenant-bootstrap-real \
+				TENANT_NAME="$$tenant_name" \
+				TENANT_ID="$$tenant_id" \
+				TENANT_ADMIN_USER="$$admin_user" \
+				TENANT_ADMIN_PASS="$$admin_pass" \
+				TENANT_CLIENT_USER="$$client_user" \
+				TENANT_CLIENT_PASS="$$client_pass" \
+				TENANT_CLIENT_ROLE="$$client_role"; \
+			;; \
+		4) \
+			$(MAKE) seed-clients; \
+			;; \
+		5) \
+			printf "Tenant ID [$(TENANT_ID)]: "; read -r tenant_id; tenant_id="$${tenant_id:-$(TENANT_ID)}"; \
+			printf "Admin user [$(TENANT_ADMIN_USER)]: "; read -r admin_user; admin_user="$${admin_user:-$(TENANT_ADMIN_USER)}"; \
+			printf "Admin pass [$(TENANT_ADMIN_PASS)]: "; read -r admin_pass; admin_pass="$${admin_pass:-$(TENANT_ADMIN_PASS)}"; \
+			$(MAKE) phase79-real-smoke \
+				TENANT_ID="$$tenant_id" \
+				TENANT_ADMIN_USER="$$admin_user" \
+				TENANT_ADMIN_PASS="$$admin_pass"; \
+			;; \
+		*) \
+			echo "Invalid selection: $$choice"; \
+			exit 1; \
+			;; \
+	esac
 
 deploy: api-up phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate api-smoke
 
