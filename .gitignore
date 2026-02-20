@@ -111,3 +111,4 @@ vectorvue_airgap_*.tar.gz
 vectorvue_db_backup.dump
 *.dump
 
+.obsidian/
