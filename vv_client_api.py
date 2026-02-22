@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from api_contract.client_api_models import Paginated, RemediationStatus, RiskSummary
 from api.compliance_routes import router as compliance_router
+from app.client_api.spectrastrike_router import router as spectrastrike_router
 from app.client_api.schemas import (
     ClientEvidenceGalleryItem,
     ClientEvidenceGalleryResponse,
@@ -123,6 +124,7 @@ metadata = MetaData()
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 app.include_router(compliance_router)
+app.include_router(spectrastrike_router)
 _event_rate_limit_lock = Lock()
 _event_rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
 

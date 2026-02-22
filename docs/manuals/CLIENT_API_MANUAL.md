@@ -53,6 +53,11 @@ Use access token in all calls:
 - `GET /api/v1/client/remediation`
 - `GET /api/v1/client/remediation-status`
 - `POST /api/v1/client/events`
+- `POST /api/v1/integrations/spectrastrike/events`
+- `POST /api/v1/integrations/spectrastrike/events/batch`
+- `POST /api/v1/integrations/spectrastrike/findings`
+- `POST /api/v1/integrations/spectrastrike/findings/batch`
+- `GET /api/v1/integrations/spectrastrike/ingest/status/{request_id}`
 
 ## 4. Analytics Endpoints
 
@@ -135,4 +140,3 @@ make api-smoke
 - [Compliance API Spec](../COMPLIANCE_API_SPEC.md)
 - [Auditor Guide](../AUDITOR_GUIDE.md)
 - [Portal Telemetry Manual](./PORTAL_TELEMETRY_MANUAL.md)
-
