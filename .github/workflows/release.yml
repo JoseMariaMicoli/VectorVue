@@ -64,8 +64,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-          cache: npm
-          cache-dependency-path: portal/package-lock.json
 
       - name: Install dependencies
         run: npm ci
