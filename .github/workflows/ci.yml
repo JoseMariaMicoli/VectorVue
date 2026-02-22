@@ -81,7 +81,12 @@ jobs:
           fi
 
       - name: Lint (if available)
-        run: npm run lint --if-present
+        run: |
+          if [ -f .eslintrc ] || [ -f .eslintrc.js ] || [ -f .eslintrc.cjs ] || [ -f .eslintrc.json ] || [ -f eslint.config.js ] || [ -f eslint.config.mjs ] || [ -f eslint.config.cjs ]; then
+            npm run lint --if-present
+          else
+            echo "No ESLint config found in portal; skipping lint to avoid interactive Next.js init."
+          fi
 
       - name: Run tests (if available)
         run: npm test --if-present
