@@ -69,7 +69,7 @@ def ensure_user(db: Database, username: str, password: str, role: str) -> str:
     ok, _ = db.authenticate_user(username, password)
     if ok:
         return "present"
-    created, msg = db.register_user(username, password, role=role, group_name="default")
+    created, msg = db.register_user(username, password, role=role, group_name="default", bypass_legal=True)
     if created:
         return "created"
     if "already exists" in msg.lower():

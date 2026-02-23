@@ -49,6 +49,7 @@ try:
     from vv_file_manager import FileManagerView
     from vv_theme import CYBER_CSS, CyberColors
     from vv_tab_navigation import TabNavigationPanel
+    from utils.legal_acceptance import current_legal_bundle
     # ===== Phase 5.5 Cognition Layer Imports =====
     from cognition_service import CognitionService
     from vv_cognition_views import (
@@ -97,35 +98,8 @@ def _load_readme_banner() -> str:
 
 
 README_ASCII_BANNER = _load_readme_banner()
-
-LICENSE_TEXT_CACHE = None
-USER_POLICY_TEXT_CACHE = None
-
-
-def _load_license_text() -> str:
-    """Load LICENSE file for pre-auth user acknowledgment."""
-    global LICENSE_TEXT_CACHE
-    if LICENSE_TEXT_CACHE is not None:
-        return LICENSE_TEXT_CACHE
-    license_path = Path(__file__).with_name("LICENSE")
-    try:
-        LICENSE_TEXT_CACHE = license_path.read_text(encoding="utf-8")
-    except Exception:
-        LICENSE_TEXT_CACHE = "License file could not be loaded."
-    return LICENSE_TEXT_CACHE
-
-
-def _load_user_policy_text() -> str:
-    """Load user policy markdown for pre-auth user acknowledgment."""
-    global USER_POLICY_TEXT_CACHE
-    if USER_POLICY_TEXT_CACHE is not None:
-        return USER_POLICY_TEXT_CACHE
-    policy_path = Path(__file__).parent / "docs" / "manuals" / "USER_POLICY.md"
-    try:
-        USER_POLICY_TEXT_CACHE = policy_path.read_text(encoding="utf-8")
-    except Exception:
-        USER_POLICY_TEXT_CACHE = "User policy file could not be loaded."
-    return USER_POLICY_TEXT_CACHE
+BRAND_ATTRIBUTION_LINE_1 = "VectorVue by Nyxera Labs"
+BRAND_ATTRIBUTION_LINE_2 = "© 2026 Nyxera Labs. All rights reserved."
 
 # =============================================================================
 # PHASE 2: RUNTIME EXECUTOR (Background Task Management)
@@ -400,10 +374,16 @@ class RegisterView(Container):
         confirm  = self.query_one("#reg-confirm").value
         group    = self.query_one("#reg-group").value.strip() or "default"
         status   = self.query_one("#reg-status")
+        legal_acceptance = getattr(self.app, "pending_legal_acceptance", None)
         if password != confirm:
             status.update("PASSWORDS DO NOT MATCH")
             return
-        ok, msg = self.app.db.register_user(username, password, group_name=group)
+        ok, msg = self.app.db.register_user(
+            username,
+            password,
+            group_name=group,
+            legal_acceptance=legal_acceptance,
+        )
         if ok: self.post_message(self.RegisterSuccess())
         else: status.update(msg)
 
@@ -476,41 +456,174 @@ class LicenseAgreementView(Container):
     class AgreementAccepted(Message): pass
     class AgreementCancelled(Message): pass
 
+    CONFIRM_PHRASE = "I ACCEPT"
+
     CSS = """
     LicenseAgreementView { align: center middle; background: $bg-void; width: 100%; height: 100%; }
-    #license-container {
+    #legal-container {
         width: 90%;
         height: 90%;
         border: heavy $steel;
         background: #141925EE;
         padding: 1;
     }
-    #license-title { color: $p-green; text-style: bold; margin-bottom: 1; content-align: center middle; }
-    #license-scroll { height: 1fr; border: solid $steel; background: #10141d; padding: 1; margin-bottom: 1; }
-    .license-check { margin: 0 0 1 0; }
+    #legal-title { color: $p-green; text-style: bold; margin-bottom: 1; content-align: center middle; }
+    #legal-doc-label { color: $steel; margin-bottom: 1; }
+    #legal-doc-scroll {
+        height: 1fr;
+        border: solid $steel;
+        background: #10141d;
+        padding: 1;
+        margin-bottom: 1;
+    }
+    #legal-progress { color: $steel; margin: 0 0 1 0; }
+    #legal-checkbox { margin: 0 0 1 0; }
+    #legal-phrase { margin: 0 0 1 0; }
+    #legal-actions-next { height: auto; margin: 0 0 1 0; }
+    #legal-actions-final { height: auto; margin: 0 0 1 0; }
+    #btn-legal-next { width: 1fr; }
+    #btn-license-accept { width: 1fr; }
+    #btn-license-cancel { width: 22; }
     #license-status { color: $r-alert; margin-top: 1; }
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            self._legal_bundle = current_legal_bundle(mode="self-hosted")
+            self._documents = self._legal_bundle["documents"]
+            self._load_error = ""
+        except Exception as exc:
+            self._legal_bundle = {
+                "document_hash": "",
+                "version": "",
+                "mode": "self-hosted",
+            }
+            self._documents = [{"name": "LEGAL LOAD ERROR", "content": str(exc)}]
+            self._load_error = f"Unable to load legal documents: {exc}"
+        self._doc_index = 0
+        self._scrolled: set[int] = set()
+
     def compose(self) -> ComposeResult:
-        with Container(id="license-container"):
-            yield Label("VECTORVUE LICENSE & USER POLICY AGREEMENT", id="license-title")
-            with ScrollableContainer(id="license-scroll"):
-                yield Markdown(f"## LICENSE\n\n{_load_license_text()}\n\n{_load_user_policy_text()}")
-            yield Checkbox("I have read and understand the LICENSE terms.", id="chk-license", classes="license-check")
-            yield Checkbox("I accept the VectorVue User Policy and authorized-use requirements.", id="chk-policy", classes="license-check")
-            with Horizontal():
-                yield Button("ACCEPT", id="btn-license-accept", variant="success")
+        with Container(id="legal-container"):
+            yield Label("VECTORVUE LEGAL ACCEPTANCE", id="legal-title")
+            yield Label("", id="legal-doc-label")
+            with ScrollableContainer(id="legal-doc-scroll"):
+                yield Markdown("", id="legal-doc-markdown")
+            yield Label("", id="legal-progress")
+            yield Checkbox(
+                "I have read and agree to all legal documents.",
+                id="legal-checkbox",
+                disabled=True,
+            )
+            yield Input(placeholder="Type EXACTLY: I ACCEPT", id="legal-phrase")
+            with Horizontal(id="legal-actions-next"):
+                yield Button("NEXT DOCUMENT", id="btn-legal-next", variant="primary")
+            with Horizontal(id="legal-actions-final"):
+                yield Button("ACCEPT (LOCKED)", id="btn-license-accept", variant="success", disabled=True)
                 yield Button("CANCEL", id="btn-license-cancel", variant="error")
             yield Label("", id="license-status")
 
+    def on_mount(self):
+        self._render_current_document()
+        self._refresh_accept_button()
+        self.set_interval(0.2, self._poll_scroll_progress)
+
+    def _all_documents_scrolled(self) -> bool:
+        return len(self._scrolled) == len(self._documents)
+
+    def _poll_scroll_progress(self):
+        if self._doc_index in self._scrolled:
+            return
+        scroll = self.query_one("#legal-doc-scroll", ScrollableContainer)
+        current = float(getattr(scroll, "scroll_y", 0.0) or 0.0)
+        maximum = float(getattr(scroll, "max_scroll_y", 0.0) or 0.0)
+        progress = 1.0 if maximum <= 0 else (current / maximum)
+        near_bottom = current >= max(0.0, (maximum * 0.95) - 1.0)
+        if progress >= 0.95 or near_bottom:
+            self._scrolled.add(self._doc_index)
+            self._update_progress_status()
+            if self._doc_index < len(self._documents) - 1:
+                self.query_one("#btn-legal-next", Button).disabled = False
+                self.query_one("#btn-legal-next", Button).label = "NEXT DOCUMENT"
+            else:
+                checkbox = self.query_one("#legal-checkbox", Checkbox)
+                checkbox.disabled = not self._all_documents_scrolled()
+                self.query_one("#btn-legal-next", Button).label = "ALL DOCUMENTS COMPLETED"
+                if not checkbox.disabled:
+                    self.query_one("#license-status", Label).update(
+                        "Final step: check the box and type 'I ACCEPT' to continue."
+                    )
+            self._refresh_accept_button()
+
+    def _update_progress_status(self):
+        status = self.query_one("#legal-progress", Label)
+        read_count = len(self._scrolled)
+        total_count = len(self._documents)
+        if not self._all_documents_scrolled():
+            status.update(f"Read progress: {read_count}/{total_count} documents scrolled to >=95%.")
+            return
+        status.update("All legal documents were fully scrolled. You may now accept.")
+
+    def _render_current_document(self):
+        doc = self._documents[self._doc_index]
+        self.query_one("#legal-doc-label", Label).update(
+            f"Document {self._doc_index + 1}/{len(self._documents)}: {doc['name']}"
+        )
+        self.query_one("#legal-doc-markdown", Markdown).update(f"```\n{doc['content']}\n```")
+        scroll = self.query_one("#legal-doc-scroll", ScrollableContainer)
+        scroll.scroll_to(y=0, animate=False)
+        self.query_one("#btn-legal-next", Button).disabled = True
+        self.query_one("#btn-legal-next", Button).label = "NEXT DOCUMENT"
+        self._update_progress_status()
+        self._refresh_accept_button()
+        if self._load_error:
+            self.query_one("#license-status", Label).update(self._load_error)
+
+    def _refresh_accept_button(self):
+        checkbox_ok = self.query_one("#legal-checkbox", Checkbox).value
+        phrase_ok = self.query_one("#legal-phrase", Input).value == self.CONFIRM_PHRASE
+        can_accept = self._all_documents_scrolled() and checkbox_ok and phrase_ok and not self._load_error
+        btn = self.query_one("#btn-license-accept", Button)
+        btn.disabled = not can_accept
+        btn.label = "CONTINUE" if can_accept else "ACCEPT (LOCKED)"
+
+    @on(Button.Pressed, "#btn-legal-next")
+    def on_next_document(self):
+        if self._doc_index not in self._scrolled:
+            self.query_one("#license-status", Label).update("Scroll this document to >=95% before continuing.")
+            return
+        if self._doc_index >= len(self._documents) - 1:
+            self.query_one("#license-status", Label).update("All documents already displayed.")
+            return
+        self._doc_index += 1
+        self.query_one("#license-status", Label).update("")
+        self._render_current_document()
+
+    @on(Checkbox.Changed, "#legal-checkbox")
+    def on_checkbox_changed(self):
+        self._refresh_accept_button()
+
+    @on(Input.Changed, "#legal-phrase")
+    def on_phrase_changed(self):
+        self._refresh_accept_button()
+
     @on(Button.Pressed, "#btn-license-accept")
     def on_accept(self):
-        license_ok = self.query_one("#chk-license", Checkbox).value
-        policy_ok = self.query_one("#chk-policy", Checkbox).value
-        if license_ok and policy_ok:
-            self.post_message(self.AgreementAccepted())
+        self._refresh_accept_button()
+        if self.query_one("#btn-license-accept", Button).disabled:
+            self.query_one("#license-status", Label).update(
+                "Complete document scrolling, check acceptance, and type exactly 'I ACCEPT'."
+            )
             return
-        self.query_one("#license-status", Label).update("You must accept both the LICENSE and User Policy to continue.")
+        self.app.pending_legal_acceptance = {
+            "accepted": True,
+            "timestamp": datetime.utcnow().isoformat(),
+            "document_hash": self._legal_bundle["document_hash"],
+            "version": self._legal_bundle["version"],
+            "mode": self._legal_bundle["mode"],
+        }
+        self.post_message(self.AgreementAccepted())
 
     @on(Button.Pressed, "#btn-license-cancel")
     def on_cancel(self):
@@ -2690,7 +2803,10 @@ class CyberTUI(App):
             yield Button("LOGOUT",     id="btn-logout",   disabled=True)
             yield Button("SHUTDOWN",   id="btn-exit")
 
-        yield Label("SYSTEM LOCKED - AUTH REQUIRED", id="status-bar")
+        yield Label(
+            f"SYSTEM LOCKED - AUTH REQUIRED | {BRAND_ATTRIBUTION_LINE_1} | {BRAND_ATTRIBUTION_LINE_2}",
+            id="status-bar",
+        )
 
     def on_mount(self):
         self.crypto      = SessionCrypto()
@@ -2699,6 +2815,7 @@ class CyberTUI(App):
         self.current_id  = None
         self.runtime_executor = RuntimeExecutor(self.db)
         self._license_next_view = "register-view"
+        self.pending_legal_acceptance = None
 
         sw = self.query_one("#view-switcher")
         self._set_tab_bar_visibility(False)
@@ -2708,7 +2825,7 @@ class CyberTUI(App):
         else:
             sw.current = "license-view"
             self._license_next_view = "register-view"
-            self.update_status("LICENSE ACCEPTANCE REQUIRED FOR REGISTRATION", CyberColors.AMBER_WARNING)
+            self.update_status("LEGAL ACCEPTANCE REQUIRED FOR REGISTRATION", CyberColors.AMBER_WARNING)
 
     def _set_tab_bar_visibility(self, visible: bool):
         """Show/hide top tab bar + right sidebar and collapse their layout tracks."""
@@ -2723,6 +2840,7 @@ class CyberTUI(App):
 
     @on(RegisterView.RegisterSuccess)
     def on_register_success(self):
+        self.pending_legal_acceptance = None
         self.update_status("REGISTRATION COMPLETE — AUTHENTICATE NOW", CyberColors.PHOSPHOR_GREEN)
         self.query_one("#view-switcher").current = "login-view"
 
@@ -2733,9 +2851,10 @@ class CyberTUI(App):
 
     @on(LoginView.RegisterRequested)
     def on_login_register_requested(self):
+        self.pending_legal_acceptance = None
         self._license_next_view = "register-view"
         self.query_one("#view-switcher").current = "license-view"
-        self.update_status("ACCEPT LICENSE/POLICY TO REGISTER", CyberColors.AMBER_WARNING)
+        self.update_status("LEGAL ACCEPTANCE REQUIRED FOR REGISTRATION", CyberColors.AMBER_WARNING)
 
     @on(LoginView.LoginSuccess)
     def on_login_success(self):
@@ -2844,7 +2963,9 @@ class CyberTUI(App):
     def update_status(self, msg, color="#ffffff"):
         bar = self.query_one("#status-bar")
         ts  = datetime.now().strftime('%H:%M:%S')
-        bar.update(f"[{ts}] {msg}")
+        bar.update(
+            f"[{ts}] {msg} | {BRAND_ATTRIBUTION_LINE_1} | {BRAND_ATTRIBUTION_LINE_2}"
+        )
         bar.styles.color = color
 
     def refresh_editor_preview(self):

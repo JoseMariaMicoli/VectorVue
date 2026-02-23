@@ -91,6 +91,32 @@ Use menu option:
 make deploy
 ```
 
+## Legal & Compliance Enforcement
+
+- `make install` is the production-grade installation path and enforces mandatory legal validation.
+- `make deploy` is for development/testing workflows and does not enforce the legal installer gate.
+
+`make install` requires:
+- Full rendering of all legal documents in sequence.
+- Interactive pagination.
+- Exact case-sensitive confirmation phrase: `I ACCEPT VECTORVUE LEGAL TERMS`.
+- A valid `.vectorvue/legal_acceptance.json` manifest with current hash/version/mode.
+
+### QA Validation (Legal + Branding)
+
+Recommended QA checks on release candidate branches:
+
+```bash
+python -m py_compile utils/legal_acceptance.py scripts/legal_install_guard.py vv_core.py vv.py vv_client_api.py vv_theme.py
+python scripts/legal_install_guard.py --mode self-hosted --acceptance-file .vectorvue/legal_acceptance.json
+docker compose run --rm vectorvue_app python -m unittest discover -s tests/unit -p "test_*.py" -v
+docker compose --profile qa run --rm vectorvue_portal_builder npm run build
+```
+
+Expected outcomes:
+- legal acceptance manifest validates successfully
+- unit test suite passes in app runtime
+- portal build succeeds in builder image profile (`vectorvue_portal_builder`)
 **Seed realistic demo data:**
 
 ```bash

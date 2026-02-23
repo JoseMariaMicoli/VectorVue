@@ -32,6 +32,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from vv_fs import FileSystemService
+from utils.legal_acceptance import current_legal_bundle
 try:
     from analytics.events import log_analytics_event
 except Exception:  # pragma: no cover
@@ -1186,6 +1187,17 @@ class Database:
             capability_profile  TEXT NOT NULL DEFAULT 'operator-core',
             updated_at          TEXT NOT NULL,
             updated_by          TEXT NOT NULL)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS legal_acceptances (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER,
+            username        TEXT NOT NULL,
+            deployment_mode TEXT NOT NULL,
+            document_hash   TEXT NOT NULL,
+            legal_version   TEXT NOT NULL,
+            accepted        INTEGER NOT NULL DEFAULT 1,
+            accepted_at     TEXT NOT NULL,
+            ip_address      TEXT DEFAULT '',
+            created_at      TEXT NOT NULL)''')
         c.execute('''CREATE TABLE IF NOT EXISTS sessions (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id       INTEGER NOT NULL REFERENCES users(id),
@@ -2207,9 +2219,71 @@ class Database:
                     return count > 0
             raise
 
-    def register_user(self, username: str, password: str, role: str = Role.OPERATOR, group_name: str = "default") -> Tuple[bool, str]:
+    def _validate_legal_acceptance_payload(self, payload: Dict[str, Any] | None, mode: str) -> tuple[bool, str, dict[str, str] | None]:
+        if not isinstance(payload, dict):
+            return False, "Legal acceptance is required before registration.", None
+        required = {"accepted", "timestamp", "document_hash", "version", "mode"}
+        if set(payload.keys()) != required:
+            return False, "Legal acceptance payload is malformed.", None
+        if payload.get("accepted") is not True:
+            return False, "Legal acceptance must be explicitly approved.", None
+        for key in ("timestamp", "document_hash", "version", "mode"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                return False, f"Legal acceptance field '{key}' is invalid.", None
+        expected = current_legal_bundle(mode=mode)
+        if payload.get("mode") != mode:
+            return False, "Legal acceptance mode mismatch.", None
+        if payload.get("document_hash") != expected["document_hash"]:
+            return False, "Legal documents changed; re-acceptance is required.", None
+        if payload.get("version") != expected["version"]:
+            return False, "Legal version changed; re-acceptance is required.", None
+        return True, "ok", {
+            "timestamp": payload["timestamp"],
+            "document_hash": payload["document_hash"],
+            "version": payload["version"],
+            "mode": payload["mode"],
+        }
+
+    def _record_user_legal_acceptance(self, user_id: int, username: str, payload: dict[str, str], ip_address: str = "") -> None:
+        c = self.conn.cursor()
+        now = datetime.utcnow().isoformat()
+        c.execute(
+            """INSERT INTO legal_acceptances
+               (user_id, username, deployment_mode, document_hash, legal_version, accepted, accepted_at, ip_address, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                user_id,
+                username,
+                payload["mode"],
+                payload["document_hash"],
+                payload["version"],
+                1,
+                payload["timestamp"],
+                ip_address,
+                now,
+            ),
+        )
+
+    def register_user(
+        self,
+        username: str,
+        password: str,
+        role: str = Role.OPERATOR,
+        group_name: str = "default",
+        legal_acceptance: Dict[str, Any] | None = None,
+        bypass_legal: bool = False,
+    ) -> Tuple[bool, str]:
         if not username or not password: return False, "Username and password are required."
         if len(password) < 8: return False, "Password must be at least 8 characters."
+        legal_payload: dict[str, str] | None = None
+        if not bypass_legal:
+            legal_ok, legal_msg, legal_payload = self._validate_legal_acceptance_payload(
+                legal_acceptance,
+                mode="self-hosted",
+            )
+            if not legal_ok:
+                return False, legal_msg
         c = self.conn.cursor()
         c.execute("SELECT COUNT(*) FROM users")
         if c.fetchone()[0] == 0: role = Role.ADMIN
@@ -2232,6 +2306,8 @@ class Database:
                    VALUES (?, ?, ?, ?)""",
                 (user_id, default_capability_profile_for_role(role), now, "SYSTEM"),
             )
+            if legal_payload is not None:
+                self._record_user_legal_acceptance(user_id, username, legal_payload)
             self.conn.commit()
             self._audit("SYSTEM", "REGISTER", "user", username)
             return True, f"User '{username}' registered as {role}."

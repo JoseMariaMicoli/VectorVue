@@ -60,3 +60,5 @@ class ClientThemeOut(ClientSafeBase):
     company_name: str
     logo_url: str | None = None
     colors: dict[str, str]
+    platform_brand_locked: bool = True
+    platform_attribution: dict[str, str]

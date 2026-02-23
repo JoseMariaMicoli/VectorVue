@@ -69,3 +69,8 @@ Use documents by operational role and task. Internal phase names are intentional
 ## Product Planning Reference
 
 - [Roadmap](../ROADMAP.md)
+
+## Legal & Compliance Enforcement
+
+- `make install` enforces mandatory legal validation before installation completes.
+- `make deploy` is for development/testing workflows and does not enforce installer legal gating.

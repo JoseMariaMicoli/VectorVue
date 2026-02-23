@@ -20,7 +20,7 @@ export function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       {...props}
-      className={`rounded-md bg-accent px-4 py-2 text-sm font-semibold text-black hover:opacity-90 ${props.className ?? ''}`}
+      className={`rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-accent-glow transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 ${props.className ?? ''}`}
     />
   );
 }

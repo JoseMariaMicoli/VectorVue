@@ -259,5 +259,25 @@ CREATE TABLE IF NOT EXISTS audit_sessions (
     UNIQUE (tenant_id, token_hash)
 );
 
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NULL REFERENCES users(id) ON DELETE SET NULL,
+    username TEXT NOT NULL,
+    tenant_id UUID NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    deployment_mode TEXT NOT NULL,
+    document_hash TEXT NOT NULL,
+    legal_version TEXT NOT NULL,
+    accepted BOOLEAN NOT NULL DEFAULT TRUE,
+    accepted_at TIMESTAMPTZ NOT NULL,
+    ip_address TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user_mode_version
+ON legal_acceptances (username, deployment_mode, legal_version);
+
+CREATE INDEX IF NOT EXISTS idx_legal_acceptances_hash_version
+ON legal_acceptances (document_hash, legal_version);
+
 CREATE INDEX IF NOT EXISTS idx_audit_sessions_tenant_expires
 ON audit_sessions (tenant_id, expires_at DESC);

@@ -17,5 +17,5 @@ You may NOT:
 import { PropsWithChildren } from 'react';
 
 export function Card({ children }: PropsWithChildren) {
-  return <div className="rounded-xl border border-slate-700 bg-panel p-4">{children}</div>;
+  return <div className="rounded-xl border border-[color:var(--vv-border-subtle)] bg-bg-secondary p-4">{children}</div>;
 }

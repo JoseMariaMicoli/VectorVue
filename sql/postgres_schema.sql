@@ -1726,3 +1726,24 @@ IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='evidence_i
     FOR EACH ROW EXECUTE FUNCTION prevent_mutation_when_immutable();
 END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS "legal_acceptances" (
+    "id" BIGSERIAL,
+    "user_id" BIGINT,
+    "username" TEXT NOT NULL,
+    "tenant_id" UUID,
+    "deployment_mode" TEXT NOT NULL,
+    "document_hash" TEXT NOT NULL,
+    "legal_version" TEXT NOT NULL,
+    "accepted" BOOLEAN NOT NULL DEFAULT TRUE,
+    "accepted_at" TIMESTAMPTZ NOT NULL,
+    "ip_address" TEXT DEFAULT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "idx_legal_acceptances_user_mode_version"
+    ON "legal_acceptances" ("username", "deployment_mode", "legal_version");
+
+CREATE INDEX IF NOT EXISTS "idx_legal_acceptances_hash_version"
+    ON "legal_acceptances" ("document_hash", "legal_version");

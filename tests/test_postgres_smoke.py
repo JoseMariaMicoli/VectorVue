@@ -31,7 +31,13 @@ class PostgresSmokeTests(unittest.TestCase):
         self.password = "SmokePass123!"
         ok, _ = self.db.authenticate_user(self.username, self.password)
         if not ok:
-            self.db.register_user(self.username, self.password, role=Role.ADMIN, group_name="default")
+            self.db.register_user(
+                self.username,
+                self.password,
+                role=Role.ADMIN,
+                group_name="default",
+                bypass_legal=True,
+            )
             ok, msg = self.db.authenticate_user(self.username, self.password)
             self.assertTrue(ok, msg)
 

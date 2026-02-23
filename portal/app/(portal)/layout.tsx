@@ -47,7 +47,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
 
   return (
     <ThemeBootstrap initialTheme={theme}>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen bg-bg-primary text-text-primary">
         <Sidebar />
         <div className="flex min-h-screen flex-1 flex-col">
           <Topbar tenantName={tenant} theme={theme} />

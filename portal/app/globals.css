@@ -20,20 +20,47 @@ You may NOT:
 
 :root {
   color-scheme: dark;
-  --primary: #0f172a;
-  --accent: #22d3ee;
-  --background: #0b0e14;
-  --foreground: #e5e7eb;
-  --danger: #ef4444;
-  --success: #22c55e;
-  --primary-rgb: 15 23 42;
-  --accent-rgb: 34 211 238;
-  --background-rgb: 11 14 20;
-  --foreground-rgb: 229 231 235;
-  --danger-rgb: 239 68 68;
-  --success-rgb: 34 197 94;
+  --vv-bg-primary: #0A0F2D;
+  --vv-bg-secondary: #121735;
+  --vv-accent: #8A2BE2;
+  --vv-accent-hover: #9D4DFF;
+  --vv-success: #00C896;
+  --vv-warning: #FFB020;
+  --vv-error: #FF4D4F;
+  --vv-text-primary: #E6E9F2;
+  --vv-text-secondary: #AAB2D5;
+  --vv-border-subtle: rgba(255, 255, 255, 0.05);
+  --vv-metallic-gradient: linear-gradient(90deg, #D9E1F2 0%, #FFFFFF 50%, #C7CEDB 100%);
+  --vv-bg-primary-rgb: 10 15 45;
+  --vv-bg-secondary-rgb: 18 23 53;
+  --vv-accent-rgb: 138 43 226;
+  --vv-accent-hover-rgb: 157 77 255;
+  --vv-success-rgb: 0 200 150;
+  --vv-warning-rgb: 255 176 32;
+  --vv-error-rgb: 255 77 79;
+  --vv-text-primary-rgb: 230 233 242;
+  --vv-text-secondary-rgb: 170 178 213;
 }
 
 body {
-  @apply bg-bg text-text;
+  @apply bg-bg-primary text-text-primary font-sans;
+  background-image: radial-gradient(circle at 20% 0%, rgb(var(--vv-accent-rgb) / 0.18) 0%, transparent 32%);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  @apply font-heading;
+}
+
+@layer utilities {
+  .text-metallic {
+    background-image: var(--vv-metallic-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }

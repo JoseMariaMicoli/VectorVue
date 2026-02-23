@@ -72,7 +72,7 @@ TENANT_OPERATOR_USER ?=
 TENANT_OPERATOR_PASS ?=
 TENANT_OPERATOR_ROLE ?= operator
 
-.PHONY: help wizard venv-rebuild run-tui run-local-postgres deploy commercial-deploy customer-deploy customer-deploy-isolated customer-deploy-portal-isolated tenant-bootstrap-real phase79-real-smoke phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
+.PHONY: help wizard venv-rebuild run-tui run-local-postgres install legal-install-check deploy commercial-deploy customer-deploy customer-deploy-isolated customer-deploy-portal-isolated tenant-bootstrap-real phase79-real-smoke phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
 
 help:
 	@echo "VectorVue PostgreSQL operational targets"
@@ -87,6 +87,7 @@ help:
 	@echo "  make run-tui    - Run interactive TUI in Docker (PostgreSQL backend)"
 	@echo "  make run-local-postgres - Run local Python TUI against Docker PostgreSQL"
 	@echo "  make wizard     - Interactive guided deploy/bootstrap wizard"
+	@echo "  make install    - Production install path (mandatory legal acceptance + deploy)"
 	@echo "  make deploy     - Build/start full stack + tenant/theme migrations + API smoke test"
 	@echo "  make commercial-deploy - Deploy + print access matrix for commercial demos"
 	@echo "  make customer-deploy - Deploy stack scoped by COMPOSE project name per customer"
@@ -196,6 +197,11 @@ wizard:
 	esac
 
 deploy: api-up phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate api-smoke
+
+legal-install-check:
+	$(PY) scripts/legal_install_guard.py --mode self-hosted --acceptance-file .vectorvue/legal_acceptance.json
+
+install: legal-install-check deploy
 
 commercial-deploy: deploy
 	@$(MAKE) print-access-matrix --no-print-directory
@@ -391,7 +397,7 @@ pg-migrate:
 		--truncate
 
 seed-clients: phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate
-	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/seed_db.py \
+	$(DC) run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/seed_db.py \
 		--backend postgres \
 		--pg-url $(PG_URL) \
 		--global-admin-user "$(GLOBAL_ADMIN_USER)" \

@@ -58,6 +58,7 @@ from utils.tenant_assets import resolve_tenant_asset
 from utils.url_builder import build_public_url
 from vv_core import SessionCrypto
 from vv_core_postgres import _check_postgres, _check_redis
+from utils.legal_acceptance import current_legal_bundle
 from analytics.model_registry import get_latest_prediction, promote_model
 from analytics.queue import enqueue_run_inference, enqueue_train_model
 
@@ -90,13 +91,17 @@ SENSITIVE_METADATA_KEYS = {
 DEFAULT_THEME = {
     "company_name": "VectorVue Customer",
     "logo_path": "",
-    "primary_color": "#0f172a",
-    "accent_color": "#22d3ee",
-    "background_color": "#0b0e14",
-    "foreground_color": "#e5e7eb",
-    "danger_color": "#ef4444",
-    "success_color": "#22c55e",
+    "primary_color": "#121735",
+    "accent_color": "#8A2BE2",
+    "background_color": "#0A0F2D",
+    "foreground_color": "#E6E9F2",
+    "danger_color": "#FF4D4F",
+    "success_color": "#00C896",
     "updated_at": "",
+}
+PLATFORM_ATTRIBUTION = {
+    "line1": "VectorVue by Nyxera Labs",
+    "line2": "© 2026 Nyxera Labs. All rights reserved.",
 }
 
 
@@ -141,6 +146,54 @@ class ClientAuthLoginResponse(BaseModel):
     expires_in: int
     tenant_id: str
     username: str
+
+
+class LegalDocumentItem(BaseModel):
+    name: str
+    path: str
+    content: str
+
+
+class LegalDocumentsResponse(BaseModel):
+    documents: list[LegalDocumentItem]
+    document_hash: str
+    version: str
+    deployment_mode: str
+
+
+class LegalAcceptanceRequest(BaseModel):
+    username: str
+    tenant_id: str | None = None
+    deployment_mode: str = "self-hosted"
+    accepted: bool
+    document_hash: str
+    version: str
+
+
+class LegalAcceptanceResponse(BaseModel):
+    acceptance_id: int
+    username: str
+    deployment_mode: str
+    document_hash: str
+    version: str
+    accepted_at: str
+
+
+class ClientAuthRegisterRequest(BaseModel):
+    username: str
+    password: str
+    tenant_id: str | None = None
+    role: str | None = None
+    deployment_mode: str = "self-hosted"
+    legal_acceptance_id: int
+
+
+class ClientAuthRegisterResponse(BaseModel):
+    created: bool = True
+    user_id: int
+    username: str
+    role: str
+    tenant_id: str
 
 
 class RiskTrendPoint(BaseModel):
@@ -219,20 +272,40 @@ def _client_visible_reports_predicate(reports: Table, tenant_id: str):
 
 
 def _theme_payload(row: dict[str, Any], request: Request) -> dict[str, Any]:
+    def _valid_hex(value: Any, fallback: str) -> str:
+        raw = _safe_scalar({"v": value}, "v", fallback)
+        text = str(raw or "").strip()
+        if len(text) == 7 and text.startswith("#"):
+            try:
+                int(text[1:], 16)
+                return text
+            except Exception:
+                return fallback
+        return fallback
+
+    def _safe_company_name(value: Any) -> str:
+        name = str(value or "").strip()
+        if not name:
+            return DEFAULT_THEME["company_name"]
+        # Guard against rendering abuse in tenant-provided branding labels.
+        return name[:80]
+
     logo_url = None
     if _safe_scalar(row, "logo_path", ""):
         logo_url = build_public_url("/api/v1/client/theme/logo", request)
     return {
-        "company_name": _safe_scalar(row, "company_name", DEFAULT_THEME["company_name"]),
+        "company_name": _safe_company_name(_safe_scalar(row, "company_name", DEFAULT_THEME["company_name"])),
         "logo_url": logo_url,
         "colors": {
-            "primary": _safe_scalar(row, "primary_color", DEFAULT_THEME["primary_color"]),
-            "accent": _safe_scalar(row, "accent_color", DEFAULT_THEME["accent_color"]),
-            "background": _safe_scalar(row, "background_color", DEFAULT_THEME["background_color"]),
-            "foreground": _safe_scalar(row, "foreground_color", DEFAULT_THEME["foreground_color"]),
-            "danger": _safe_scalar(row, "danger_color", DEFAULT_THEME["danger_color"]),
-            "success": _safe_scalar(row, "success_color", DEFAULT_THEME["success_color"]),
+            "primary": _valid_hex(_safe_scalar(row, "primary_color", DEFAULT_THEME["primary_color"]), DEFAULT_THEME["primary_color"]),
+            "accent": _valid_hex(_safe_scalar(row, "accent_color", DEFAULT_THEME["accent_color"]), DEFAULT_THEME["accent_color"]),
+            "background": _valid_hex(_safe_scalar(row, "background_color", DEFAULT_THEME["background_color"]), DEFAULT_THEME["background_color"]),
+            "foreground": _valid_hex(_safe_scalar(row, "foreground_color", DEFAULT_THEME["foreground_color"]), DEFAULT_THEME["foreground_color"]),
+            "danger": _valid_hex(_safe_scalar(row, "danger_color", DEFAULT_THEME["danger_color"]), DEFAULT_THEME["danger_color"]),
+            "success": _valid_hex(_safe_scalar(row, "success_color", DEFAULT_THEME["success_color"]), DEFAULT_THEME["success_color"]),
         },
+        "platform_brand_locked": True,
+        "platform_attribution": dict(PLATFORM_ATTRIBUTION),
     }
 
 
@@ -376,6 +449,243 @@ def _resolve_login_tenant(db: Session, requested_tenant_id: str | None) -> str:
                 detail="Tenant schema missing. Run make phase65-migrate and retry.",
             ) from exc
         raise
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    if request.client and request.client.host:
+        return request.client.host.strip()
+    return ""
+
+
+def _ensure_legal_acceptance_schema(db: Session) -> None:
+    db.execute(
+        text(
+            """CREATE TABLE IF NOT EXISTS legal_acceptances (
+                   id BIGSERIAL PRIMARY KEY,
+                   user_id BIGINT NULL,
+                   username TEXT NOT NULL,
+                   tenant_id UUID NULL,
+                   deployment_mode TEXT NOT NULL,
+                   document_hash TEXT NOT NULL,
+                   legal_version TEXT NOT NULL,
+                   accepted BOOLEAN NOT NULL DEFAULT TRUE,
+                   accepted_at TIMESTAMPTZ NOT NULL,
+                   ip_address TEXT NULL,
+                   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+               )"""
+        )
+    )
+    db.execute(
+        text(
+            """CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user_mode_version
+               ON legal_acceptances (username, deployment_mode, legal_version)"""
+        )
+    )
+    db.execute(
+        text(
+            """CREATE INDEX IF NOT EXISTS idx_legal_acceptances_hash_version
+               ON legal_acceptances (document_hash, legal_version)"""
+        )
+    )
+    db.commit()
+
+
+def _current_legal_for_mode(mode: str) -> dict[str, Any]:
+    if mode not in {"self-hosted", "saas"}:
+        raise HTTPException(status_code=422, detail="deployment_mode must be self-hosted|saas")
+    return current_legal_bundle(mode=mode)
+
+
+def _verify_legal_hash_and_version(mode: str, document_hash: str, version: str) -> dict[str, Any]:
+    bundle = _current_legal_for_mode(mode)
+    if document_hash != bundle["document_hash"]:
+        raise HTTPException(status_code=409, detail="Legal document hash mismatch; re-acceptance is required")
+    if version != bundle["version"]:
+        raise HTTPException(status_code=409, detail="Legal version mismatch; re-acceptance is required")
+    return bundle
+
+
+def _resolve_register_role(db: Session, requested_role: str | None) -> str:
+    user_count = int(db.execute(text("SELECT COUNT(*) FROM users")).scalar_one())
+    if user_count == 0:
+        return "admin"
+    role = (requested_role or "operator").strip().lower()
+    if role not in {"viewer", "operator", "lead", "admin"}:
+        raise HTTPException(status_code=422, detail="role must be viewer|operator|lead|admin")
+    return role
+
+
+def _ensure_default_group(db: Session) -> int:
+    groups = _load_table("groups")
+    row = db.execute(select(groups.c.id).where(groups.c.name == "default").limit(1)).mappings().first()
+    if row:
+        return int(row["id"])
+    inserted = db.execute(
+        text("INSERT INTO groups (name, description) VALUES (:name, :description) RETURNING id"),
+        {"name": "default", "description": "Default group"},
+    ).mappings().first()
+    if not inserted:
+        raise HTTPException(status_code=500, detail="Unable to create default group")
+    return int(inserted["id"])
+
+
+@app.get("/api/v1/client/legal/documents", response_model=LegalDocumentsResponse, tags=["client-legal"])
+def legal_documents(mode: str = Query(default="self-hosted")):
+    bundle = _current_legal_for_mode(mode)
+    docs = [LegalDocumentItem(name=d["name"], path=d["path"], content=d["content"]) for d in bundle["documents"]]
+    return LegalDocumentsResponse(
+        documents=docs,
+        document_hash=bundle["document_hash"],
+        version=bundle["version"],
+        deployment_mode=mode,
+    )
+
+
+@app.post("/api/v1/client/legal/accept", response_model=LegalAcceptanceResponse, tags=["client-legal"])
+def legal_accept(payload: LegalAcceptanceRequest, request: Request, db: Session = Depends(_get_db)):
+    _ensure_legal_acceptance_schema(db)
+    username = (payload.username or "").strip()
+    if not username:
+        raise HTTPException(status_code=422, detail="username is required")
+    if payload.accepted is not True:
+        raise HTTPException(status_code=422, detail="Legal acceptance checkbox must be checked")
+    bundle = _verify_legal_hash_and_version(payload.deployment_mode, payload.document_hash, payload.version)
+    users = _load_table("users")
+    user_row = db.execute(select(users.c.id).where(users.c.username == username).limit(1)).mappings().first()
+    user_id = int(user_row["id"]) if user_row else None
+    ip_address = _client_ip(request) if payload.deployment_mode == "saas" else None
+    accepted_at = datetime.utcnow().isoformat() + "Z"
+    row = db.execute(
+        text(
+            """INSERT INTO legal_acceptances
+               (user_id, username, tenant_id, deployment_mode, document_hash, legal_version, accepted, accepted_at, ip_address)
+               VALUES (:user_id, :username, CAST(:tenant_id AS UUID), :deployment_mode, :document_hash, :legal_version, TRUE, :accepted_at, :ip_address)
+               RETURNING id"""
+        ),
+        {
+            "user_id": user_id,
+            "username": username,
+            "tenant_id": payload.tenant_id,
+            "deployment_mode": payload.deployment_mode,
+            "document_hash": bundle["document_hash"],
+            "legal_version": bundle["version"],
+            "accepted_at": accepted_at,
+            "ip_address": ip_address,
+        },
+    ).mappings().first()
+    db.commit()
+    if not row:
+        raise HTTPException(status_code=500, detail="Unable to persist legal acceptance")
+    return LegalAcceptanceResponse(
+        acceptance_id=int(row["id"]),
+        username=username,
+        deployment_mode=payload.deployment_mode,
+        document_hash=bundle["document_hash"],
+        version=bundle["version"],
+        accepted_at=accepted_at,
+    )
+
+
+@app.post("/api/v1/client/auth/register", response_model=ClientAuthRegisterResponse, tags=["client-auth"])
+def client_register(payload: ClientAuthRegisterRequest, db: Session = Depends(_get_db)):
+    _ensure_legal_acceptance_schema(db)
+    username = (payload.username or "").strip()
+    password = payload.password or ""
+    if not username or not password:
+        raise HTTPException(status_code=422, detail="username and password are required")
+    if len(password) < 8:
+        raise HTTPException(status_code=422, detail="password must be at least 8 characters")
+
+    bundle = _current_legal_for_mode(payload.deployment_mode)
+    users = _load_table("users")
+    existing = db.execute(select(users.c.id).where(users.c.username == username).limit(1)).mappings().first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Username '{username}' already exists")
+
+    legal_row = db.execute(
+        text(
+            """SELECT id, user_id, username, tenant_id, deployment_mode, document_hash, legal_version, accepted
+               FROM legal_acceptances
+               WHERE id = :id"""
+        ),
+        {"id": payload.legal_acceptance_id},
+    ).mappings().first()
+    if not legal_row:
+        raise HTTPException(status_code=403, detail="Legal acceptance record not found")
+    if str(legal_row["username"]).strip() != username:
+        raise HTTPException(status_code=403, detail="Legal acceptance does not belong to this username")
+    if legal_row["accepted"] is not True:
+        raise HTTPException(status_code=403, detail="Legal acceptance is invalid")
+    if str(legal_row["deployment_mode"]) != payload.deployment_mode:
+        raise HTTPException(status_code=403, detail="Legal acceptance deployment mode mismatch")
+    if str(legal_row["document_hash"]) != bundle["document_hash"]:
+        raise HTTPException(status_code=409, detail="Legal documents changed; re-acceptance is required")
+    if str(legal_row["legal_version"]) != bundle["version"]:
+        raise HTTPException(status_code=409, detail="Legal version changed; re-acceptance is required")
+
+    tenant_id = _resolve_login_tenant(db, payload.tenant_id)
+    role = _resolve_register_role(db, payload.role)
+    group_id = _ensure_default_group(db)
+    user_salt = os.urandom(32)
+    salt_b64 = base64.b64encode(user_salt).decode("utf-8")
+    crypto = SessionCrypto()
+    pw_hash = crypto.derive_user_password_hash(password, user_salt)
+    now = datetime.utcnow().isoformat() + "Z"
+
+    created = db.execute(
+        text(
+            """INSERT INTO users (username, password_hash, salt, role, group_id, created_at, last_login)
+               VALUES (:username, :password_hash, :salt, :role, :group_id, :created_at, :last_login)
+               RETURNING id"""
+        ),
+        {
+            "username": username,
+            "password_hash": pw_hash,
+            "salt": salt_b64,
+            "role": role,
+            "group_id": group_id,
+            "created_at": now,
+            "last_login": "",
+        },
+    ).mappings().first()
+    if not created:
+        raise HTTPException(status_code=500, detail="User registration failed")
+    user_id = int(created["id"])
+
+    db.execute(
+        text(
+            """INSERT INTO user_capabilities (user_id, capability_profile, updated_at, updated_by)
+               VALUES (:user_id, :capability_profile, :updated_at, :updated_by)
+               ON CONFLICT (user_id) DO NOTHING"""
+        ),
+        {
+            "user_id": user_id,
+            "capability_profile": "admin-full" if role == "admin" else "operator-core",
+            "updated_at": now,
+            "updated_by": "SYSTEM",
+        },
+    )
+
+    db.execute(
+        text(
+            """UPDATE legal_acceptances
+               SET user_id = :user_id, tenant_id = CAST(:tenant_id AS UUID)
+               WHERE id = :id"""
+        ),
+        {"user_id": user_id, "tenant_id": tenant_id, "id": payload.legal_acceptance_id},
+    )
+    db.commit()
+
+    return ClientAuthRegisterResponse(
+        created=True,
+        user_id=user_id,
+        username=username,
+        role=role,
+        tenant_id=tenant_id,
+    )
 
 
 def _enforce_user_tenant_access(db: Session, user_id: int, username: str, tenant_id: str) -> None:

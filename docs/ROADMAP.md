@@ -41,6 +41,18 @@ VectorVue has evolved from a single-operator red team notebook into an enterpris
 - **Phase 8:** ML/Analytics (Attack prediction, anomaly learning) ✅ Delivered
 - **Phase 9:** Compliance & Regulatory Assurance (audit evidence, ISO/SOC2/HIPAA/financial readiness) ✅ Delivered
 
+## Epic: Legal Enforcement & Installation Hardening
+
+- [ ] Web UI scroll-gated legal enforcement
+- [ ] Server-side validation enforcement
+- [ ] TUI paginated enforcement
+- [x] TUI legal acceptance unlock/state feedback fix
+- [ ] make install legal validation workflow
+- [ ] Acceptance hash versioning system
+- [ ] Acceptance persistence layer
+- [ ] Re-acceptance logic on version change
+- [ ] Update README.md
+- [ ] Update INDEX.md
 
 ---
 

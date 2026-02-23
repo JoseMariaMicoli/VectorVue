@@ -89,6 +89,11 @@ export type ClientTheme = {
     danger: string;
     success: string;
   };
+  platform_brand_locked?: boolean;
+  platform_attribution?: {
+    line1: string;
+    line2: string;
+  };
 };
 
 export type ClientMLInsight = {
