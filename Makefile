@@ -391,7 +391,7 @@ pg-migrate:
 		--truncate
 
 seed-clients: phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate
-	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/seed_db.py \
+	$(DC) run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/seed_db.py \
 		--backend postgres \
 		--pg-url $(PG_URL) \
 		--global-admin-user "$(GLOBAL_ADMIN_USER)" \
