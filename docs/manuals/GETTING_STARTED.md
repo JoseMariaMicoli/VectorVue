@@ -1,14 +1,14 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# Getting Started with VectorVue v3.9
+# Getting Started with VectorVue v4.0
 
-![Setup](https://img.shields.io/badge/Setup-v3.9_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_6_Complete-39FF14?style=flat-square) ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14?style=flat-square) ![Features](https://img.shields.io/badge/Features-78_Tables_250%2B_Methods-39FF14)
+![Setup](https://img.shields.io/badge/Setup-v4.0_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_6_Complete-39FF14?style=flat-square) ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14?style=flat-square) ![Features](https://img.shields.io/badge/Features-78_Tables_250%2B_Methods-39FF14)
 
-This guide covers deployment of **VectorVue v3.9**, the complete Red Team Campaign Management Platform with Phases 0-5 and Phase 6 (Deployment & Hardening) implemented: campaign management, RBAC, evidence chain of custody, operational intelligence, operational cognition decision-support, reporting & export, multi-team federation, and advanced threat intelligence. Follow these steps to get operationally ready.
+This guide covers deployment of **VectorVue v4.0**, the complete Red Team Campaign Management Platform with Phases 0-5 and Phase 6 (Deployment & Hardening) implemented: campaign management, RBAC, evidence chain of custody, operational intelligence, operational cognition decision-support, reporting & export, multi-team federation, and advanced threat intelligence. Follow these steps to get operationally ready.
 
 ---
 
-## 🎯 What is VectorVue v3.9?
+## 🎯 What is VectorVue v4.0?
 
 VectorVue is a terminal-based (TUI) platform for red team operators to:
 - **Manage campaigns** with client context, ROE, objectives, and team assignments
@@ -21,7 +21,7 @@ VectorVue is a terminal-based (TUI) platform for red team operators to:
 - **Analyze threats** with automated risk scoring, behavioral analytics, defense prediction
 - **Make better decisions** with operational cognition: pathfinding, objective tracking, detection pressure, confidence scoring (Phase 5.5)
 
-**New in v3.9:** Operational Cognition (Phase 5.5) - Attack graph pathfinding, objective distance, recommendation scoring, detection pressure tracking, OpSec simulation, event replay, operator tempo analysis, infrastructure burn tracking, confidence analysis, and pattern learning.
+**New in v4.0:** Operational Cognition (Phase 5.5) - Attack graph pathfinding, objective distance, recommendation scoring, detection pressure tracking, OpSec simulation, event replay, operator tempo analysis, infrastructure burn tracking, confidence analysis, and pattern learning.
 
 ---
 

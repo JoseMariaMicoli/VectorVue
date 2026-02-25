@@ -41,9 +41,9 @@ RUN pip install --upgrade pip setuptools wheel \
 
 COPY . .
 
-RUN python -m py_compile vv.py vv_core.py vv_core_postgres.py scripts/*.py tests/test_postgres_smoke.py \
+RUN python -m py_compile vv.py vv_core.py vv_core_postgres.py vv_client_api.py scripts/*.py tests/test_postgres_smoke.py \
     && VV_DB_BACKEND=sqlite python -m unittest -q tests/test_postgres_smoke.py \
-    && python -m compileall -q vv.py vv_core.py vv_core_postgres.py vv_*.py cognition_service.py engines scripts tests
+    && python -m compileall -q vv.py vv_core.py vv_core_postgres.py vv_client_api.py vv_*.py cognition_service.py engines scripts tests
 
 FROM python:3.11-slim AS runtime
 
@@ -88,11 +88,11 @@ COPY --from=builder --chown=vectorvue:vectorvue /build /opt/vectorvue
 RUN rm -rf /opt/vectorvue/.git /opt/vectorvue/venv /opt/vectorvue/__pycache__ \
     && ln -sfn /var/lib/vectorvue/reports /opt/vectorvue/Reports \
     && ln -sfn /var/lib/vectorvue/logs /opt/vectorvue/logs \
-    && python -m compileall -q /opt/vectorvue/vv.py /opt/vectorvue/vv_core.py /opt/vectorvue/vv_core_postgres.py /opt/vectorvue/engines /opt/vectorvue/scripts /opt/vectorvue/tests
+    && python -m compileall -q /opt/vectorvue/vv.py /opt/vectorvue/vv_core.py /opt/vectorvue/vv_core_postgres.py /opt/vectorvue/vv_client_api.py /opt/vectorvue/engines /opt/vectorvue/scripts /opt/vectorvue/tests
 
 USER vectorvue:vectorvue
 
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["python", "-m", "vv_core_postgres"]
+CMD ["python", "-m", "uvicorn", "vv_client_api:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]

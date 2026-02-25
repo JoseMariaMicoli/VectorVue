@@ -1,0 +1,291 @@
+"""VectorVue client-safe REST API (Phase 6.5).
+
+This module is additive and does not modify operator routes/TUI behavior.
+It serves tenant-isolated read-only endpoints for future public portal usage.
+"""
+
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from typing import Any
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from sqlalchemy import MetaData, Table, create_engine, select, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
+
+from api_contract.client_api_models import Paginated, RemediationStatus, RiskSummary
+from schemas.client_safe import ClientEvidence, ClientFinding, ClientReport
+from security.tenant_auth import get_current_tenant
+from vv_core_postgres import _check_postgres, _check_redis
+
+
+APP_TITLE = "VectorVue Client API"
+APP_VERSION = "4.0"
+
+
+def _db_url() -> str:
+    env_url = os.environ.get("VV_DB_URL", "").strip()
+    if env_url:
+        url = make_url(env_url)
+        if url.get_backend_name() == "postgresql" and url.drivername != "postgresql+psycopg":
+            url = url.set(drivername="postgresql+psycopg")
+        return str(url)
+    user = os.environ.get("VV_DB_USER", os.environ.get("POSTGRES_USER", "vectorvue"))
+    password = os.environ.get("VV_DB_PASSWORD", os.environ.get("POSTGRES_PASSWORD", "strongpassword"))
+    host = os.environ.get("VV_DB_HOST", "postgres")
+    port = os.environ.get("VV_DB_PORT", "5432")
+    name = os.environ.get("VV_DB_NAME", os.environ.get("POSTGRES_DB", "vectorvue_db"))
+    return str(make_url(f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"))
+
+
+engine = create_engine(_db_url(), pool_pre_ping=True, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+metadata = MetaData()
+
+
+app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+
+
+def _get_db() -> Session:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def _load_table(name: str) -> Table:
+    return Table(name, metadata, autoload_with=engine)
+
+
+def _require_tenant_column(table: Table) -> None:
+    if "tenant_id" not in table.c:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Table '{table.name}' is missing tenant_id. Apply Phase 6.5 migration.",
+        )
+
+
+def _safe_scalar(row: Any, key: str, default: Any = None) -> Any:
+    if row is None:
+        return default
+    try:
+        return row[key]
+    except Exception:
+        return default
+
+
+@app.get("/", tags=["system"])
+def root_health() -> dict[str, Any]:
+    pg_ok, pg_msg = _check_postgres()
+    redis_ok, redis_msg = _check_redis()
+    return {
+        "status": "healthy" if pg_ok and redis_ok else "degraded",
+        "version": APP_VERSION,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "checks": {
+            "postgres": {"ok": pg_ok, "detail": pg_msg},
+            "redis": {"ok": redis_ok, "detail": redis_msg},
+        },
+    }
+
+
+@app.get("/healthz", tags=["system"])
+def healthz() -> dict[str, Any]:
+    return root_health()
+
+
+@app.get("/api/v1/client/findings", response_model=Paginated[ClientFinding], tags=["client"])
+def list_client_findings(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    findings = _load_table("findings")
+    _require_tenant_column(findings)
+
+    offset = (page - 1) * page_size
+
+    try:
+        total_stmt = select(text("COUNT(*)")).select_from(findings).where(findings.c.tenant_id == tenant_id)
+        total = int(db.execute(total_stmt).scalar_one())
+
+        stmt = (
+            select(
+                findings.c.id,
+                findings.c.title,
+                findings.c.cvss_score,
+                findings.c.mitre_id,
+                findings.c.approval_status,
+                findings.c.visibility.label("visibility_status"),
+            )
+            .where(findings.c.tenant_id == tenant_id)
+            .order_by(findings.c.id.desc())
+            .limit(page_size)
+            .offset(offset)
+        )
+        rows = db.execute(stmt).mappings().all()
+
+        items = [
+            ClientFinding(
+                id=int(r["id"]),
+                title=str(r["title"]),
+                cvss_score=float(r["cvss_score"]) if r["cvss_score"] is not None else None,
+                mitre_id=_safe_scalar(r, "mitre_id"),
+                approval_status=_safe_scalar(r, "approval_status", "pending"),
+                visibility_status=_safe_scalar(r, "visibility_status", "restricted"),
+            )
+            for r in rows
+        ]
+        return Paginated[ClientFinding](items=items, page=page, page_size=page_size, total=total)
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+
+@app.get("/api/v1/client/evidence", response_model=Paginated[ClientEvidence], tags=["client"])
+def list_client_evidence(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    evidence = _load_table("evidence_items")
+    _require_tenant_column(evidence)
+
+    offset = (page - 1) * page_size
+
+    total_stmt = select(text("COUNT(*)")).select_from(evidence).where(evidence.c.tenant_id == tenant_id)
+    total = int(db.execute(total_stmt).scalar_one())
+
+    stmt = (
+        select(
+            evidence.c.id,
+            evidence.c.finding_id,
+            evidence.c.description.label("label"),
+            evidence.c.sha256_hash.label("hash_sha256"),
+            evidence.c.collected_timestamp.label("collected_at"),
+            evidence.c.approval_status,
+        )
+        .where(evidence.c.tenant_id == tenant_id)
+        .order_by(evidence.c.id.desc())
+        .limit(page_size)
+        .offset(offset)
+    )
+    rows = db.execute(stmt).mappings().all()
+
+    items = [
+        ClientEvidence(
+            id=int(r["id"]),
+            finding_id=_safe_scalar(r, "finding_id"),
+            label=_safe_scalar(r, "label", "evidence"),
+            hash_sha256=_safe_scalar(r, "hash_sha256"),
+            collected_at=None,
+            approval_status=_safe_scalar(r, "approval_status", "pending"),
+            visibility_status="restricted",
+        )
+        for r in rows
+    ]
+    return Paginated[ClientEvidence](items=items, page=page, page_size=page_size, total=total)
+
+
+@app.get("/api/v1/client/reports", response_model=Paginated[ClientReport], tags=["client"])
+def list_client_reports(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+    db: Session = Depends(_get_db),
+):
+    tenant_id = str(get_current_tenant(request))
+    reports = _load_table("client_reports")
+    _require_tenant_column(reports)
+
+    offset = (page - 1) * page_size
+    total_stmt = select(text("COUNT(*)")).select_from(reports).where(reports.c.tenant_id == tenant_id)
+    total = int(db.execute(total_stmt).scalar_one())
+
+    stmt = (
+        select(
+            reports.c.id,
+            reports.c.report_title.label("title"),
+            reports.c.created_at,
+            reports.c.status.label("approval_status"),
+        )
+        .where(reports.c.tenant_id == tenant_id)
+        .order_by(reports.c.id.desc())
+        .limit(page_size)
+        .offset(offset)
+    )
+    rows = db.execute(stmt).mappings().all()
+
+    items = [
+        ClientReport(
+            id=int(r["id"]),
+            title=_safe_scalar(r, "title", "Untitled report"),
+            created_at=None,
+            summary=None,
+            approval_status=_safe_scalar(r, "approval_status", "draft"),
+            visibility_status="customer_visible",
+        )
+        for r in rows
+    ]
+    return Paginated[ClientReport](items=items, page=page, page_size=page_size, total=total)
+
+
+@app.get("/api/v1/client/risk-summary", response_model=RiskSummary, tags=["client"])
+def risk_summary(request: Request, db: Session = Depends(_get_db)):
+    tenant_id = str(get_current_tenant(request))
+    findings = _load_table("findings")
+    _require_tenant_column(findings)
+
+    stmt = (
+        select(findings.c.cvss_score)
+        .where(findings.c.tenant_id == tenant_id)
+    )
+    scores = [float(r[0]) for r in db.execute(stmt).all() if r[0] is not None]
+
+    critical = sum(1 for s in scores if s >= 9.0)
+    high = sum(1 for s in scores if 7.0 <= s < 9.0)
+    medium = sum(1 for s in scores if 4.0 <= s < 7.0)
+    low = sum(1 for s in scores if 0.0 <= s < 4.0)
+    avg = (sum(scores) / len(scores)) if scores else 0.0
+
+    return RiskSummary(
+        critical=critical,
+        high=high,
+        medium=medium,
+        low=low,
+        score=round(avg, 2),
+        last_updated=datetime.utcnow(),
+    )
+
+
+@app.get("/api/v1/client/remediation-status", response_model=RemediationStatus, tags=["client"])
+def remediation_status(request: Request, db: Session = Depends(_get_db)):
+    tenant_id = str(get_current_tenant(request))
+
+    # Primary source: remediation_tasks table (created by Phase 6.5 migration if missing).
+    remediation = _load_table("remediation_tasks")
+    _require_tenant_column(remediation)
+
+    stmt = select(remediation.c.status).where(remediation.c.tenant_id == tenant_id)
+    statuses = [str(r[0]).lower() for r in db.execute(stmt).all() if r[0] is not None]
+
+    total = len(statuses)
+    open_tasks = sum(1 for s in statuses if s in {"open", "todo"})
+    in_progress = sum(1 for s in statuses if s in {"in_progress", "doing", "active"})
+    completed = sum(1 for s in statuses if s in {"done", "completed", "closed"})
+    blocked = sum(1 for s in statuses if s in {"blocked", "stalled"})
+
+    return RemediationStatus(
+        total_tasks=total,
+        open_tasks=open_tasks,
+        in_progress_tasks=in_progress,
+        completed_tasks=completed,
+        blocked_tasks=blocked,
+    )

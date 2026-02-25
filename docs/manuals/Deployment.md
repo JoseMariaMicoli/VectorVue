@@ -1,14 +1,15 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue Deployment & Hardening Guide (Phase 6)
+# VectorVue Deployment & Hardening Guide (Phase 6 / 6.5)
 
 ## Scope
 
 This runbook makes VectorVue production-ready with:
 - Multi-stage Docker build
-- Docker Compose stack (`vectorvue_app`, `postgres`, `redis`, `nginx`)
+- Docker Compose stack (`vectorvue_app`, `vectorvue_runtime`, `postgres`, `redis`, `nginx`)
 - systemd service integration
 - TLS 1.3 and mTLS preparation
+- Tenant-isolated REST API runtime
 - Air-gap deployment packaging
 - Security hardening checks
 - Functional, security, and performance validation scripts
@@ -24,7 +25,7 @@ All existing TUI views, keybindings, database features, RBAC checks, audit loggi
 
 ## 2. Environment Variables
 
-Use these PostgreSQL values (required by Phase 6):
+Use these PostgreSQL values (required by Phase 6+):
 
 ```bash
 export POSTGRES_USER=vectorvue
@@ -55,21 +56,20 @@ Output location: `deploy/certs/`.
 
 Certificates are mounted into containers read-only.
 
-## 4. Start Production Stack (Docker)
+## 4. Start Production Stack (Docker + REST API)
 
 ```bash
-docker compose build --no-cache vectorvue_app
-docker compose up -d postgres redis vectorvue_app nginx
-docker compose ps
+make deploy
 ```
 
 Services:
-- `vectorvue_app`: VectorVue backend/runtime loop with health endpoint (`/healthz`)
+- `vectorvue_app`: FastAPI client-safe REST API (`vv_client_api.py`) on `:8080`
+- `vectorvue_runtime`: RuntimeExecutor background worker (`vv_core_postgres.py --mode service`)
 - `postgres`: primary database, SSL enabled, WAL archive enabled
 - `redis`: cache/task coordination backend
 - `nginx`: TLS 1.3 reverse proxy and secure headers
 
-## 5. PostgreSQL Initialization / Migration
+## 5. PostgreSQL Initialization / Migration / Tenant Isolation
 
 Fresh reset:
 
@@ -93,6 +93,18 @@ Smoke tests:
 
 ```bash
 make pg-smoke
+```
+
+Phase 6.5 tenant migration:
+
+```bash
+make phase65-migrate
+```
+
+REST API validation:
+
+```bash
+make api-smoke
 ```
 
 ## 6. systemd Integration (Host Mode)
@@ -241,9 +253,10 @@ Container defaults also enforce color parity:
 
 ## 13. Phase 7 and Phase 8 Integration Readiness
 
-Phase 6 outputs required for next phases:
+Phase 6/6.5 outputs required for next phases:
 - PostgreSQL stable backend in production stack
 - Redis operational for queue/caching expansion
 - Nginx TLS reverse proxy with mTLS-ready certificate chain
 - Containerized deployment with hardened defaults
 - Centralized logs and audit trail preservation
+- Tenant-isolated read-only REST API contract for customer portal
