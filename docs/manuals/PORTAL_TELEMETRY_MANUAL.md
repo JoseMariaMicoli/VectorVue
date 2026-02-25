@@ -61,12 +61,17 @@ Index:
 7. API inserts asynchronously in background task.
 8. API returns quickly (`202 Accepted`) without blocking UI.
 
+Phase 8 linkage:
+9. Telemetry events feed tenant-isolated analytics datasets.
+10. Defensive models consume those datasets for security score, residual risk, and detection gap projections.
+
 ## Operational Steps
 
 ### Enable telemetry schema
 
 ```bash
 make phase7e-migrate
+make phase8-migrate
 ```
 
 ### Seed demo and generate events
@@ -80,6 +85,7 @@ Then use portal pages as a normal client:
 - open findings
 - open remediation page
 - download reports
+- open analytics page and run simulation
 
 ### Validate event ingestion
 
@@ -98,4 +104,3 @@ Use:
 Included metrics:
 - MTTA (mean time to acknowledge)
 - MTTR (mean time to remediate)
-

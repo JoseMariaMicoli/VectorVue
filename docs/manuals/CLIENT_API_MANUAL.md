@@ -68,6 +68,12 @@ curl -k https://127.0.0.1/api/v1/client/findings?page=1&page_size=25 \
 - `GET /api/v1/client/theme`
 - `GET /api/v1/client/theme/logo`
 - `POST /api/v1/client/events`
+- `GET /ml/client/security-score`
+- `GET /ml/client/risk`
+- `GET /ml/client/detection-gaps`
+- `GET /ml/client/anomalies`
+- `POST /ml/client/simulate`
+- `GET /ml/operator/suggestions/{campaign_id}`
 
 ## Common Workflows (Step-by-Step)
 
@@ -105,12 +111,27 @@ curl -k -X POST https://127.0.0.1/api/v1/client/events \
 
 Expected response: `202 Accepted`.
 
+### E) Fetch Commercial Analytics (Phase 8)
+1. Call `GET /ml/client/security-score`.
+2. Call `GET /ml/client/risk`.
+3. Call `GET /ml/client/detection-gaps`.
+4. Call `GET /ml/client/anomalies`.
+5. Optionally call `POST /ml/client/simulate` for what-if defense projection.
+
+Response contract for all client analytics endpoints:
+- `score`
+- `confidence`
+- `explanation`
+- `model_version`
+- `generated_at`
+
 ## Deployment Commands
 
 ```bash
 make deploy
 make phase65-migrate
 make phase7e-migrate
+make phase8-migrate
 make api-smoke
 ```
 
@@ -119,9 +140,10 @@ make api-smoke
 1. Start stack: `make api-up`
 2. Apply migration: `make phase65-migrate`
 3. Apply telemetry migration: `make phase7e-migrate`
-4. Verify API: `make api-smoke`
-5. Tail runtime logs: `make api-logs`
-6. Seed demo multi-tenant data: `make seed-clients`
+4. Apply analytics migration: `make phase8-migrate`
+5. Verify API: `make api-smoke`
+6. Tail runtime logs: `make api-logs`
+7. Seed demo multi-tenant data: `make seed-clients`
 
 ## Telemetry Event Reference
 

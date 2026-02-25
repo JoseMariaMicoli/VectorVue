@@ -19,6 +19,7 @@ Use it as the fast reference for:
 - Client Panel 2 tenant with two client portal users
 - Two campaigns per client tenant (4 total)
 - portal telemetry schema for defensive analytics datasets
+- phase-8 analytics models + explainable prediction records for demo-ready dashboards
 
 ## Default Accounts
 
@@ -54,6 +55,7 @@ make seed-clients
 3. Login as `acme_viewer`.
 4. Walk through:
    - `Overview`
+   - `Analytics` (review ML scores, confidence, and simulation)
    - `Findings` (filter critical, open detail)
    - `Reports` (download one PDF)
    - `Remediation`
@@ -65,6 +67,7 @@ Expected result:
 - populated dashboards
 - downloadable reports
 - visible remediation state
+- explainable commercial analytics ready for stakeholder discussion
 
 ## Makefile Overrides
 
