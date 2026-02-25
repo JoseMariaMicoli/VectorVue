@@ -72,7 +72,27 @@ Steps:
 Expected outcome:
 - identify high-risk findings and inspect proof rapidly.
 
-### 3) Reports (`/portal/reports`)
+### 3) Analytics (`/portal/analytics`)
+
+Use this page for advanced analytics and executive-grade intelligence.
+
+Steps:
+1. Open `Analytics` from the sidebar.
+2. Review top ML cards:
+   - security score
+   - residual risk
+   - detection coverage
+   - anomaly baseline
+   - operator suggestion score
+3. Review `Phase 8 Score Comparison (Bar)` chart.
+4. Review `Latest Explanations` to understand top drivers in plain language.
+5. Review `Model Timeline` and verify `model_version` + `generated_at`.
+6. Click `Run Hardening Simulation` to generate a projection for defense improvements.
+
+Expected outcome:
+- communicate predictive and explainable security insights without exposing internal model details.
+
+### 4) Reports (`/portal/reports`)
 
 Use this page to consume formal deliverables.
 
@@ -85,7 +105,7 @@ Steps:
 Expected outcome:
 - retrieve approved reporting artifacts with minimal friction.
 
-### 4) Risk (`/portal/risk`)
+### 5) Risk (`/portal/risk`)
 
 Use this page for risk communication and trend analysis.
 
@@ -101,7 +121,7 @@ Steps:
 Expected outcome:
 - communicate security posture over time to stakeholders.
 
-### 5) Remediation (`/portal/remediation`)
+### 6) Remediation (`/portal/remediation`)
 
 Use this page for closure tracking.
 
@@ -122,11 +142,12 @@ Expected outcome:
 ## Day-to-Day Workflow (Recommended)
 
 1. Start in `Overview` for status snapshot.
-2. Move to `Findings` and filter `Critical` and `High`.
-3. Open each critical finding and validate evidence.
-4. Check `Remediation` to confirm ownership and status.
-5. Download latest reports from `Reports`.
-6. End in `Risk` to confirm trend direction before stakeholder updates.
+2. Move to `Analytics` for explainable ML posture and simulation.
+3. Move to `Findings` and filter `Critical` and `High`.
+4. Open each critical finding and validate evidence.
+5. Check `Remediation` to confirm ownership and status.
+6. Download latest reports from `Reports`.
+7. End in `Risk` to confirm trend direction before stakeholder updates.
 
 ## Client-Facing Features
 
@@ -135,6 +156,8 @@ Expected outcome:
 - Finding detail with evidence gallery + timeline
 - Report downloads (PDF/HTML)
 - Risk charts (distribution + trend)
+- Advanced analytics page (scores, confidence, explanation, model version)
+- Defensive simulation action for what-if planning
 - Remediation status tracking
 - Notification center
 - Language toggle (EN/ES)
@@ -158,6 +181,7 @@ Expected outcome:
 - If login fails after reset/seed, run:
   - `make phase65-migrate`
   - `make phase7e-migrate`
+  - `make phase8-migrate`
   - `make seed-clients`
 - If pages are stale, hard refresh browser (`Ctrl+Shift+R`).
 - If host is not recognized, verify tenant host mapping in deployment env.

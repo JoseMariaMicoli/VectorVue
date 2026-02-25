@@ -149,6 +149,35 @@ services:
       start_period: 20s
     command: ["python", "-m", "vv_core_postgres", "--mode", "service", "--disable-health-server"]
 
+  vectorvue_ml_worker:
+    image: vectorvue:phase6
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_ml_worker"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      VV_DB_BACKEND: postgres
+      VV_DB_URL: postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
+      VV_REDIS_URL: redis://:strongpassword@redis:6379/0
+      VV_ANALYTICS_STORAGE_DIR: /storage
+      VV_ML_WORKER_LOG_LEVEL: INFO
+    volumes:
+      - vectorvue_logs:/var/lib/vectorvue/logs
+      - vectorvue_analytics:/storage
+      - vectorvue_tmp:/var/lib/vectorvue/tmp
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /run:size=16m,nosuid,nodev
+    command: ["python", "-m", "analytics.worker"]
+
   postgres:
     image: postgres:16
     container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_postgres"
@@ -234,3 +263,4 @@ volumes:
   vectorvue_runtime:
   vectorvue_tmp:
   vectorvue_config:
+  vectorvue_analytics:

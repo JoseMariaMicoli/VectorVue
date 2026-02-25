@@ -12,7 +12,7 @@ export async function proxyClientApi(request: NextRequest, path: string): Promis
   if (token) upstreamHeaders.set('Authorization', `Bearer ${token}`);
   const method = request.method.toUpperCase();
   const hasBody = method !== 'GET' && method !== 'HEAD';
-  const body = hasBody ? await request.arrayBuffer() : undefined;
+  const upstreamBody = hasBody ? await request.arrayBuffer() : undefined;
 
   const timeoutMs = Number(process.env.VV_PROXY_TIMEOUT_MS ?? 8000);
   const controller = new AbortController();
@@ -23,7 +23,7 @@ export async function proxyClientApi(request: NextRequest, path: string): Promis
     res = await fetch(`${API_URL}${path}`, {
       method,
       headers: upstreamHeaders,
-      body: body && body.byteLength > 0 ? body : undefined,
+      body: upstreamBody && upstreamBody.byteLength > 0 ? upstreamBody : undefined,
       cache: 'no-store',
       signal: controller.signal
     });
@@ -36,7 +36,7 @@ export async function proxyClientApi(request: NextRequest, path: string): Promis
     clearTimeout(timer);
   }
 
-  const body = await res.arrayBuffer();
+  const responseBody = await res.arrayBuffer();
   const headers = new Headers();
   const passthrough = ['content-type', 'content-disposition', 'cache-control', 'etag'];
   for (const key of passthrough) {
@@ -44,7 +44,7 @@ export async function proxyClientApi(request: NextRequest, path: string): Promis
     if (value) headers.set(key, value);
   }
 
-  return new Response(body, {
+  return new Response(responseBody, {
     status: res.status,
     headers
   });
