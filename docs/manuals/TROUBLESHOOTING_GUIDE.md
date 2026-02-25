@@ -1,453 +1,302 @@
-# VectorVue v3.0 Troubleshooting Guide
+# VectorVue v3.4 Troubleshooting Guide
 
-![Level](https://img.shields.io/badge/Level-L1_Support-39FF14?style=flat-square) ![Version](https://img.shields.io/badge/Version-3.0-00FFFF?style=flat-square)
+![Troubleshooting](https://img.shields.io/badge/Troubleshooting-v3.4-00FFFF?style=flat-square) ![Status](https://img.shields.io/badge/Status-Complete-39FF14)
 
-Diagnostic steps and resolutions for issues encountered during VectorVue v3.0 operation. This guide covers authentication, database, cryptography, file I/O, and MITRE lookup problems.
+Comprehensive troubleshooting guide for VectorVue v3.4 with solutions for common operational, database, runtime, and security issues.
 
----
+## 1. Installation & Startup Issues
 
-## 1. Authentication & Login Issues
-
-### "Not Authenticated" Error on Startup
-**Symptom:** Application shows "Not Authenticated" and prevents any operations  
-**Root Cause:** User session expired or session table corrupted
-
-**Resolution:**
-1. Log out completely (press `Q`)
-2. Close application
-3. Log back in with valid credentials
-4. Session will be re-established
-
-### "Username not found" When Logging In
-**Symptom:** Login fails with "User does not exist"  
-**Root Cause:** User account not created (first admin must be created at startup)
-
-**Resolution:**
-1. First launch should prompt to create admin user
-2. If missed, delete `vectorvue.db` and restart:
-   ```bash
-   rm vectorvue.db
-   python3 vv.py
-   # Follow admin creation prompt
-   ```
-3. Once admin exists, use ADMIN view to create additional users
-
-### "Campaign Not Found" After Login
-**Symptom:** Login succeeds but campaign context is missing  
-**Root Cause:** User has no campaigns assigned or first campaign not created
-
-**Resolution:**
-1. Create first campaign (Ctrl+N)
-   - Fill in: Name, Client, Team, Objective
-   - Save (Ctrl+S)
-2. Campaign is now active and all views will refresh
-3. To switch campaigns, press Ctrl+C to view all campaigns
-
-### "Wrong Password" Error Persists
-**Symptom:** Correct password rejected repeatedly  
-**Root Cause:** Cached credentials or password hash corruption
-
-**Resolution:**
-1. Clear terminal buffer (Ctrl+L)
-2. Try again with CAPS LOCK off
-3. If persistent, reset admin password:
-   ```bash
-   # As ADMIN: Delete user and recreate
-   sqlite3 vectorvue.db "DELETE FROM users WHERE username='USERNAME';"
-   # Restart app to create new admin
-   ```
-
----
-
-## 2. Database Integrity Issues
-
-### "sqlite3.OperationalError: database is locked"
-**Symptom:** Application freezes when creating/saving findings  
-**Root Cause:** Another process holds exclusive lock on `vectorvue.db`
-
-**Resolution:**
-1. Close any external database browsers (DB Browser for SQLite, etc.)
-2. Check for stale processes:
-   ```bash
-   ps aux | grep "vv.py"
-   kill -9 [PID]  # Force terminate if needed
-   ```
-3. Remove journal files:
-   ```bash
-   rm -f vectorvue.db-journal vectorvue.db-wal
-   ```
-4. Restart application
-
-### "UNIQUE constraint failed"
-**Symptom:** Error when creating finding or asset with duplicate name  
-**Root Cause:** Same title already exists in campaign (unique constraint violation)
-
-**Resolution:**
-1. Use different name/title for new finding
-2. Or rename existing finding first
-3. No duplicates allowed per campaign
-
-### "Foreign Key Constraint Failed"
-**Symptom:** Error when saving finding or asset  
-**Root Cause:** Referenced campaign or user doesn't exist
-
-**Resolution:**
-1. Ensure campaign is created first (Ctrl+N)
-2. Ensure you're logged in as valid user
-3. Check campaign_id in findings table matches existing campaign
-
-### Database Corrupted / Won't Start
-**Symptom:** Application crashes with SQLite error on launch  
-**Root Cause:** Corrupted database file (partial write, disk full, etc.)
-
-**Resolution:**
-1. Backup existing database:
-   ```bash
-   cp vectorvue.db vectorvue.db.backup
-   ```
-2. Attempt repair:
-   ```bash
-   sqlite3 vectorvue.db "PRAGMA integrity_check;"
-   ```
-3. If repair fails, delete and recreate:
-   ```bash
-   rm vectorvue.db vectorvue.db-wal vectorvue.db-journal
-   python3 vv.py  # Recreate schema
-   ```
-4. Note: All data will be lost; restore from backup if available
-
----
-
-## 3. Cryptography & Encryption Issues
-
-### "PBKDF2 Key Derivation Failed"
-**Symptom:** Passwords rejected after password reset  
-**Root Cause:** Salt file corrupted or wrong Python version
-
-**Resolution:**
-1. Verify Python version >= 3.10:
-   ```bash
-   python3 --version
-   ```
-2. Check salt file exists:
-   ```bash
-   ls -la vectorvue.salt
-   ```
-3. If missing, delete and recreate:
-   ```bash
-   rm vectorvue.salt
-   python3 vv.py  # Recreate salt
-   ```
-
-### "Fernet Key Invalid"
-**Symptom:** Cannot decrypt credentials or evidence  
-**Root Cause:** Encryption key derivation failure or database moved between systems
-
-**Resolution:**
-1. Ensure `vectorvue.salt` is in same directory as `vectorvue.db`
-2. Verify file permissions:
-   ```bash
-   chmod 600 vectorvue.salt  # Owner read/write only
-   ```
-3. Ensure Python cryptography module is installed:
-   ```bash
-   pip install cryptography
-   ```
-
-### "Evidence Hash Mismatch"
-**Symptom:** Evidence displays warning "Hash Mismatch"  
-**Root Cause:** Evidence file was modified after collection (integrity violation)
-
-**Resolution:**
-1. This is intentional (immutability by design)
-2. Check activity_log for who modified it:
-   - Press V to view timeline
-   - Look for modification entry
-3. Original file cannot be recovered (immutable)
-4. If error, ask LEAD to reject finding and recreate with correct evidence
-
----
-
-## 4. File I/O & Atomic Write Failures
-
-### "Atomic Write Failed: Permission Denied"
-**Symptom:** Cannot save findings or export reports  
-**Root Cause:** No write permission to directory
-
-**Resolution:**
-```bash
-# Check directory permissions
-ls -ld /home/xoce/Workspace/VectorVue
-
-# Fix if needed
-chmod 755 /home/xoce/Workspace/VectorVue
-
-# Or change to different directory with write perms
-cd ~
-python3 /path/to/vv.py
+### Issue: "ModuleNotFoundError: No module named 'textual'"
+**Symptoms:**
+```
+Traceback (most recent call last):
+  File "vv.py", line 10, in <module>
+    from textual.app import ComposeResult
+ModuleNotFoundError: No module named 'textual'
 ```
 
-### "Disk Full" During Report Export
-**Symptom:** Report generation fails halfway through  
-**Root Cause:** Not enough disk space
+**Cause:** Dependencies not installed
 
-**Resolution:**
-1. Check disk usage:
+**Solution:**
+```bash
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+python -c "import textual; print(f'Textual installed')"
+```
+
+### Issue: "Terminal colors wrong (pink instead of green)"
+**Symptoms:** UI shows pink/brown instead of Phosphor green (#39FF14)
+
+**Cause:** Terminal doesn't support 24-bit TrueColor
+
+**Solution:** Update to Alacritty, Kitty, or Windows Terminal (v1.5+)
+
+### Issue: "Cannot open database file"
+**Cause:** Write permission denied or disk full
+
+**Solution:**
+```bash
+chmod 600 vectorvue.db vectorvue.salt
+df -h  # Check disk space (need 100MB+)
+```
+
+## 2. Database Issues
+
+### Issue: "CRYPTO_AVAILABLE = False" / Encryption errors
+**Solution:**
+```bash
+pip install cryptography
+```
+
+### Issue: "Database is locked"
+**Cause:** Another process has database open
+
+**Solution:**
+```bash
+lsof | grep vectorvue.db
+kill -9 <PID>
+rm -f .vectorvue.db-wal .vectorvue.db-shm
+python3 vv.py
+```
+
+### Issue: "41 tables don't exist" / Schema mismatch
+**Cause:** Corrupted database or old schema version
+
+**Solution:**
+```bash
+sqlite3 vectorvue.db ".tables"  # Should show 41 tables
+# If missing, restore from backup
+tar xzf vectorvue-backup-YYYYMMDD.tar.gz
+```
+
+### Issue: "Duplicate campaign_id" / Integrity constraint
+**Cause:** Attempted to create campaign with existing ID
+
+**Solution:** Use UI (Ctrl+K) to create campaigns, not direct database inserts
+
+## 3. Authentication & Session Issues
+
+### Issue: "Login fails with 'Invalid credentials'"
+**Cause:** User account doesn't exist or password changed
+
+**Solution:**
+```bash
+# Check user exists
+sqlite3 vectorvue.db "SELECT username, role FROM users"
+# If missing, ADMIN must invite new operator (Ctrl+6 → Team Management)
+```
+
+### Issue: "Session timeout after 30 minutes (not 120)"
+**Cause:** Custom retention policy overrides default TTL
+
+**Solution:**
+1. Press Ctrl+6 (Security Hardening) → Policies Tab
+2. Click `r` key (Reset to defaults)
+3. Confirm reset
+
+### Issue: "Logged out unexpectedly"
+**Cause:** Session TTL expired or admin force-logged user
+
+**Solution:** Login again, increase TTL in Ctrl+6 → Policies Tab
+
+## 4. Finding & Evidence Issues
+
+### Issue: "Finding won't save (Ctrl+S pressed, no response)"
+**Cause:**
+1. Campaign status is not ACTIVE (check with Ctrl+2)
+2. Disk space exhausted
+3. Database write permission denied
+4. Background executor error
+
+**Solution:**
+```bash
+df -h  # Check disk space
+# Change campaign status to ACTIVE (Ctrl+Shift+S)
+# Check Ctrl+5 Task Orchestrator for executor errors
+```
+
+### Issue: "Evidence hash mismatch"
+**Cause:** File was modified between uploads (evidence is immutable)
+
+**Solution:** Evidence system is correct - verify original file matches hash with:
+```bash
+sha256sum original-file.bin
+```
+
+### Issue: "Approval stuck (LEAD clicked approve, still PENDING)"
+**Cause:** Background executor (webhook executor) is busy
+
+**Solution:**
+1. Wait 30 seconds for scheduler to process
+2. Press `r` key to refresh view
+3. Check Ctrl+5 Task Orchestrator status
+
+### Issue: "Can't delete finding (Permission Denied)"
+**Cause:**
+1. User is not LEAD (check status bar)
+2. Client Safe Mode enabled
+3. Finding is in APPROVED status (write-protected)
+
+**Solution:**
+- Verify role is LEAD or higher (ask ADMIN to promote)
+- Press Ctrl+6 → Policies Tab, toggle Client Safe Mode OFF
+- Reject the approval first (Ctrl+Shift+R), then delete
+
+## 5. Background Task & Runtime Issues
+
+### Issue: "Task executor error / Scheduler Failed"
+**Cause:**
+1. Database connectivity lost
+2. RuntimeExecutor encountered exception
+3. Task executor thread crashed
+
+**Solution:**
+```bash
+# Check executor status
+# Press Ctrl+5 (Task Orchestrator)
+# All 5 executors should show green status (RUNNING)
+# Check logs: press l key
+# Reset: press R key (Resume)
+```
+
+### Issue: "Report generation hangs (Ctrl+Shift+G pressed, no progress)"
+**Cause:** Report generator task timed out (>10 min) or large campaign
+
+**Solution:**
+1. Check task status (Ctrl+5 Task Orchestrator)
+2. Cancel long-running task: select and press `c`
+3. Try again with smaller scope (HIGH/CRITICAL only)
+4. Restart app: Logout and login
+
+### Issue: "Webhook delivery failed (Slack/webhook integration not working)"
+**Cause:**
+1. Webhook endpoint URL is incorrect
+2. Network connectivity issue
+3. Webhook payload format wrong
+
+**Solution:**
+1. Verify webhook URL (Ctrl+6 → Integration Tab)
+2. Test manually: curl to webhook endpoint
+3. Check delivery logs (Ctrl+5 Task Orchestrator)
+4. Toggle webhook OFF then ON and retry
+
+## 6. Encryption & Security Issues
+
+### Issue: "Cannot decrypt finding / Crypto error"
+**Cause:**
+1. Encryption key changed
+2. Salt file (vectorvue.salt) was modified or deleted
+3. Finding data corrupted
+
+**Solution:**
+1. Restore from backup (includes salt file):
    ```bash
-   df -h
+   tar xzf vectorvue-backup-YYYYMMDD.tar.gz
    ```
-2. Free up space or move to different drive
-3. Try exporting smaller campaigns first
-4. If atomic write succeeds, report will be complete (crash-safe)
-
-### "File Manager Won't Delete"
-**Symptom:** Press D to delete file but nothing happens  
-**Root Cause:** File in use or permission denied
-
-**Resolution:**
-1. Ensure file is not currently open in editor
-2. Check file permissions:
+2. If data still corrupted, check database:
    ```bash
-   ls -l [filename]
-   ```
-3. Use terminal to delete if needed:
-   ```bash
-   rm [filename]
-   ```
-4. Refresh file manager (press Esc and return)
-
----
-
-## 5. MITRE Intelligence Lookup Failures
-
-### "mitre_reference.txt Not Found"
-**Symptom:** Application starts but MITRE lookups show "No technique found"  
-**Root Cause:** MITRE reference file missing
-
-**Resolution:**
-1. Check file exists in root directory:
-   ```bash
-   ls -la mitre_reference.txt
-   ```
-2. If missing, MITRE features are disabled (non-critical)
-3. Application still works without MITRE data
-4. Manual technique entry still supported
-
-### "Technique ID Not Found"
-**Symptom:** Type T-Code but system says "UNKNOWN"  
-**Root Cause:** Incorrect T-Code format or not in MITRE database
-
-**Resolution:**
-1. Verify T-Code format: `TXXXX` (e.g., `T1566`)
-2. Check MITRE reference has matching entry:
-   ```bash
-   grep "T1566" mitre_reference.txt
-   ```
-3. If missing from file, manually type technique name
-4. Application accepts both T-Codes and descriptions
-
-### "MITRE Coverage Matrix Won't Generate"
-**Symptom:** Report generation fails when trying to include MITRE coverage  
-**Root Cause:** Findings missing MITRE technique mapping
-
-**Resolution:**
-1. Ensure all findings have MITRE technique assigned
-2. Map findings to techniques:
-   - Edit finding (press E)
-   - Set MITRE Technique field
-   - Save (Ctrl+S)
-3. Try report generation again
-
----
-
-## 6. RBAC & Permission Issues
-
-### "You Don't Have Permission to Approve"
-**Symptom:** Try to approve finding but get permission error  
-**Root Cause:** User role is OPERATOR (needs LEAD+)
-
-**Resolution:**
-1. Only LEAD, ADMIN can approve findings
-2. Ask LEAD to approve on your behalf
-3. Or request role upgrade from ADMIN
-
-### "Cannot Edit Approved Finding"
-**Symptom:** Try to edit finding but it's locked  
-**Root Cause:** By design - approved findings are immutable
-
-**Resolution:**
-1. This is correct behavior (audit trail protection)
-2. If changes needed, ask LEAD to reject finding
-3. OPERATOR re-opens and edits
-4. Re-submit for approval
-
-### "Cannot Delete Campaign"
-**Symptom:** Try to delete campaign but permission denied  
-**Root Cause:** Only ADMIN can delete campaigns
-
-**Resolution:**
-1. Ask ADMIN to delete campaign
-2. Or use ARCHIVE status instead (soft delete)
-
----
-
-## 7. UI/UX Issues
-
-### "Colors Not Rendering (Monochrome)"
-**Symptom:** Terminal shows only white/grey instead of Phosphor green/cyan  
-**Root Cause:** Terminal doesn't support 24-bit TrueColor
-
-**Resolution:**
-1. Use recommended terminal:
-   - Kitty ✅
-   - Alacritty ✅
-   - iTerm2 ✅
-   - Windows Terminal ✅
-   - Standard Linux terminal ⚠️ (may need config)
-2. Verify terminal setting:
-   ```bash
-   echo $TERM  # Should show "xterm-256color" or "kitty"
-   ```
-3. If using SSH, enable color forwarding:
-   ```bash
-   ssh -E /tmp/ssh_debug.log user@host
+   sqlite3 vectorvue.db "PRAGMA integrity_check"
    ```
 
-### "Unicode Glyphs Show as Boxes"
-**Symptom:** Icons display as `[]` instead of symbols  
-**Root Cause:** Font doesn't support Unicode or Nerd Font icons
+### Issue: "Sensitive data visible / Client Safe Mode not working"
+**Cause:** Client Safe Mode not enabled
 
-**Resolution:**
-1. Install Nerd Font:
-   - Download from [nerdfonts.com](https://nerdfonts.com)
-   - Recommended: JetBrains Mono Nerd Font, FiraCode Nerd Font
-2. Configure terminal to use font
-3. Restart terminal and VectorVue
+**Solution:**
+1. Press Ctrl+6 (Security Hardening)
+2. Toggle "Client Safe Mode" ON
+3. Now reports will redact IPs, hide credential hashes, etc.
 
-### "Text Editor is Slow"
-**Symptom:** Typing feels laggy when editing findings  
-**Root Cause:** Large description or slow system
+## 7. MITRE & Technique Mapping Issues
 
-**Resolution:**
-1. Check system resources:
-   ```bash
-   top  # Look for CPU/memory usage
-   ```
-2. Close other applications
-3. Break large findings into multiple smaller ones
-4. Consider SSD vs HDD performance
+### Issue: "MITRE view empty (no techniques shown)"
+**Cause:** mitre_reference.txt missing or corrupted
 
----
+**Solution:**
+1. Check file: `ls -la mitre_reference.txt`
+2. If missing, download from https://attack.mitre.org/
+3. File format: CSV with T-code,Name,Tactic,Description
+4. Restart app (Ctrl+L logout, then login)
+
+### Issue: "Can't link finding to technique"
+**Cause:**
+1. MITRE data not loaded (view empty)
+2. Finding not saved yet
+3. Technique list empty
+
+**Solution:**
+1. Verify MITRE data (Ctrl+3 should show tactics)
+2. Save finding first (Ctrl+S)
+3. Link technique: Ctrl+3, navigate to technique, press `l`
 
 ## 8. Performance & Optimization
 
-### "Campaign List is Slow to Load"
-**Symptom:** Takes >5 seconds to load campaign list  
-**Root Cause:** Large number of campaigns or slow disk
+### Issue: "Application slow / UI lag"
+**Cause:**
+1. Large campaign (10k+ findings)
+2. Background executor consuming CPU
+3. Database query slow
 
-**Resolution:**
-1. Check database size:
+**Solution:**
+1. Check executor status (Ctrl+5)
+2. Switch to smaller campaign (Ctrl+Shift+K)
+3. Optimize database:
    ```bash
-   ls -lh vectorvue.db
+   sqlite3 vectorvue.db "VACUUM"
+   sqlite3 vectorvue.db "ANALYZE"
    ```
-2. Archive old campaigns (soft delete)
-3. If very large (>500MB), consider backing up and archiving
 
-### "Report Generation Takes Too Long"
-**Symptom:** Export report hangs or is very slow  
-**Root Cause:** Large campaign with many findings/evidence
+### Issue: "Database growing too large (>500MB)"
+**Cause:** Old data not being purged (retention policies not running)
 
-**Resolution:**
-1. Generate report for smaller date range
-2. Exclude non-critical evidence items
-3. Use CSV format instead of Markdown (smaller)
-4. Check disk space available
+**Solution:**
+1. Check retention policies (Ctrl+6 → Policies Tab)
+2. Force retention cleanup:
+   ```bash
+   sqlite3 vectorvue.db "DELETE FROM findings WHERE created_at < datetime('now', '-90 days')"
+   sqlite3 vectorvue.db "VACUUM"
+   ```
 
----
+## 9. Data Recovery & Backup
 
-## 9. Common Errors by Component
+### Issue: "Accidentally deleted finding / Data loss"
+**Cause:** Deletion is permanent (secure-deleted if policies enabled)
 
-### vv_core.py (Database Layer) Errors
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `AttributeError: 'NoneType'` | No campaign selected | Create or switch campaign (Ctrl+C) |
-| `sqlite3.IntegrityError` | Constraint violation | Check for duplicate data |
-| `KeyError` in finding dict | Missing field | Ensure all required fields filled |
+**Solution:**
+1. Restore from recent backup:
+   ```bash
+   tar xzf vectorvue-backup-20250120.tar.gz
+   ```
+2. If no backup, check activity log for deletion details
 
-### vv.py (UI Layer) Errors
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `IndexError` in list | Empty list access | Create at least one finding first |
-| `ValueError` in CVSS score | Invalid number | Enter 0.0-10.0 |
-| `PermissionError` | Role insufficient | Check user role |
+### Issue: "Backup is corrupted / Can't extract"
+**Cause:** Backup file corrupted during save
 
-### vv_fs.py (File I/O) Errors
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `FileNotFoundError` | File missing | Verify file exists |
-| `PermissionError` | Access denied | Check file permissions |
-| `OSError: [Errno 28] No space left` | Disk full | Free disk space |
-
-### vv_theme.py (Theme) Errors
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `CSS Syntax Error` | Invalid CSS in theme | Reload theme file |
-| Color not applying | CSS selector wrong | Check widget class names |
-
----
-
-## 10. Getting Help
-
-### Before Reporting Issues
-
-1. **Check this guide** - Most issues documented here
-2. **Check activity log** - Press V to view timeline
-3. **Verify permissions** - Ensure your role is sufficient
-4. **Check logs** - Review terminal output for Python tracebacks
-5. **Test isolation** - Try with small, fresh campaign
-
-### Collecting Debug Information
-
-If you need to report a bug:
-
+**Solution:**
 ```bash
-# 1. Capture Python version
-python3 --version
-
-# 2. Check dependencies
-pip list | grep -E "textual|cryptography|pydantic"
-
-# 3. Verify database integrity
-sqlite3 vectorvue.db "PRAGMA integrity_check;"
-
-# 4. Get error traceback
-python3 vv.py 2>&1 | tee debug.log
-# Reproduce error, then save debug.log
+tar tzf vectorvue-backup-20250120.tar.gz > /dev/null  # Test integrity
+# If fails, try older backup
+ls -lt vectorvue-backup-*.tar.gz | head -5  # Show last 5 backups
+tar xzf vectorvue-backup-OLDER.tar.gz  # Use older backup
 ```
 
-### Contact Support
+## 10. Asking for Help
 
-- **Internal:** Reach out to Internal Engineering Lead
-- **GitHub:** Submit issue with debug information
-- **Email:** team@vectorvue.local
+### Information to collect before contacting support
 
----
+```bash
+grep "__version__" vv.py  # VectorVue version
+sqlite3 vectorvue.db ".tables"  # Database schema (should show 41 tables)
+python --version  # Python version (should be 3.10+)
+uname -a  # OS and kernel
+ls -lh vectorvue.db  # Database file size
+```
 
-## Quick Reference Table
-
-| Symptom | Quick Fix | Detailed Help |
-|---------|-----------|---------------|
-| Can't log in | Create admin user | Section 1 |
-| Database locked | Close DB browser | Section 2 |
-| Crypto error | Recreate salt file | Section 3 |
-| Can't save | Check permissions | Section 4 |
-| MITRE not found | Install reference file | Section 5 |
-| Permission denied | Check user role | Section 6 |
-| Monochrome UI | Use Nerd Font | Section 7 |
-| Slow performance | Archive old campaigns | Section 8 |
+**Reproduction steps:**
+- "1. Click X
+- 2. Press Y
+- 3. See error Z"
 
 ---
 
-**VectorVue v3.0** | Red Team Campaign Management Platform | v3.0-RC1
-
-Need more help? Check `.github/copilot-instructions.md` for development patterns or contact your team lead.
+**VectorVue v3.4** | Troubleshooting Complete | Contact Support | Production Ready
