@@ -1,10 +1,10 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v4.0 Operator Manual
+# VectorVue v4.1 Operator Manual
 
-![Version](https://img.shields.io/badge/Version-v4.0_Production-39FF14) ![Phase](https://img.shields.io/badge/Phase-6_Complete-39FF14) ![Tables](https://img.shields.io/badge/Database-78_Tables-FF00FF)
+![Version](https://img.shields.io/badge/Version-v4.1_Production-39FF14) ![Phase](https://img.shields.io/badge/Phase-6_Complete-39FF14) ![Tables](https://img.shields.io/badge/Database-78_Tables-FF00FF)
 
-Complete operational reference for VectorVue v4.0 red team campaign management platform. This manual covers all phases from campaign setup through advanced threat intelligence analysis, operational cognition decision-support, and multi-team coordination.
+Complete operational reference for VectorVue v4.1 red team campaign management platform. This manual covers all phases from campaign setup through advanced threat intelligence analysis, operational cognition decision-support, and multi-team coordination.
 
 ---
 
