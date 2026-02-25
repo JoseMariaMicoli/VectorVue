@@ -1,6 +1,6 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue PostgreSQL Usage Guide (v4.0)
+# VectorVue PostgreSQL Usage Guide (v4.1)
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@
 
 ## Scope
 
-This runbook provides production-style operational steps for using VectorVue v4.0 with PostgreSQL in Docker, including migration, reset, seeding, verification, and recovery workflows.
+This runbook provides production-style operational steps for using VectorVue v4.1 with PostgreSQL in Docker, including migration, reset, seeding, verification, and recovery workflows.
 
 ## Prerequisites
 
@@ -48,7 +48,8 @@ Note: host mapping is `5433:5432` in `docker-compose.yml`.
 ```bash
 make pg-reset
 make pg-migrate
-make pg-seed
+make phase7e-migrate
+make seed-clients
 make pg-smoke
 ```
 
@@ -79,6 +80,12 @@ Then seed:
 docker compose run --rm vectorvue_app python scripts/seed_db.py \
   --backend postgres \
   --pg-url postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
+```
+
+Apply portal telemetry schema (Phase 7.5.0):
+
+```bash
+make phase7e-migrate
 ```
 
 ## Run VectorVue on PostgreSQL
