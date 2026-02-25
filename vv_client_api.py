@@ -42,6 +42,8 @@ from utils.tenant_assets import resolve_tenant_asset
 from utils.url_builder import build_public_url
 from vv_core import SessionCrypto
 from vv_core_postgres import _check_postgres, _check_redis
+from analytics.model_registry import get_latest_prediction, promote_model
+from analytics.queue import enqueue_run_inference, enqueue_train_model
 
 
 APP_TITLE = "VectorVue Client API"
@@ -139,6 +141,19 @@ class ClientActivityEventIn(BaseModel):
 
 class ClientActivityEventAccepted(BaseModel):
     accepted: bool = True
+
+
+class ModelPromoteResponse(BaseModel):
+    promoted: bool = True
+    model_id: int
+
+
+class ClientMLResponse(BaseModel):
+    score: float
+    confidence: float
+    explanation: str
+    model_version: str
+    generated_at: str
 
 
 def _get_db() -> Session:
@@ -488,6 +503,135 @@ def create_client_event(
         },
     )
     return ClientActivityEventAccepted(accepted=True)
+
+
+def _prediction_to_client_contract(row: dict[str, Any] | None, fallback_explanation: str) -> ClientMLResponse:
+    if not row:
+        return ClientMLResponse(
+            score=0.0,
+            confidence=0.0,
+            explanation=fallback_explanation,
+            model_version="pending",
+            generated_at=datetime.utcnow().isoformat() + "Z",
+        )
+    prediction = row.get("prediction") or {}
+    explanation = row.get("explanation") or {}
+    score = float(prediction.get("score", 0.0))
+    confidence = float(prediction.get("confidence", 0.0))
+    readable = fallback_explanation
+    if isinstance(explanation, dict):
+        top = explanation.get("top_factors") or []
+        if isinstance(top, list) and top:
+            labels = [str(t.get("feature", "factor")) for t in top[:3] if isinstance(t, dict)]
+            if labels:
+                readable = f"Primary drivers: {', '.join(labels)}."
+    return ClientMLResponse(
+        score=round(score, 4),
+        confidence=round(confidence, 4),
+        explanation=readable,
+        model_version=str(row.get("model_version", "unknown")),
+        generated_at=str(row.get("created_at", datetime.utcnow().isoformat() + "Z")),
+    )
+
+
+@app.post("/ml/models/{model_id}/promote", response_model=ModelPromoteResponse, tags=["ml"])
+def ml_promote_model(model_id: int, request: Request):
+    tenant_id = str(get_current_tenant(request))
+    promote_model(model_id=model_id, tenant_id=tenant_id)
+    return ModelPromoteResponse(promoted=True, model_id=model_id)
+
+
+@app.get("/ml/operator/suggestions/{campaign_id}", response_model=ClientMLResponse, tags=["ml"])
+def ml_operator_suggestions(campaign_id: int, request: Request):
+    tenant_id = str(get_current_tenant(request))
+    entity_id = str(campaign_id)
+    tasks = ["next_step_prediction", "path_success_probability", "operator_efficiency_score"]
+    rows = []
+    for task in tasks:
+        row = get_latest_prediction(tenant_id=tenant_id, task=task, entity_id=entity_id)
+        if not row:
+            enqueue_run_inference(task_name=task, tenant_id=tenant_id, entity_id=entity_id)
+        else:
+            rows.append(row)
+    if not rows:
+        return _prediction_to_client_contract(None, "Operator suggestions are being prepared for this campaign.")
+    scores = []
+    versions = []
+    factors: list[str] = []
+    for row in rows:
+        pred = row.get("prediction") or {}
+        scores.append(float(pred.get("score", 0.0)))
+        versions.append(str(row.get("model_version", "unknown")))
+        ex = row.get("explanation") or {}
+        for factor in ex.get("top_factors", []) if isinstance(ex, dict) else []:
+            if isinstance(factor, dict) and factor.get("feature"):
+                factors.append(str(factor["feature"]))
+    explanation = "Suggested next steps based on campaign behavior."
+    if factors:
+        top = ", ".join(sorted(set(factors))[:3])
+        explanation = f"Suggested next steps prioritize: {top}."
+    return ClientMLResponse(
+        score=round(sum(scores) / len(scores), 4),
+        confidence=0.78,
+        explanation=explanation,
+        model_version=", ".join(sorted(set(versions))),
+        generated_at=datetime.utcnow().isoformat() + "Z",
+    )
+
+
+@app.get("/ml/client/security-score", response_model=ClientMLResponse, tags=["ml"])
+def ml_client_security_score(request: Request):
+    tenant_id = str(get_current_tenant(request))
+    row = get_latest_prediction(tenant_id=tenant_id, task="control_effectiveness", entity_id=tenant_id)
+    if not row:
+        enqueue_run_inference(task_name="control_effectiveness", tenant_id=tenant_id, entity_id=tenant_id)
+    return _prediction_to_client_contract(row, "Security score is being generated from current tenant telemetry.")
+
+
+@app.get("/ml/client/risk", response_model=ClientMLResponse, tags=["ml"])
+def ml_client_risk(request: Request):
+    tenant_id = str(get_current_tenant(request))
+    row = get_latest_prediction(tenant_id=tenant_id, task="residual_risk", entity_id=tenant_id)
+    if not row:
+        enqueue_run_inference(task_name="residual_risk", tenant_id=tenant_id, entity_id=tenant_id)
+    return _prediction_to_client_contract(row, "Residual risk estimation is being generated.")
+
+
+@app.get("/ml/client/detection-gaps", response_model=ClientMLResponse, tags=["ml"])
+def ml_client_detection_gaps(request: Request):
+    tenant_id = str(get_current_tenant(request))
+    row = get_latest_prediction(tenant_id=tenant_id, task="detection_coverage", entity_id=tenant_id)
+    if not row:
+        enqueue_run_inference(task_name="detection_coverage", tenant_id=tenant_id, entity_id=tenant_id)
+    return _prediction_to_client_contract(row, "Detection gap analysis is being generated.")
+
+
+@app.get("/ml/client/anomalies", response_model=ClientMLResponse, tags=["ml"])
+def ml_client_anomalies(request: Request):
+    tenant_id = str(get_current_tenant(request))
+    row = get_latest_prediction(tenant_id=tenant_id, task="baseline_behavior", entity_id=tenant_id)
+    if not row:
+        enqueue_run_inference(task_name="baseline_behavior", tenant_id=tenant_id, entity_id=tenant_id)
+    return _prediction_to_client_contract(row, "Anomaly analysis is being generated from behavioral baseline.")
+
+
+class ClientSimulationRequest(BaseModel):
+    scenario: str = "baseline"
+    controls_improvement: float = 0.0
+    detection_improvement: float = 0.0
+
+
+@app.post("/ml/client/simulate", response_model=ClientMLResponse, tags=["ml"])
+def ml_client_simulate(payload: ClientSimulationRequest, request: Request):
+    tenant_id = str(get_current_tenant(request))
+    enqueue_train_model(task_name="defense_improvement_projection", tenant_id=tenant_id)
+    row = get_latest_prediction(tenant_id=tenant_id, task="defense_improvement_projection", entity_id=tenant_id)
+    if not row:
+        enqueue_run_inference(task_name="defense_improvement_projection", tenant_id=tenant_id, entity_id=tenant_id)
+    return _prediction_to_client_contract(
+        row,
+        f"Simulation queued for scenario '{payload.scenario}'. Updated projection will be available shortly.",
+    )
 
 
 @app.get("/api/v1/client/findings", response_model=Paginated[ClientFinding], tags=["client"])

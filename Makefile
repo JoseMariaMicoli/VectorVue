@@ -52,7 +52,7 @@ PANEL1_PORTAL_HOST ?= acme.vectorvue.local
 PANEL2_PORTAL_HOST ?= globex.vectorvue.local
 PORTAL_PROTO ?= https
 
-.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy customer-deploy-isolated phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
+.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy customer-deploy-isolated phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
 
 help:
 	@echo "VectorVue PostgreSQL operational targets"
@@ -84,6 +84,7 @@ help:
 	@echo "  make phase6-test - Run functional, security, and performance validation"
 	@echo "  make phase65-migrate - Apply tenant isolation migration (Phase 6.5)"
 	@echo "  make phase7e-migrate - Apply portal usage telemetry schema (Phase 7E)"
+	@echo "  make phase8-migrate - Apply advanced ML/analytics schema (Phase 8)"
 	@echo "  make phase6-down - Stop Phase 6 stack"
 	@echo "  make phase6-reset - Stop stack and remove volumes"
 	@echo "  make phase6-airgap - Export air-gap deployment bundle"
@@ -98,7 +99,7 @@ help:
 	@echo "  PANEL1_PORTAL_HOST=acme.vectorvue.local PANEL2_PORTAL_HOST=globex.vectorvue.local"
 	@echo "  HTTP_HOST_PORT=8080 HTTPS_HOST_PORT=8443 POSTGRES_HOST_PORT=5543"
 
-deploy: api-up phase65-migrate phase7d-migrate phase7e-migrate api-smoke
+deploy: api-up phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate api-smoke
 
 customer-deploy:
 	COMPOSE_PROJECT_NAME=$(CUSTOMER) \
@@ -144,7 +145,7 @@ phase6-up:
 	else \
 		echo "SKIP_BUILD=1 -> skipping image build"; \
 	fi
-	$(DC) up -d --force-recreate postgres redis vectorvue_app vectorvue_runtime vectorvue_portal nginx
+	$(DC) up -d --force-recreate postgres redis vectorvue_app vectorvue_runtime vectorvue_ml_worker vectorvue_portal nginx
 
 api-up: phase6-up
 
@@ -194,6 +195,11 @@ phase7e-migrate:
 		--pg-url $(PG_URL) \
 		--sql sql/phase7e_portal_telemetry.sql
 
+phase8-migrate:
+	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/apply_pg_sql.py \
+		--pg-url $(PG_URL) \
+		--sql sql/phase8_analytics.sql
+
 phase65-bootstrap: phase65-migrate
 	./deploy/scripts/bootstrap_customer.sh "$(CUSTOMER)" "$(TENANT_NAME)" "$(TENANT_ID)" "$(PG_URL)"
 
@@ -229,7 +235,7 @@ pg-migrate:
 		--schema $(SCHEMA_SQL) \
 		--truncate
 
-seed-clients: phase65-migrate phase7d-migrate phase7e-migrate
+seed-clients: phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate
 	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/seed_db.py \
 		--backend postgres \
 		--pg-url $(PG_URL) \

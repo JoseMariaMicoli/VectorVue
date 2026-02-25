@@ -30,6 +30,10 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from vv_fs import FileSystemService
+try:
+    from analytics.events import log_analytics_event
+except Exception:  # pragma: no cover
+    log_analytics_event = None
 
 try:
     import psycopg
@@ -2446,7 +2450,16 @@ class Database:
             c.execute("INSERT INTO campaigns (name, project_id, created_at, created_by, status, integrity_hash) VALUES (?, ?, ?, ?, ?, ?)",
                       (name, project_id, created_at, self.current_user.id, "active", h))
             self.conn.commit()
+            campaign_id = c.lastrowid
             self._audit(self.current_user.username, "CREATE_CAMPAIGN", "campaign", name)
+            tenant_id = self._tenant_for_campaign(campaign_id)
+            self._log_analytics_event_safe(
+                tenant_id=tenant_id,
+                event_type="CAMPAIGN_CREATED",
+                entity_type="campaign",
+                entity_id=campaign_id,
+                payload={"campaign_name": name, "project_id": project_id, "actor": self.current_user.username},
+            )
             return True, f"Campaign '{name}' initialized."
         except sqlite3.IntegrityError:
             return False, "Campaign name exists."
@@ -2857,6 +2870,19 @@ class Database:
         fid = c.lastrowid
         actor = self.current_user.username if self.current_user else "SYSTEM"
         self.log_audit_event(actor, "CREATE_FINDING", {"finding_id": fid, "title": f.title, "project_id": f.project_id, "type": "finding"})
+        self._log_analytics_event_safe(
+            tenant_id=self._tenant_for_finding(fid),
+            event_type="FINDING_CREATED",
+            entity_type="finding",
+            entity_id=fid,
+            payload={
+                "title": f.title,
+                "cvss_score": f.cvss_score,
+                "mitre_id": f.mitre_id,
+                "status": f.status,
+                "created_by": actor,
+            },
+        )
         return fid
 
     def update_finding(self, f: Finding):
@@ -2945,6 +2971,58 @@ class Database:
     # AUDIT LOG (v2.5 - Enhanced for v3.0)
     # -------------------------------------------------------------------------
 
+    def _tenant_for_campaign(self, campaign_id: int | None) -> str | None:
+        if campaign_id is None:
+            return None
+        if getattr(self, "db_backend", "").lower() != "postgres":
+            return None
+        try:
+            c = self.conn.cursor()
+            c.execute("SELECT tenant_id FROM campaigns WHERE id=?", (campaign_id,))
+            row = c.fetchone()
+            if row and row.get("tenant_id"):
+                return str(row["tenant_id"])
+        except Exception:
+            return None
+        return None
+
+    def _tenant_for_finding(self, finding_id: int | None) -> str | None:
+        if finding_id is None:
+            return None
+        if getattr(self, "db_backend", "").lower() != "postgres":
+            return None
+        try:
+            c = self.conn.cursor()
+            c.execute("SELECT tenant_id FROM findings WHERE id=?", (finding_id,))
+            row = c.fetchone()
+            if row and row.get("tenant_id"):
+                return str(row["tenant_id"])
+        except Exception:
+            return None
+        return None
+
+    def _log_analytics_event_safe(
+        self,
+        tenant_id: str | None,
+        event_type: str,
+        entity_type: str,
+        entity_id: str | int | None,
+        payload: dict | None = None,
+    ) -> None:
+        if not tenant_id or log_analytics_event is None:
+            return
+        try:
+            log_analytics_event(
+                tenant_id=tenant_id,
+                event_type=event_type,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                payload=payload or {},
+            )
+        except Exception:
+            # Analytics must never impact campaign execution path.
+            return
+
     def log_audit_event(self, actor: str, action: str, context: dict) -> str:
         """Log an auditable event with structured context (v3.0 enhanced).
         
@@ -2999,6 +3077,23 @@ class Database:
                   (entry_id, ts, actor, action, target_type, target_id, "", context_hash))
         
         self.conn.commit()
+
+        # Phase 8 analytics: operator action stream.
+        tenant_id = self._tenant_for_campaign(context.get("campaign_id"))
+        if tenant_id and action:
+            self._log_analytics_event_safe(
+                tenant_id=tenant_id,
+                event_type="OPERATOR_ACTION",
+                entity_type="operator_action",
+                entity_id=entry_id,
+                payload={
+                    "actor": actor,
+                    "action": action,
+                    "target_type": target_type,
+                    "target_id": target_id,
+                    "context": context,
+                },
+            )
         return entry_id
 
     def _audit(self, actor: str, action: str, target_type: str, target_id: str = "", old_value: str = "", new_value: str = ""):
@@ -3516,6 +3611,22 @@ class Database:
                 "command": command[:50] + ("..." if len(command) > 50 else ""),
                 "type": "command_execution"
             })
+            self._log_analytics_event_safe(
+                tenant_id=self._tenant_for_campaign(campaign_id),
+                event_type="COMMAND_EXECUTED",
+                entity_type="campaign",
+                entity_id=campaign_id,
+                payload={
+                    "campaign_id": campaign_id,
+                    "command_id": cmd_id,
+                    "asset_id": asset_id,
+                    "operator": operator,
+                    "shell_type": shell_type,
+                    "technique": mitre_technique or "",
+                    "success": bool(success),
+                    "detection_likelihood": detection_likelihood,
+                },
+            )
             return cmd_id
         except Exception as e:
             return -1
@@ -3608,6 +3719,19 @@ class Database:
                 "campaign_id": campaign_id, "asset_id": asset_id, "session_id": session_id,
                 "session_type": session_type, "type": "session"
             })
+            self._log_analytics_event_safe(
+                tenant_id=self._tenant_for_campaign(campaign_id),
+                event_type="SESSION_OPENED",
+                entity_type="campaign",
+                entity_id=campaign_id,
+                payload={
+                    "campaign_id": campaign_id,
+                    "session_id": session_id,
+                    "asset_id": asset_id,
+                    "session_type": session_type,
+                    "opened_by": opened_by,
+                },
+            )
             return session_id
         except Exception:
             return -1
@@ -3699,6 +3823,21 @@ class Database:
                 "campaign_id": campaign_id, "asset_id": asset_id, "event_id": event_id,
                 "detection_type": detection_type, "confidence": confidence
             })
+            self._log_analytics_event_safe(
+                tenant_id=self._tenant_for_campaign(campaign_id),
+                event_type="DETECTION_LOGGED",
+                entity_type="campaign",
+                entity_id=campaign_id,
+                payload={
+                    "campaign_id": campaign_id,
+                    "asset_id": asset_id,
+                    "event_id": event_id,
+                    "detection_type": detection_type,
+                    "indicator": indicator,
+                    "source": source,
+                    "confidence": confidence,
+                },
+            )
             return event_id
         except Exception:
             return -1
