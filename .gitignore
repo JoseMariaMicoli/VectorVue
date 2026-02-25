@@ -15,6 +15,8 @@ vectorvue.salt
 vector.key
 .env
 *.env
+.env.*
+portal/.env*
 
 # Python environments and caches
 venv/
@@ -38,6 +40,9 @@ build/
 dist/
 *.egg-info/
 pip-wheel-metadata/
+portal/.next/
+portal/node_modules/
+portal/.turbo/
 
 # Database runtime files
 vectorvue.db
@@ -77,7 +82,7 @@ Thumbs.db
 # Local-only project paths
 example.md
 docs/dev-log/
-.github/ 
+config/
 
 # Phase 6 deployment generated artifacts
 deploy/certs/
@@ -88,3 +93,5 @@ deploy/customers/*
 vectorvue_airgap_*.tar.gz
 vectorvue_db_backup.dump
 *.dump
+
+.github/

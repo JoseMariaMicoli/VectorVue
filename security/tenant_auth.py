@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from uuid import UUID
 
 import jwt
@@ -25,8 +26,21 @@ def get_current_tenant(request: Request) -> UUID:
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
 
+    jwt_secret = os.environ.get("VV_CLIENT_JWT_SECRET", "").strip()
+    allow_unsigned = os.environ.get("VV_CLIENT_JWT_ALLOW_UNSIGNED", "0").strip() == "1"
+
     try:
-        payload = jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
+        if jwt_secret:
+            payload = jwt.decode(token, key=jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
+        elif allow_unsigned:
+            payload = jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="JWT verification misconfigured on server",
+            )
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired") from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid JWT") from exc
 

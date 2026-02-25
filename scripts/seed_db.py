@@ -16,6 +16,7 @@ You may NOT:
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -37,7 +38,111 @@ def ensure_login(db: Database, username: str, password: str) -> None:
         raise RuntimeError(f"unable to authenticate seed user: {msg}")
 
 
-def get_or_create_campaign(db: Database, name: str, project_id: str = "DEFAULT") -> int:
+def _role_from_name(role_name: str) -> str:
+    mapping = {
+        "viewer": Role.VIEWER,
+        "operator": Role.OPERATOR,
+        "lead": Role.LEAD,
+        "admin": Role.ADMIN,
+    }
+    key = (role_name or "").strip().lower()
+    if key not in mapping:
+        raise ValueError(f"invalid role '{role_name}' (use viewer|operator|lead|admin)")
+    return mapping[key]
+
+
+def ensure_user_credentials(db: Database, username: str, password: str, role: str) -> str:
+    """Create user if missing; verify credentials if present.
+
+    Returns a short status string for console output.
+    """
+    ok, _ = db.authenticate_user(username, password)
+    if ok:
+        return "present"
+
+    created, msg = db.register_user(username, password, role=role, group_name="default")
+    if created:
+        return "created"
+
+    # Most common failure is duplicate username with different password.
+    if "already exists" in msg.lower():
+        return "exists_with_different_password"
+    return f"error:{msg}"
+
+
+def ensure_tenant(db: Database, tenant_id: str, tenant_name: str) -> str:
+    """Ensure tenant row exists and is active (PostgreSQL only)."""
+    if getattr(db, "db_backend", "").lower() != "postgres":
+        return tenant_id
+    c = db.conn.cursor()
+    c.execute(
+        """INSERT INTO tenants (id, name, active)
+           VALUES (?, ?, TRUE)
+           ON CONFLICT (id) DO UPDATE SET
+             name=EXCLUDED.name,
+             active=TRUE""",
+        (tenant_id, tenant_name),
+    )
+    db.conn.commit()
+    return tenant_id
+
+
+def assign_user_tenant_access(
+    db: Database,
+    username: str,
+    tenant_id: str,
+    access_role: str,
+) -> None:
+    """Assign explicit tenant access to a user (PostgreSQL only)."""
+    if getattr(db, "db_backend", "").lower() != "postgres":
+        return
+    c = db.conn.cursor()
+    c.execute("SELECT id FROM users WHERE username=?", (username,))
+    row = c.fetchone()
+    if not row:
+        raise RuntimeError(f"user not found for tenant mapping: {username}")
+    user_id = int(row["id"])
+    c.execute(
+        """INSERT INTO user_tenant_access (user_id, username, tenant_id, access_role, active)
+           VALUES (?, ?, ?, ?, TRUE)
+           ON CONFLICT (user_id, tenant_id) DO UPDATE SET
+             username=EXCLUDED.username,
+             access_role=EXCLUDED.access_role,
+             active=TRUE""",
+        (user_id, username, tenant_id, access_role),
+    )
+    db.conn.commit()
+
+
+def get_or_create_campaign(
+    db: Database,
+    name: str,
+    project_id: str = "DEFAULT",
+    tenant_id: str | None = None,
+) -> int:
+    if getattr(db, "db_backend", "").lower() == "postgres" and tenant_id:
+        c = db.conn.cursor()
+        c.execute("SELECT id FROM campaigns WHERE name=? AND tenant_id=?", (name, tenant_id))
+        row = c.fetchone()
+        if row:
+            return int(row["id"])
+        created_at = datetime.utcnow().isoformat()
+        c.execute(
+            """INSERT INTO campaigns (name, project_id, created_at, created_by, status, integrity_hash, tenant_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                name,
+                project_id,
+                created_at,
+                db.current_user.id if db.current_user else None,
+                "active",
+                "",
+                tenant_id,
+            ),
+        )
+        db.conn.commit()
+        return int(c.lastrowid)
+
     existing = db.get_campaign_by_name(name)
     if existing:
         return int(existing.id)
@@ -294,6 +399,228 @@ def pressure_val_for_rows(cursor) -> float:
     return float(row["m"]) if row and row["m"] is not None else 0.0
 
 
+def resolve_active_tenant_id(db: Database) -> str | None:
+    """Resolve active tenant UUID for tenant-scoped client API seed data."""
+    if getattr(db, "db_backend", "").lower() != "postgres":
+        return None
+    c = db.conn.cursor()
+    try:
+        c.execute("SELECT id FROM tenants WHERE active=TRUE ORDER BY created_at ASC LIMIT 1")
+        row = c.fetchone()
+        if row and row["id"]:
+            return str(row["id"])
+    except Exception:
+        return None
+    return "00000000-0000-0000-0000-000000000001"
+
+
+def seed_client_portal_data(
+    db: Database,
+    campaign_ids: list[int],
+    operator: str,
+    tenant_id: str | None,
+    client_name: str,
+) -> None:
+    """Seed findings/reports/remediation/evidence so Phase 7 portal is not empty."""
+    if not tenant_id:
+        return
+    c = db.conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    user_id = db.current_user.id if db.current_user else None
+
+    shared_templates = [
+        ("Weak AD Password Policy", 8.4, "T1110", "Password spraying exposed weak domain accounts."),
+        ("Unrestricted Lateral Movement Path", 7.6, "T1021", "Service account enabled broad admin pivot paths."),
+        ("Domain Controller Audit Gaps", 7.2, "T1005", "Critical security events were not consistently forwarded."),
+        ("Endpoint EDR Tamper Surface", 8.7, "T1562", "EDR policy exclusions allowed defense evasion paths."),
+        ("Shared Local Admin Credential Reuse", 9.1, "T1550", "Local admin credential reuse enabled rapid lateral spread."),
+        ("Weak Backup Repository Segmentation", 8.0, "T1490", "Backup services were reachable from user VLAN segments."),
+        ("Stale Privileged Accounts Active", 7.5, "T1078", "Dormant privileged identities remained enabled."),
+        ("Insecure GPO Script Path", 8.3, "T1059", "Startup scripts were writable by non-admin principals."),
+    ]
+
+    campaign_profile_templates = [
+        [
+            ("Public VPN Portal Brute-Forceable", 7.9, "T1110", "Rate limits and MFA controls were inconsistently enforced."),
+            ("Legacy External Appliance Firmware", 8.1, "T1190", "Unpatched edge appliance exposed known exploit chain."),
+            ("Open Redirect in SSO Flow", 6.9, "T1189", "SSO redirect logic enabled credential interception scenarios."),
+            ("Web Upload Content Validation Weakness", 7.4, "T1505", "Uploaded payloads bypassed extension validation."),
+            ("Phishing-Resistant MFA Coverage Gap", 8.2, "T1566", "High-value users were exempted from strong MFA."),
+            ("Unaudited API Token Sprawl", 7.8, "T1552", "Long-lived API tokens lacked owner and rotation metadata."),
+            ("Exposed CI Build Secrets", 8.6, "T1552", "Pipeline logs leaked service credentials to non-privileged users."),
+            ("Public Object Storage Misconfiguration", 7.7, "T1530", "Sensitive exports were reachable without signed URLs."),
+            ("Legacy Email Gateway Bypass", 7.1, "T1566", "Mail filtering policy exceptions allowed payload delivery."),
+            ("Password Reset Workflow Enumeration", 6.8, "T1589", "Account recovery endpoint leaked valid user identifiers."),
+            ("Outdated VPN Client Certificate Policy", 7.3, "T1556", "Certificate validation rules allowed weak client trust."),
+            ("Unrestricted Helpdesk Reset Actions", 8.0, "T1078", "Helpdesk workflow could reset privileged accounts without approval."),
+            ("Cloud Console Session Timeout Gap", 7.0, "T1539", "Long-lived browser sessions increased takeover blast radius."),
+            ("Third-Party SSO Trust Drift", 7.6, "T1556", "External identity trust mappings were not periodically validated."),
+        ],
+        [
+            ("Kerberos Delegation Misconfiguration", 8.2, "T1558", "Constrained delegation boundaries were bypassable."),
+            ("Excessive Service Account Privileges", 8.1, "T1078", "Service principals had unnecessary privileged rights."),
+            ("Tier-0 Admin Workstation Exposure", 8.9, "T1021", "Privileged admin logons occurred on non-hardened hosts."),
+            ("AD CS Template Abuse Path", 9.0, "T1552", "Certificate template ACLs enabled privilege escalation."),
+            ("Unconstrained Delegation Hosts Present", 8.5, "T1558", "Legacy unconstrained delegation remained enabled on servers."),
+            ("LAPS Deployment Coverage Gap", 7.6, "T1078", "Local admin password rotation was not uniformly enforced."),
+            ("Privileged Group Nesting Sprawl", 8.0, "T1098", "Nested groups obscured effective privileged access paths."),
+            ("RDP Exposure From User VLAN", 7.8, "T1021", "Direct RDP paths enabled noisy but viable pivot opportunities."),
+            ("Backup Admin Account Reuse", 8.4, "T1078", "Backup administrators reused credentials across environments."),
+            ("GMSA Scope Misconfiguration", 7.7, "T1078", "Group managed service account scopes exceeded workload boundaries."),
+            ("DCSync Guardrail Weakness", 9.2, "T1003", "Directory replication permissions enabled credential theft risk."),
+            ("Tiering Boundary Firewall Drift", 7.4, "T1562", "Policy drift opened cross-tier management channels."),
+            ("SIEM Correlation Rule Blind Spot", 7.1, "T1059", "Multi-stage attack telemetry was not correlated into incidents."),
+            ("Persistence Artifact Cleanup Gap", 6.9, "T1053", "Expired persistence artifacts remained active in scheduled tasks."),
+        ],
+    ]
+
+    for camp_idx, camp in enumerate(campaign_ids):
+        profile_templates = campaign_profile_templates[camp_idx % len(campaign_profile_templates)]
+        templates = profile_templates + shared_templates
+        finding_ids: list[int] = []
+        for idx, (title, cvss, mitre, desc) in enumerate(templates, start=1):
+            scoped_title = f"{title} [campaign:{camp}]"
+            c.execute("SELECT id FROM findings WHERE title=? AND tenant_id=?", (scoped_title, tenant_id))
+            row = c.fetchone()
+            if row:
+                fid = int(row["id"])
+            else:
+                c.execute(
+                    """INSERT INTO findings
+                       (title, description, cvss_score, mitre_id, status, evidence, remediation, project_id,
+                        cvss_vector, evidence_hash, created_by, last_modified_by, assigned_to, visibility,
+                        tags, approval_status, approved_by, approval_timestamp, tenant_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        scoped_title,
+                        desc,
+                        cvss,
+                        mitre,
+                        "Open",
+                        "Seeded client evidence narrative.",
+                        "Apply least privilege and harden privileged groups.",
+                        "DEFAULT",
+                        "",
+                        hashlib.sha256(f"{scoped_title}:{tenant_id}".encode()).hexdigest(),
+                        user_id,
+                        user_id,
+                        user_id,
+                        "global",
+                        "seed,client,portal",
+                        "approved",
+                        user_id,
+                        now,
+                        tenant_id,
+                    ),
+                )
+                fid = int(c.lastrowid)
+            finding_ids.append(fid)
+
+            evidence_templates = [
+                ("screenshot", "Operator screenshot showing exploit path validation."),
+                ("pcap", "Captured network telemetry supporting lateral movement narrative."),
+                ("log", "Security control logs correlated to the observed adversary technique."),
+            ]
+            for ev_idx, (artifact_type, ev_desc) in enumerate(evidence_templates, start=1):
+                evidence_hash = hashlib.sha256(
+                    f"evidence:{tenant_id}:{camp}:{idx}:{ev_idx}:{artifact_type}".encode()
+                ).hexdigest()
+                c.execute(
+                    """INSERT INTO evidence_items
+                       (campaign_id, finding_id, artifact_type, description, sha256_hash, collected_by,
+                        collection_method, collected_timestamp, source_host, technique_id,
+                        approval_status, approved_by, approval_timestamp, immutable, tenant_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT (sha256_hash) DO NOTHING""",
+                    (
+                        camp,
+                        fid,
+                        artifact_type,
+                        f"{ev_desc} (finding={fid}, sample={ev_idx})",
+                        evidence_hash,
+                        user_id,
+                        "seed_db",
+                        now,
+                        f"seed-host-{camp}",
+                        mitre,
+                        "approved",
+                        user_id,
+                        now,
+                        1,
+                        tenant_id,
+                    ),
+                )
+
+            task_templates = [
+                (f"Remediate finding {fid} - identity controls", "open"),
+                (f"Remediate finding {fid} - segmentation hardening", "in_progress"),
+            ]
+            for task_title, task_status in task_templates:
+                c.execute(
+                    "SELECT id FROM remediation_tasks WHERE tenant_id=? AND title=?",
+                    (tenant_id, task_title),
+                )
+                if not c.fetchone():
+                    c.execute(
+                        """INSERT INTO remediation_tasks (finding_id, title, status, created_at, tenant_id)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (fid, task_title, task_status, now, tenant_id),
+                    )
+
+        if camp_idx % len(campaign_profile_templates) == 0:
+            report_templates = [
+                ("Executive Summary - Initial Access Focus", "final"),
+                ("Perimeter Attack Surface Detail", "approved"),
+                ("Identity Control Hardening Plan", "published"),
+                ("Risk Trend Quarterly Pack", "final"),
+                ("External Exposure Validation Pack", "published"),
+            ]
+        else:
+            report_templates = [
+                ("Executive Summary - Lateral Movement Focus", "final"),
+                ("Privilege Escalation Detail", "approved"),
+                ("Remediation Progress Matrix", "published"),
+                ("Risk Trend Quarterly Pack", "final"),
+                ("Tier-0 Protection Deep Dive", "approved"),
+            ]
+        for report_suffix, report_status in report_templates:
+            report_title = f"{report_suffix} [campaign:{camp}]"
+            c.execute(
+                "SELECT id FROM client_reports WHERE campaign_id=? AND report_title=? AND tenant_id=?",
+                (camp, report_title, tenant_id),
+            )
+            if c.fetchone():
+                continue
+            c.execute(
+                """INSERT INTO client_reports
+                   (campaign_id, client_name, report_title, report_date, generated_at, generated_by,
+                    filter_rules, include_exec_summary, include_risk_dashboard, include_metrics,
+                    branding_logo_url, footer_text, status, file_path, file_hash, created_at, tenant_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    camp,
+                    client_name,
+                    report_title,
+                    now,
+                    now,
+                    operator,
+                    "{}",
+                    1,
+                    1,
+                    1,
+                    "",
+                    "Seeded by VectorVue",
+                    report_status,
+                    "",
+                    "",
+                    now,
+                    tenant_id,
+                ),
+            )
+
+    db.conn.commit()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed VectorVue DB with realistic Phase 5.5 data.")
     parser.add_argument(
@@ -307,12 +634,32 @@ def main() -> int:
         default=None,
         help="PostgreSQL URL override. Falls back to VV_DB_URL / VV_DB_* env vars.",
     )
-    parser.add_argument("--admin-user", default="admin")
-    parser.add_argument("--admin-pass", default="AdminPassw0rd!")
+    parser.add_argument("--global-admin-user", default="redteam_admin")
+    parser.add_argument("--global-admin-pass", default="RedTeamAdm1n!")
+    parser.add_argument("--operator-lead-user", default="rt_lead")
+    parser.add_argument("--operator-lead-pass", default="LeadOperat0r!")
+    parser.add_argument("--operator-user", default="rt_operator")
+    parser.add_argument("--operator-pass", default="CoreOperat0r!")
+    parser.add_argument("--panel1-tenant-id", default="10000000-0000-0000-0000-000000000001")
+    parser.add_argument("--panel1-tenant-name", default="ACME Industries")
+    parser.add_argument("--panel1-client-user-1", default="acme_viewer")
+    parser.add_argument("--panel1-client-pass-1", default="AcmeView3r!")
+    parser.add_argument("--panel1-client-role-1", default="viewer")
+    parser.add_argument("--panel1-client-user-2", default="acme_operator")
+    parser.add_argument("--panel1-client-pass-2", default="AcmeOperat0r!")
+    parser.add_argument("--panel1-client-role-2", default="operator")
+    parser.add_argument("--panel2-tenant-id", default="20000000-0000-0000-0000-000000000002")
+    parser.add_argument("--panel2-tenant-name", default="Globex Corporation")
+    parser.add_argument("--panel2-client-user-1", default="globex_viewer")
+    parser.add_argument("--panel2-client-pass-1", default="GlobexView3r!")
+    parser.add_argument("--panel2-client-role-1", default="viewer")
+    parser.add_argument("--panel2-client-user-2", default="globex_operator")
+    parser.add_argument("--panel2-client-pass-2", default="GlobexOperat0r!")
+    parser.add_argument("--panel2-client-role-2", default="operator")
     parser.add_argument(
         "--passphrase",
         default=None,
-        help="Database encryption passphrase (defaults to --admin-pass).",
+        help="Database encryption passphrase (defaults to --global-admin-pass).",
     )
     args = parser.parse_args()
 
@@ -324,7 +671,7 @@ def main() -> int:
     if args.backend == "postgres" and args.pg_url:
         os.environ["VV_DB_URL"] = args.pg_url
 
-    encryption_passphrase = args.passphrase or args.admin_pass
+    encryption_passphrase = args.passphrase or args.global_admin_pass
     crypto = SessionCrypto()
     if not crypto.derive_key(encryption_passphrase):
         raise RuntimeError("failed to derive encryption key from provided passphrase")
@@ -337,21 +684,89 @@ def main() -> int:
                 "Run scripts/reset_db.py --yes or pass the original --passphrase."
             )
 
-        ensure_login(db, args.admin_user, args.admin_pass)
-        camp1 = get_or_create_campaign(db, "OP_REDWOLF_2026")
-        camp2 = get_or_create_campaign(db, "OP_NIGHTGLASS_2026")
+        ensure_login(db, args.global_admin_user, args.global_admin_pass)
+        lead_status = ensure_user_credentials(db, args.operator_lead_user, args.operator_lead_pass, Role.LEAD)
+        operator_status = ensure_user_credentials(db, args.operator_user, args.operator_pass, Role.OPERATOR)
 
-        seed_campaign(db, camp1, "REDWOLF", args.admin_user, "RW-C2-01")
-        seed_campaign(db, camp2, "NIGHTGLASS", args.admin_user, "NG-C2-01")
+        panel1_tenant_id = ensure_tenant(db, args.panel1_tenant_id, args.panel1_tenant_name)
+        panel2_tenant_id = ensure_tenant(db, args.panel2_tenant_id, args.panel2_tenant_name)
+
+        panel1_campaigns = [
+            ("OP_ACME_REDWOLF_2026", "ACME-REDWOLF", "ACME-C2-01"),
+            ("OP_ACME_NIGHTGLASS_2026", "ACME-NIGHTGLASS", "ACME-C2-02"),
+        ]
+        panel2_campaigns = [
+            ("OP_GLOBEX_REDWOLF_2026", "GLOBEX-REDWOLF", "GLOBEX-C2-01"),
+            ("OP_GLOBEX_NIGHTGLASS_2026", "GLOBEX-NIGHTGLASS", "GLOBEX-C2-02"),
+        ]
+
+        seeded_panel1_ids: list[int] = []
+        for campaign_name, op_name, c2_name in panel1_campaigns:
+            camp_id = get_or_create_campaign(db, campaign_name, tenant_id=panel1_tenant_id)
+            seed_campaign(db, camp_id, op_name, args.global_admin_user, c2_name)
+            seeded_panel1_ids.append(camp_id)
+        seed_client_portal_data(db, seeded_panel1_ids, args.global_admin_user, panel1_tenant_id, args.panel1_tenant_name)
+
+        seeded_panel2_ids: list[int] = []
+        for campaign_name, op_name, c2_name in panel2_campaigns:
+            camp_id = get_or_create_campaign(db, campaign_name, tenant_id=panel2_tenant_id)
+            seed_campaign(db, camp_id, op_name, args.global_admin_user, c2_name)
+            seeded_panel2_ids.append(camp_id)
+        seed_client_portal_data(db, seeded_panel2_ids, args.global_admin_user, panel2_tenant_id, args.panel2_tenant_name)
+
+        panel1_client1_status = ensure_user_credentials(
+            db,
+            args.panel1_client_user_1,
+            args.panel1_client_pass_1,
+            _role_from_name(args.panel1_client_role_1),
+        )
+        panel1_client2_status = ensure_user_credentials(
+            db,
+            args.panel1_client_user_2,
+            args.panel1_client_pass_2,
+            _role_from_name(args.panel1_client_role_2),
+        )
+        panel2_client1_status = ensure_user_credentials(
+            db,
+            args.panel2_client_user_1,
+            args.panel2_client_pass_1,
+            _role_from_name(args.panel2_client_role_1),
+        )
+        panel2_client2_status = ensure_user_credentials(
+            db,
+            args.panel2_client_user_2,
+            args.panel2_client_pass_2,
+            _role_from_name(args.panel2_client_role_2),
+        )
+
+        assign_user_tenant_access(db, args.global_admin_user, panel1_tenant_id, "admin")
+        assign_user_tenant_access(db, args.global_admin_user, panel2_tenant_id, "admin")
+        assign_user_tenant_access(db, args.operator_lead_user, panel1_tenant_id, "lead")
+        assign_user_tenant_access(db, args.operator_user, panel2_tenant_id, "operator")
+        assign_user_tenant_access(db, args.panel1_client_user_1, panel1_tenant_id, args.panel1_client_role_1)
+        assign_user_tenant_access(db, args.panel1_client_user_2, panel1_tenant_id, args.panel1_client_role_2)
+        assign_user_tenant_access(db, args.panel2_client_user_1, panel2_tenant_id, args.panel2_client_role_1)
+        assign_user_tenant_access(db, args.panel2_client_user_2, panel2_tenant_id, args.panel2_client_role_2)
 
         print("Seed complete.")
-        print("Campaigns:")
-        print(" - OP_REDWOLF_2026")
-        print(" - OP_NIGHTGLASS_2026")
         print(f"Backend: {args.backend}")
-        print("Login:")
-        print(f" - username: {args.admin_user}")
-        print(f" - password: {args.admin_pass}")
+        print("Global Red Team Accounts:")
+        print(f" - {args.global_admin_user} / {args.global_admin_pass} (role=admin, status=present)")
+        print(f" - {args.operator_lead_user} / {args.operator_lead_pass} (role=lead, tenant={panel1_tenant_id}, status={lead_status})")
+        print(f" - {args.operator_user} / {args.operator_pass} (role=operator, tenant={panel2_tenant_id}, status={operator_status})")
+        print("Client Panel 1:")
+        print(f" - tenant: {args.panel1_tenant_name} ({panel1_tenant_id})")
+        print(f" - campaigns: {', '.join(name for name, _, _ in panel1_campaigns)}")
+        print(f" - {args.panel1_client_user_1} / {args.panel1_client_pass_1} (role={args.panel1_client_role_1}, status={panel1_client1_status})")
+        print(f" - {args.panel1_client_user_2} / {args.panel1_client_pass_2} (role={args.panel1_client_role_2}, status={panel1_client2_status})")
+        print("Client Panel 2:")
+        print(f" - tenant: {args.panel2_tenant_name} ({panel2_tenant_id})")
+        print(f" - campaigns: {', '.join(name for name, _, _ in panel2_campaigns)}")
+        print(f" - {args.panel2_client_user_1} / {args.panel2_client_pass_1} (role={args.panel2_client_role_1}, status={panel2_client1_status})")
+        print(f" - {args.panel2_client_user_2} / {args.panel2_client_pass_2} (role={args.panel2_client_role_2}, status={panel2_client2_status})")
+        if getattr(db, "db_backend", "").lower() != "postgres":
+            fallback_tenant = resolve_active_tenant_id(db)
+            print(f" - sqlite fallback tenant id: {fallback_tenant or 'N/A'}")
         print(f" - passphrase used for DB encryption: {encryption_passphrase}")
         return 0
     finally:
