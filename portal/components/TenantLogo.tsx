@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+*/
+
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
@@ -19,7 +35,7 @@ export default function TenantLogo({ companyName, logoUrl }: TenantLogoProps) {
 
   if (!logoUrl || failed) {
     return (
-      <div className="flex h-10 w-10 items-center justify-center rounded border border-slate-700 bg-slate-900 text-xs font-semibold text-muted">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--vv-border-subtle)] bg-bg-secondary text-xs font-semibold text-text-secondary">
         {initials}
       </div>
     );
@@ -29,9 +45,8 @@ export default function TenantLogo({ companyName, logoUrl }: TenantLogoProps) {
     <img
       src={logoUrl}
       alt={`${companyName} logo`}
-      className="h-10 w-10 rounded border border-slate-700 object-contain bg-slate-900"
+      className="h-10 w-10 rounded-lg border border-[color:var(--vv-border-subtle)] bg-bg-secondary object-contain"
       onError={() => setFailed(true)}
     />
   );
 }
-

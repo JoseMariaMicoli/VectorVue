@@ -1,4 +1,18 @@
-<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
 # VectorVue Deployment Guide
 
@@ -12,6 +26,16 @@ This runbook deploys VectorVue for production-style environments.
 - DNS/hosts mapping for tenant domains
 
 ## 2. Deploy Full Stack
+
+Recommended guided flow:
+
+```bash
+make wizard
+```
+
+Select option `1`.
+
+Direct command path:
 
 ```bash
 make deploy
@@ -34,6 +58,8 @@ Expected services:
 ```bash
 make seed-clients
 ```
+
+Guided path: `make wizard` and select option `4`.
 
 ## 4. Validation
 
@@ -65,6 +91,14 @@ make customer-deploy-isolated \
   POSTGRES_HOST_PORT=5544
 ```
 
+For full isolated portal onboarding in one flow:
+
+```bash
+make wizard
+```
+
+Select option `2`.
+
 ## 7. Upgrade and Migration Sequence
 
 Use this order:
@@ -93,3 +127,18 @@ Use this order:
   - `make phase79-real-smoke ...`
 - One-command isolated client portal stack:
   - `make customer-deploy-portal-isolated ...`
+- Guided command menu:
+  - `make wizard`
+
+## 10. TUI Admin Onboarding Wizard
+
+Use this flow to onboard tenant + portal metadata from the app UI.
+
+1. Start TUI:
+   - `make run-tui`
+2. Login with admin role.
+3. Open wizard:
+   - hotkey `Ctrl+Shift+W`
+   - or sidebar `ONBOARD WIZARD`
+4. Fill tenant metadata, company branding, and credentials.
+5. Run `CREATE TENANT + USERS`.

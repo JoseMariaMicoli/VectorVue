@@ -1,0 +1,188 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  python-validate-main:
+    name: Python Validate (main)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint (if available)
+        run: |
+          if python -m pip show ruff >/dev/null 2>&1; then
+            ruff check .
+          elif python -m pip show flake8 >/dev/null 2>&1; then
+            flake8 .
+          else
+            echo "No Python linter configured in dependencies; skipping lint."
+          fi
+
+      - name: Run tests
+        run: python -m unittest discover -s tests/unit -p "test_*.py" -v
+
+      - name: Build
+        run: python -m compileall -q .
+
+  portal-validate-main:
+    name: Portal Validate (main)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: portal
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Lint (if available)
+        run: |
+          if [ -f .eslintrc ] || [ -f .eslintrc.js ] || [ -f .eslintrc.cjs ] || [ -f .eslintrc.json ] || [ -f eslint.config.js ] || [ -f eslint.config.mjs ] || [ -f eslint.config.cjs ]; then
+            npm run lint --if-present
+          else
+            echo "No ESLint config found in portal; skipping lint to avoid interactive Next.js init."
+          fi
+
+      - name: Run tests (if available)
+        run: npm test --if-present
+
+      - name: Build
+        run: npm run build
+
+  docker-validate-main:
+    name: Docker Validate (main)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: vectorvue:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Validate Compose config
+        run: docker compose config -q
+
+  tag-and-release:
+    name: Tag and release
+    needs: [python-validate-main, portal-validate-main, docker-validate-main]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Calculate next patch version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # VectorVue current baseline version.
+          project_version="4.1.0"
+          project_tag="v${project_version}"
+
+          latest_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
+          if [[ -z "${latest_tag}" ]]; then
+            latest_tag="${project_tag}"
+          fi
+
+          # Anchor math to whichever is newer: latest git tag or project baseline.
+          if [[ "$(printf '%s\n%s\n' "${latest_tag#v}" "${project_version}" | sort -V | tail -n1)" == "${project_version}" ]]; then
+            base_version="${project_version}"
+            base_tag="${project_tag}"
+          else
+            base_version="${latest_tag#v}"
+            base_tag="${latest_tag}"
+          fi
+
+          version="${base_version}"
+          IFS='.' read -r major minor patch <<< "${version}"
+          next_patch=$((patch + 1))
+          next_tag="v${major}.${minor}.${next_patch}"
+
+          echo "latest_tag=${base_tag}" >> "$GITHUB_OUTPUT"
+          echo "next_tag=${next_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push git tag
+        env:
+          NEXT_TAG: ${{ steps.version.outputs.next_tag }}
+        run: |
+          set -euo pipefail
+          git tag -a "$NEXT_TAG" -m "Release $NEXT_TAG"
+          git push origin "$NEXT_TAG"
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        env:
+          NEXT_TAG: ${{ steps.version.outputs.next_tag }}
+          PREV_TAG: ${{ steps.version.outputs.latest_tag }}
+        with:
+          script: |
+            const tag = process.env.NEXT_TAG;
+            const previous = process.env.PREV_TAG;
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              generate_release_notes: true,
+              body: `Automated release from ${context.sha} (previous tag: ${previous}).`
+            });

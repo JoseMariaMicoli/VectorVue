@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+*/
+
 import type { ClientTheme } from '@/lib/types';
 
 let cachedTheme: ClientTheme | null = null;
@@ -6,12 +22,12 @@ const DEFAULT_THEME: ClientTheme = {
   company_name: 'VectorVue Customer',
   logo_url: null,
   colors: {
-    primary: '#0f172a',
-    accent: '#22d3ee',
-    background: '#0b0e14',
-    foreground: '#e5e7eb',
-    danger: '#ef4444',
-    success: '#22c55e'
+    primary: '#121735',
+    accent: '#8A2BE2',
+    background: '#0A0F2D',
+    foreground: '#E6E9F2',
+    danger: '#FF4D4F',
+    success: '#00C896'
   }
 };
 
@@ -30,18 +46,18 @@ function applyTheme(theme: ClientTheme): void {
   const root = document.documentElement;
   const { colors } = theme;
 
-  root.style.setProperty('--primary', colors.primary);
-  root.style.setProperty('--accent', colors.accent);
-  root.style.setProperty('--background', colors.background);
-  root.style.setProperty('--foreground', colors.foreground);
-  root.style.setProperty('--danger', colors.danger);
-  root.style.setProperty('--success', colors.success);
-  root.style.setProperty('--primary-rgb', hexToRgb(colors.primary));
-  root.style.setProperty('--accent-rgb', hexToRgb(colors.accent));
-  root.style.setProperty('--background-rgb', hexToRgb(colors.background));
-  root.style.setProperty('--foreground-rgb', hexToRgb(colors.foreground));
-  root.style.setProperty('--danger-rgb', hexToRgb(colors.danger));
-  root.style.setProperty('--success-rgb', hexToRgb(colors.success));
+  root.style.setProperty('--vv-bg-primary', colors.background);
+  root.style.setProperty('--vv-bg-secondary', colors.primary);
+  root.style.setProperty('--vv-accent', colors.accent);
+  root.style.setProperty('--vv-text-primary', colors.foreground);
+  root.style.setProperty('--vv-error', colors.danger);
+  root.style.setProperty('--vv-success', colors.success);
+  root.style.setProperty('--vv-bg-primary-rgb', hexToRgb(colors.background));
+  root.style.setProperty('--vv-bg-secondary-rgb', hexToRgb(colors.primary));
+  root.style.setProperty('--vv-accent-rgb', hexToRgb(colors.accent));
+  root.style.setProperty('--vv-text-primary-rgb', hexToRgb(colors.foreground));
+  root.style.setProperty('--vv-error-rgb', hexToRgb(colors.danger));
+  root.style.setProperty('--vv-success-rgb', hexToRgb(colors.success));
 }
 
 export function getCachedTheme(): ClientTheme | null {

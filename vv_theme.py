@@ -1,6 +1,8 @@
 """
-Copyright (c) 2026 José María Micoli
-Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
 
 You may:
 ✔ Study
@@ -24,43 +26,43 @@ Color Philosophy:
 """
 
 class CyberColors:
-    # Professional dark-mode palette (Burp-like neutral + amber accent)
-    PHOSPHOR_GREEN = "#FFB86B"  # Primary accent
-    ELECTRIC_CYAN  = "#8BBBD9"  # Secondary accent
-    AMBER_WARNING  = "#F0A94B"  # Warning
-    RED_ALERT      = "#E06C75"  # Critical
-    PURPLE_HAZE    = "#A3A9B8"  # Muted management accent
-    CRIMSON_BLOOD  = "#C57070"  # Sensitive-impact accent
+    # VectorVue official design system
+    PHOSPHOR_GREEN = "#8A2BE2"  # Primary accent purple
+    ELECTRIC_CYAN  = "#D9E1F2"  # Metallic light
+    AMBER_WARNING  = "#FFB020"  # Warning
+    RED_ALERT      = "#FF4D4F"  # Error
+    PURPLE_HAZE    = "#AAB2D5"  # Muted text
+    CRIMSON_BLOOD  = "#FF4D4F"  # Sensitive-impact accent
     
     # v3.0 OPSEC Colors (New)
-    ORANGE_CAUTION  = "#D99A4E"
-    LIME_EVIDENCE   = "#8FC18A"
-    MAGENTA_AUDIT   = "#D087B1"
-    TEAL_APPROVAL   = "#88B3A1"
+    ORANGE_CAUTION  = "#FFB020"
+    LIME_EVIDENCE   = "#00C896"
+    MAGENTA_AUDIT   = "#9D4DFF"
+    TEAL_APPROVAL   = "#00C896"
     GRAY_DISABLED   = "#5C6370"
     
     # Phase 5 Threat Intelligence Colors
-    NEON_PINK       = "#C792EA"
+    NEON_PINK       = "#9D4DFF"
     
     # Phase 5.5 Cognition Engine Colors (10 Engines)
-    COG_OPPORTUNITY = "#B8D67A"
-    COG_PATH        = "#A8A5D6"
-    COG_STATE       = "#8BBBD9"
-    COG_DETECTION   = "#E06C75"
-    COG_CONFIDENCE  = "#F0A94B"
-    COG_KNOWLEDGE   = "#8FC18A"
-    COG_TECHNIQUE   = "#C792EA"
-    COG_VALIDATION  = "#D087B1"
-    COG_EXPLAINABILITY = "#7FB6D8"
-    COG_DASHBOARD   = "#FFB86B"
+    COG_OPPORTUNITY = "#00C896"
+    COG_PATH        = "#9D4DFF"
+    COG_STATE       = "#D9E1F2"
+    COG_DETECTION   = "#FF4D4F"
+    COG_CONFIDENCE  = "#FFB020"
+    COG_KNOWLEDGE   = "#00C896"
+    COG_TECHNIQUE   = "#8A2BE2"
+    COG_VALIDATION  = "#9D4DFF"
+    COG_EXPLAINABILITY = "#C7CEDB"
+    COG_DASHBOARD   = "#8A2BE2"
     
     # Industrial Dark Mode Neutrals
-    VOID_DARK      = "#0f1115"
-    PANEL_GREY     = "#1a1d24"
-    STEEL_BORDER   = "#2e3440"
-    TEXT_MAIN      = "#d8dee9"
-    TEXT_DIM       = "#7d8596"
-    TEXT_MUTED     = "#4c5566"
+    VOID_DARK      = "#0A0F2D"
+    PANEL_GREY     = "#121735"
+    STEEL_BORDER   = "#2A335A"
+    TEXT_MAIN      = "#E6E9F2"
+    TEXT_DIM       = "#AAB2D5"
+    TEXT_MUTED     = "#7C88B8"
     
     # MITRE Coverage Heatmap (technique distribution)
     COVERAGE_NONE   = "#1a1d24"

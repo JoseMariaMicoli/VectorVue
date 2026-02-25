@@ -1,4 +1,18 @@
-<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
 # VectorVue Documentation Index
 
@@ -44,8 +58,10 @@ Use documents by operational role and task. Internal phase names are intentional
 
 ## Common Operational Tasks
 
+- Guided deployment/bootstrap menu: `make wizard`
 - Deploy platform: `make deploy`
 - Seed commercial demo data: `make seed-clients`
+- Start TUI onboarding flow: `make run-tui` then `Ctrl+Shift+W`
 - Verify API health: `make api-smoke`
 - Validate PostgreSQL migrations: `make pg-schema-bootstrap`
 - Apply compliance schema only: `make phase9-migrate`
@@ -53,3 +69,8 @@ Use documents by operational role and task. Internal phase names are intentional
 ## Product Planning Reference
 
 - [Roadmap](../ROADMAP.md)
+
+## Legal & Compliance Enforcement
+
+- `make install` enforces mandatory legal validation before installation completes.
+- `make deploy` is for development/testing workflows and does not enforce installer legal gating.

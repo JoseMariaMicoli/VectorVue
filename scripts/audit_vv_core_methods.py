@@ -1,6 +1,8 @@
 """
-Copyright (c) 2026 José María Micoli
-Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
 
 You may:
 ✔ Study
@@ -71,8 +73,10 @@ def main() -> int:
 
     lines = []
     lines.append("/*")
-    lines.append("Copyright (c) 2026 José María Micoli")
-    lines.append("Licensed under Apache-2.0")
+    lines.append("Copyright (c) 2026 NyxeraLabs")
+    lines.append("Author: José María Micoli")
+    lines.append("Licensed under BSL 1.1")
+    lines.append("Change Date: 2033-02-17 → Apache-2.0")
     lines.append("")
     lines.append("You may:")
     lines.append("✔ Study")
@@ -80,7 +84,8 @@ def main() -> int:
     lines.append("✔ Use for internal security testing")
     lines.append("")
     lines.append("You may NOT:")
-    lines.append("✘ Remove copyright notices")
+    lines.append("✘ Offer as a commercial service")
+    lines.append("✘ Sell derived competing products")
     lines.append("*/")
     lines.append("")
     lines.append("# PostgreSQL Migration Audit Report")

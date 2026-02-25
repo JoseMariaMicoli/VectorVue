@@ -1,4 +1,18 @@
-<sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
 # VectorVue Product Roadmap: Phase 0-9
 
@@ -27,6 +41,18 @@ VectorVue has evolved from a single-operator red team notebook into an enterpris
 - **Phase 8:** ML/Analytics (Attack prediction, anomaly learning) ✅ Delivered
 - **Phase 9:** Compliance & Regulatory Assurance (audit evidence, ISO/SOC2/HIPAA/financial readiness) ✅ Delivered
 
+## Epic: Legal Enforcement & Installation Hardening
+
+- [ ] Web UI scroll-gated legal enforcement
+- [ ] Server-side validation enforcement
+- [ ] TUI paginated enforcement
+- [x] TUI legal acceptance unlock/state feedback fix
+- [ ] make install legal validation workflow
+- [ ] Acceptance hash versioning system
+- [ ] Acceptance persistence layer
+- [ ] Re-acceptance logic on version change
+- [ ] Update README.md
+- [ ] Update INDEX.md
 
 ---
 
@@ -1411,6 +1437,51 @@ This enables auditors to validate compliance using platform-generated evidence r
 * [ ] Formal Statement of Applicability generator output
 * [ ] Monthly/quarterly report scheduling and executive summary templates
 * [ ] Automated compliance drift alerting thresholds by framework policy
+
+## Post-Phase 9 QA & Stabilization (Delivered)
+
+Purpose: harden runtime behavior for commercial production use after compliance rollout.
+
+* [x] Added dedicated QA test package: `tests/qa_cycle/`
+* [x] API verification suite:
+* [x] route presence and OpenAPI contract checks
+* [x] auth enforcement checks
+* [x] tenant isolation checks
+* [x] pagination contract checks
+* [x] Workflow validation suite:
+* [x] event ingestion to persistence checks
+* [x] no orphan remediation relationships
+* [x] compliance report generation + signed audit package download
+* [x] expired session rejection checks
+* [x] Portal contract suite:
+* [x] frontend proxy routes mapped to existing backend endpoints
+* [x] Data integrity checks:
+* [x] compliance hash-chain continuity
+* [x] timestamp consistency bounds
+* [x] snapshot reproducibility checks (stable dataset hash for unchanged data)
+* [x] Performance simulation checks:
+* [x] 10k analytics events ingestion scenario
+* [x] parallel compliance export scenario
+* [x] Stabilization patches applied:
+* [x] compliance export filename collision fix for concurrent downloads
+* [x] deterministic dataset hash computation for reproducible snapshots
+* [x] remediation due-date null edge-case fix
+* [x] report media type correction (`application/pdf` when applicable)
+* [x] client API basic rate limiting implementation
+* [x] tenant-focused composite index additions for high-traffic client queries
+
+Execution command (in containerized QA flow):
+
+```bash
+docker compose run --rm \
+  -e QA_BASE_URL=http://vectorvue_app:8080 \
+  -v "$(pwd):/opt/vectorvue" \
+  vectorvue_app \
+  python -m unittest -v \
+    tests.qa_cycle.test_api_security \
+    tests.qa_cycle.test_workflow_integrity \
+    tests.qa_cycle.test_portal_contract
+```
 
 ## Database Additions (Implemented)
 

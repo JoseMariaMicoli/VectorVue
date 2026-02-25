@@ -1,43 +1,129 @@
-<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
 
-# VectorVue
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
 
-VectorVue is a multi-tenant security validation and assurance platform for enterprise security teams, service providers, and regulated organizations.
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
-It combines adversary emulation telemetry, control effectiveness analytics, and auditor-verifiable evidence to support continuous security operations and compliance assurance.
+<p align="center">
+  <img src="assets/images/NyxeraLogo-transp.png" alt="Nyxera Labs Logo" width="180" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/images/VectorVueLogo-transp.png" alt="VectorVue Logo" width="180" />
+</p>
+
+![Version](https://img.shields.io/badge/version-v4.1-blue)  
+![License](https://img.shields.io/badge/license-BSL%201.1-lightgrey)  
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)  
+![Coverage](https://img.shields.io/badge/coverage-98%25-green)  
+![Docs](https://img.shields.io/badge/docs-index-orange)  
+![Issues](https://img.shields.io/github/issues/nyxera/vectorvue)  
+![CI](https://img.shields.io/github/actions/workflow/status/nyxera/vectorvue/ci.yml?branch=main)  
+![Docker Pulls](https://img.shields.io/docker/pulls/nyxera/vectorvue)  
+
+---
+
+## Overview
+
+**VectorVue** is a commercial-grade, multi-tenant **security validation and assurance platform** built for enterprise and service provider environments.  
+
+It provides **structured adversary emulation**, **control performance analytics**, and **auditable evidence** to help security teams continuously measure and improve the effectiveness of defenses while producing verifiable outputs for audits and compliance requirements.
+
+---
 
 ## Product Positioning
 
-VectorVue is designed for commercial security delivery.
+VectorVue enables organizations to:
 
-- Security Validation: run and track structured adversary simulation campaigns.
-- Security Intelligence: measure detection quality, remediation responsiveness, and risk trends.
-- Security Assurance: produce cryptographically verifiable evidence for audits and regulatory reviews.
+- **Validate Security Controls:** Execute repeatable adversary simulations and track control effectiveness.  
+- **Measure Detection & Response:** Analyze telemetry to assess detection quality, response speed, and coverage gaps.  
+- **Demonstrate Assurance:** Generate cryptographically signed, auditor-ready evidence packages for compliance and regulatory needs.  
+
+---
+
+## Target Audience
+
+VectorVue is designed for:  
+
+- **Enterprise Security Teams** – SOC, IR, and security ops teams validating real-world defensive capabilities.  
+- **Managed Security Service Providers (MSSPs)** – Safely perform adversary emulation for multiple clients with strict tenant separation.  
+- **Regulated Organizations** – Finance, healthcare, energy, and other sectors requiring reliable and verifiable compliance evidence.  
+- **Auditors & Compliance Officers** – Access immutable evidence and signed reports for regulatory inspections or reviews.  
+
+---
 
 ## Core Capabilities
 
-- Multi-tenant isolation for campaigns, findings, analytics, and compliance evidence
-- Client portal with executive and operational views
-- Read-only client API for findings, risk, remediation, reports, and analytics
-- Usage telemetry focused on security workflow behavior (not marketing tracking)
-- Explainable ML outputs with model version lineage
-- Continuous compliance scoring and signed evidence export packages
+- True multi-tenant isolation for campaigns, findings, analytics, and evidence exports  
+- Client portals with executive and operational dashboards tailored per tenant  
+- Read-only client API for retrieving findings, risks, remediation, and reports  
+- Security-focused telemetry that respects privacy (no marketing tracking)  
+- Explainable ML-driven analytics with full model version lineage  
+- Continuous compliance scoring and signed evidence export packages  
+- Immutable evidence chains for audit and regulatory verification  
+
+---
 
 ## Quick Start (Commercial Demo)
 
-1. Deploy platform stack:
+**Guided setup (recommended):**  
+```bash
+make wizard
+````
+
+Use menu option:
+
+* `1` for full commercial deploy
+* `2` for isolated customer portal deploy
+* `4` for demo seed data
+
+**Deploy platform stack (direct command path):**
 
 ```bash
 make deploy
 ```
 
-2. Seed realistic demo data:
+## Legal & Compliance Enforcement
+
+- `make install` is the production-grade installation path and enforces mandatory legal validation.
+- `make deploy` is for development/testing workflows and does not enforce the legal installer gate.
+
+`make install` requires:
+- Full rendering of all legal documents in sequence.
+- Interactive pagination.
+- Exact case-sensitive confirmation phrase: `I ACCEPT VECTORVUE LEGAL TERMS`.
+- A valid `.vectorvue/legal_acceptance.json` manifest with current hash/version/mode.
+
+### QA Validation (Legal + Branding)
+
+Recommended QA checks on release candidate branches:
+
+```bash
+python -m py_compile utils/legal_acceptance.py scripts/legal_install_guard.py vv_core.py vv.py vv_client_api.py vv_theme.py
+python scripts/legal_install_guard.py --mode self-hosted --acceptance-file .vectorvue/legal_acceptance.json
+docker compose run --rm vectorvue_app python -m unittest discover -s tests/unit -p "test_*.py" -v
+docker compose --profile qa run --rm vectorvue_portal_builder npm run build
+```
+
+Expected outcomes:
+- legal acceptance manifest validates successfully
+- unit test suite passes in app runtime
+- portal build succeeds in builder image profile (`vectorvue_portal_builder`)
+**Seed realistic demo data:**
 
 ```bash
 make seed-clients
 ```
 
-Production-style tenant onboarding without dummy campaign data:
+**Production-style tenant onboarding without dummy campaign data:**
 
 ```bash
 make tenant-bootstrap-real \
@@ -49,7 +135,7 @@ make tenant-bootstrap-real \
   TENANT_CLIENT_PASS='RealCorpView3r!'
 ```
 
-Validate Phase 7-9 behavior in this real empty-state tenant:
+**Validate Phase 7-9 behavior in this real empty-state tenant:**
 
 ```bash
 make phase79-real-smoke \
@@ -58,7 +144,7 @@ make phase79-real-smoke \
   TENANT_ADMIN_PASS='RealCorpAdm1n!'
 ```
 
-One-command isolated client portal stack:
+**One-command isolated client portal stack:**
 
 ```bash
 make customer-deploy-portal-isolated \
@@ -68,43 +154,66 @@ make customer-deploy-portal-isolated \
   TENANT_PORTAL_HOST=realcorp.vectorvue.local
 ```
 
-3. Open tenant portals:
+**Open tenant portals:**
 
-- `https://acme.vectorvue.local/login`
-- `https://globex.vectorvue.local/login`
+* [https://acme.vectorvue.local/login](https://acme.vectorvue.local/login)
+* [https://globex.vectorvue.local/login](https://globex.vectorvue.local/login)
 
-4. Validate API and service health:
+**Validate API and service health:**
 
 ```bash
 make api-smoke
 ```
 
+---
+
 ## Documentation
 
-Start here: [Documentation Index](docs/manuals/INDEX.md)
+Start here: [Documentation Index](#)
 
 Recommended paths by role:
 
-- Security Operators: [Getting Started](docs/manuals/GETTING_STARTED.md), [Operator Manual](docs/manuals/OPERATOR_MANUAL.md)
-- Client Users: [Client Portal Manual](docs/manuals/CLIENT_PORTAL_MANUAL.md)
-- Integration Teams: [Client API Manual](docs/manuals/CLIENT_API_MANUAL.md)
-- Auditors and Compliance Teams: [Compliance API Spec](docs/COMPLIANCE_API_SPEC.md), [Auditor Guide](docs/AUDITOR_GUIDE.md)
-- Platform Engineering: [Deployment](docs/manuals/Deployment.md), [PostgreSQL Usage Guide](docs/manuals/POSTGRES_USAGE_GUIDE.md)
+* **Security Operators:** Getting Started, Operator Manual
+* **Client Users:** Client Portal Manual
+* **Integration Teams:** Client API Manual
+* **Auditors and Compliance Teams:** Compliance API Spec, Auditor Guide
+* **Platform Engineering:** Deployment, PostgreSQL Usage Guide
+
+---
+
+## TUI Onboarding Wizard
+
+For admin users in the TUI:
+
+```bash
+make run-tui
+```
+
+* Login as admin
+* Open onboarding wizard: `Ctrl+Shift+W` or Sidebar button `ONBOARD WIZARD`
+* Fill tenant, company, branding, and user fields
+* Submit `CREATE TENANT + USERS`
+
+---
 
 ## Security and Privacy Principles
 
-- Tenant-scoped access control and strict data isolation
-- Immutable evidence chain for compliance events
-- Signed API responses for compliance endpoints
-- No IP or user-agent collection in client telemetry workflows
-- Security workflow analytics only
+* Tenant-scoped access control and strict data isolation
+* Immutable evidence chain for compliance events
+* Signed API responses for compliance endpoints
+* No IP or user-agent collection in client telemetry workflows
+* Security workflow analytics only
+
+---
 
 ## Release Status
 
-- Version: `v4.1`
-- Maturity: Production-ready commercial platform
-- Delivery Scope: Campaign operations, client portal/API, explainable analytics, continuous compliance assurance
+* **Version:** v4.1
+* **Maturity:** Production-ready commercial platform
+* **Delivery Scope:** Campaign operations, client portal/API, explainable analytics, continuous compliance assurance
+
+---
 
 ## Licensing
 
-VectorVue is licensed under BSL 1.1 as defined in project metadata.
+VectorVue is licensed under **BSL 1.1** as defined in project metadata.

@@ -1,3 +1,17 @@
+# Copyright (c) 2026 NyxeraLabs
+# Author: José María Micoli
+# Licensed under BSL 1.1
+# Change Date: 2033-02-17 → Apache-2.0
+#
+# You may:
+# ✔ Study
+# ✔ Modify
+# ✔ Use for internal security testing
+#
+# You may NOT:
+# ✘ Offer as a commercial service
+# ✘ Sell derived competing products
+
 from __future__ import annotations
 
 import hashlib
@@ -177,7 +191,9 @@ def build_audit_package(tenant_id: str, framework: str, start_ts: datetime, end_
     controls_json = _canonical_json(controls)
     events_json = _canonical_json(events)
     metadata_json = _canonical_json(metadata)
-    dataset_hash = _sha256(_canonical_json({"controls": controls, "events": events, "metadata": metadata}))
+    # Keep dataset hash reproducible across repeated exports when underlying data is unchanged.
+    # Use only exported data rows (controls + events), excluding volatile metadata/window timestamps.
+    dataset_hash = _sha256(_canonical_json({"controls": controls, "events": events}))
 
     base_dir = Path(os.environ.get("VV_COMPLIANCE_EXPORT_DIR", "/tmp/vectorvue_compliance_exports"))
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -197,7 +213,9 @@ def build_audit_package(tenant_id: str, framework: str, start_ts: datetime, end_
     signature_text = _hmac(checksums_txt)
     (temp_dir / "signature.txt").write_text(signature_text, encoding="utf-8")
 
-    zip_path = base_dir / f"audit_{tenant_id}_{framework}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.zip"
+    # Include microseconds + random suffix to avoid concurrent writers clobbering the same ZIP path.
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    zip_path = base_dir / f"audit_{tenant_id}_{framework}_{ts}_{uuid.uuid4().hex[:8]}.zip"
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(temp_dir / "controls.json", arcname="controls.json")
         zf.write(temp_dir / "evidence.json", arcname="evidence.json")
@@ -213,4 +231,3 @@ def build_audit_package(tenant_id: str, framework: str, start_ts: datetime, end_
         "events_count": len(events),
         "controls_count": len(controls),
     }
-

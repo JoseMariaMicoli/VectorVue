@@ -1,5 +1,16 @@
--- Copyright (c) 2026 Jose Maria Micoli
--- Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+-- Copyright (c) 2026 NyxeraLabs
+-- Author: José María Micoli
+-- Licensed under BSL 1.1
+-- Change Date: 2033-02-17 → Apache-2.0
+--
+-- You may:
+-- ✔ Study
+-- ✔ Modify
+-- ✔ Use for internal security testing
+--
+-- You may NOT:
+-- ✘ Offer as a commercial service
+-- ✘ Sell derived competing products
 
 -- Phase 6.5 tenant isolation migration for PostgreSQL schema.
 -- Safe for existing deployments: creates/extends objects if missing.
@@ -136,3 +147,9 @@ CREATE INDEX IF NOT EXISTS idx_reports_tenant_id ON reports (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_remediation_tasks_tenant_id ON remediation_tasks (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_user_tenant_access_tenant_id ON user_tenant_access (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_user_tenant_access_username ON user_tenant_access (username);
+CREATE INDEX IF NOT EXISTS idx_findings_tenant_approval_visibility_id
+    ON findings (tenant_id, approval_status, visibility, id DESC);
+CREATE INDEX IF NOT EXISTS idx_client_reports_tenant_status_id
+    ON client_reports (tenant_id, status, id DESC);
+CREATE INDEX IF NOT EXISTS idx_remediation_tasks_tenant_status_id
+    ON remediation_tasks (tenant_id, status, id DESC);

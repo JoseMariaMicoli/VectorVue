@@ -1,4 +1,18 @@
-<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
 # VectorVue Operator Manual
 
@@ -22,6 +36,20 @@ Minimum role guidance:
 - Operator: create and update operational records
 - Lead: approvals and team coordination
 - Admin: platform administration and user management
+
+## 2.1 Guided Onboarding Paths
+
+Use guided workflows to reduce operator error during setup:
+
+1. CLI guided wizard:
+   - `make wizard`
+2. TUI guided onboarding (admin):
+   - `make run-tui`
+   - open with `Ctrl+Shift+W` or sidebar `ONBOARD WIZARD`
+3. Use the wizard to set:
+   - tenant id/name
+   - portal host and company branding
+   - tenant admin and client credentials
 
 ## 3. Daily Operator Procedure
 

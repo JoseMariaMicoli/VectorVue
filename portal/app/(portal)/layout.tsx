@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+*/
+
 import { cookies, headers } from 'next/headers';
 import type { ReactNode } from 'react';
 
@@ -31,7 +47,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
 
   return (
     <ThemeBootstrap initialTheme={theme}>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen bg-bg-primary text-text-primary">
         <Sidebar />
         <div className="flex min-h-screen flex-1 flex-col">
           <Topbar tenantName={tenant} theme={theme} />

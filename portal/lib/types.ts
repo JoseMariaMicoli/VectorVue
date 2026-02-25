@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+*/
+
 export type Paginated<T> = {
   items: T[];
   page: number;
@@ -72,6 +88,11 @@ export type ClientTheme = {
     foreground: string;
     danger: string;
     success: string;
+  };
+  platform_brand_locked?: boolean;
+  platform_attribution?: {
+    line1: string;
+    line2: string;
   };
 };
 

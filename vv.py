@@ -1,6 +1,8 @@
 """
-Copyright (c) 2026 José María Micoli
-Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
 
 You may:
 ✔ Study
@@ -15,9 +17,11 @@ You may NOT:
 import os
 import sys
 import asyncio
+import subprocess
 from datetime import datetime
 from pathlib import Path
 import logging
+import uuid
 from types import SimpleNamespace
 
 # Stabilize color behavior across local and containerized terminals.
@@ -45,6 +49,7 @@ try:
     from vv_file_manager import FileManagerView
     from vv_theme import CYBER_CSS, CyberColors
     from vv_tab_navigation import TabNavigationPanel
+    from utils.legal_acceptance import current_legal_bundle
     # ===== Phase 5.5 Cognition Layer Imports =====
     from cognition_service import CognitionService
     from vv_cognition_views import (
@@ -93,35 +98,8 @@ def _load_readme_banner() -> str:
 
 
 README_ASCII_BANNER = _load_readme_banner()
-
-LICENSE_TEXT_CACHE = None
-USER_POLICY_TEXT_CACHE = None
-
-
-def _load_license_text() -> str:
-    """Load LICENSE file for pre-auth user acknowledgment."""
-    global LICENSE_TEXT_CACHE
-    if LICENSE_TEXT_CACHE is not None:
-        return LICENSE_TEXT_CACHE
-    license_path = Path(__file__).with_name("LICENSE")
-    try:
-        LICENSE_TEXT_CACHE = license_path.read_text(encoding="utf-8")
-    except Exception:
-        LICENSE_TEXT_CACHE = "License file could not be loaded."
-    return LICENSE_TEXT_CACHE
-
-
-def _load_user_policy_text() -> str:
-    """Load user policy markdown for pre-auth user acknowledgment."""
-    global USER_POLICY_TEXT_CACHE
-    if USER_POLICY_TEXT_CACHE is not None:
-        return USER_POLICY_TEXT_CACHE
-    policy_path = Path(__file__).parent / "docs" / "manuals" / "USER_POLICY.md"
-    try:
-        USER_POLICY_TEXT_CACHE = policy_path.read_text(encoding="utf-8")
-    except Exception:
-        USER_POLICY_TEXT_CACHE = "User policy file could not be loaded."
-    return USER_POLICY_TEXT_CACHE
+BRAND_ATTRIBUTION_LINE_1 = "VectorVue by Nyxera Labs"
+BRAND_ATTRIBUTION_LINE_2 = "© 2026 Nyxera Labs. All rights reserved."
 
 # =============================================================================
 # PHASE 2: RUNTIME EXECUTOR (Background Task Management)
@@ -396,10 +374,16 @@ class RegisterView(Container):
         confirm  = self.query_one("#reg-confirm").value
         group    = self.query_one("#reg-group").value.strip() or "default"
         status   = self.query_one("#reg-status")
+        legal_acceptance = getattr(self.app, "pending_legal_acceptance", None)
         if password != confirm:
             status.update("PASSWORDS DO NOT MATCH")
             return
-        ok, msg = self.app.db.register_user(username, password, group_name=group)
+        ok, msg = self.app.db.register_user(
+            username,
+            password,
+            group_name=group,
+            legal_acceptance=legal_acceptance,
+        )
         if ok: self.post_message(self.RegisterSuccess())
         else: status.update(msg)
 
@@ -472,45 +456,386 @@ class LicenseAgreementView(Container):
     class AgreementAccepted(Message): pass
     class AgreementCancelled(Message): pass
 
+    CONFIRM_PHRASE = "I ACCEPT"
+
     CSS = """
     LicenseAgreementView { align: center middle; background: $bg-void; width: 100%; height: 100%; }
-    #license-container {
+    #legal-container {
         width: 90%;
         height: 90%;
         border: heavy $steel;
         background: #141925EE;
         padding: 1;
     }
-    #license-title { color: $p-green; text-style: bold; margin-bottom: 1; content-align: center middle; }
-    #license-scroll { height: 1fr; border: solid $steel; background: #10141d; padding: 1; margin-bottom: 1; }
-    .license-check { margin: 0 0 1 0; }
+    #legal-title { color: $p-green; text-style: bold; margin-bottom: 1; content-align: center middle; }
+    #legal-doc-label { color: $steel; margin-bottom: 1; }
+    #legal-doc-scroll {
+        height: 1fr;
+        border: solid $steel;
+        background: #10141d;
+        padding: 1;
+        margin-bottom: 1;
+    }
+    #legal-progress { color: $steel; margin: 0 0 1 0; }
+    #legal-checkbox { margin: 0 0 1 0; }
+    #legal-phrase { margin: 0 0 1 0; }
+    #legal-actions-next { height: auto; margin: 0 0 1 0; }
+    #legal-actions-final { height: auto; margin: 0 0 1 0; }
+    #btn-legal-next { width: 1fr; }
+    #btn-license-accept { width: 1fr; }
+    #btn-license-cancel { width: 22; }
     #license-status { color: $r-alert; margin-top: 1; }
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            self._legal_bundle = current_legal_bundle(mode="self-hosted")
+            self._documents = self._legal_bundle["documents"]
+            self._load_error = ""
+        except Exception as exc:
+            self._legal_bundle = {
+                "document_hash": "",
+                "version": "",
+                "mode": "self-hosted",
+            }
+            self._documents = [{"name": "LEGAL LOAD ERROR", "content": str(exc)}]
+            self._load_error = f"Unable to load legal documents: {exc}"
+        self._doc_index = 0
+        self._scrolled: set[int] = set()
+
     def compose(self) -> ComposeResult:
-        with Container(id="license-container"):
-            yield Label("VECTORVUE LICENSE & USER POLICY AGREEMENT", id="license-title")
-            with ScrollableContainer(id="license-scroll"):
-                yield Markdown(f"## LICENSE\n\n{_load_license_text()}\n\n{_load_user_policy_text()}")
-            yield Checkbox("I have read and understand the LICENSE terms.", id="chk-license", classes="license-check")
-            yield Checkbox("I accept the VectorVue User Policy and authorized-use requirements.", id="chk-policy", classes="license-check")
-            with Horizontal():
-                yield Button("ACCEPT", id="btn-license-accept", variant="success")
+        with Container(id="legal-container"):
+            yield Label("VECTORVUE LEGAL ACCEPTANCE", id="legal-title")
+            yield Label("", id="legal-doc-label")
+            with ScrollableContainer(id="legal-doc-scroll"):
+                yield Markdown("", id="legal-doc-markdown")
+            yield Label("", id="legal-progress")
+            yield Checkbox(
+                "I have read and agree to all legal documents.",
+                id="legal-checkbox",
+                disabled=True,
+            )
+            yield Input(placeholder="Type EXACTLY: I ACCEPT", id="legal-phrase")
+            with Horizontal(id="legal-actions-next"):
+                yield Button("NEXT DOCUMENT", id="btn-legal-next", variant="primary")
+            with Horizontal(id="legal-actions-final"):
+                yield Button("ACCEPT (LOCKED)", id="btn-license-accept", variant="success", disabled=True)
                 yield Button("CANCEL", id="btn-license-cancel", variant="error")
             yield Label("", id="license-status")
 
+    def on_mount(self):
+        self._render_current_document()
+        self._refresh_accept_button()
+        self.set_interval(0.2, self._poll_scroll_progress)
+
+    def _all_documents_scrolled(self) -> bool:
+        return len(self._scrolled) == len(self._documents)
+
+    def _poll_scroll_progress(self):
+        if self._doc_index in self._scrolled:
+            return
+        scroll = self.query_one("#legal-doc-scroll", ScrollableContainer)
+        current = float(getattr(scroll, "scroll_y", 0.0) or 0.0)
+        maximum = float(getattr(scroll, "max_scroll_y", 0.0) or 0.0)
+        progress = 1.0 if maximum <= 0 else (current / maximum)
+        near_bottom = current >= max(0.0, (maximum * 0.95) - 1.0)
+        if progress >= 0.95 or near_bottom:
+            self._scrolled.add(self._doc_index)
+            self._update_progress_status()
+            if self._doc_index < len(self._documents) - 1:
+                self.query_one("#btn-legal-next", Button).disabled = False
+                self.query_one("#btn-legal-next", Button).label = "NEXT DOCUMENT"
+            else:
+                checkbox = self.query_one("#legal-checkbox", Checkbox)
+                checkbox.disabled = not self._all_documents_scrolled()
+                self.query_one("#btn-legal-next", Button).label = "ALL DOCUMENTS COMPLETED"
+                if not checkbox.disabled:
+                    self.query_one("#license-status", Label).update(
+                        "Final step: check the box and type 'I ACCEPT' to continue."
+                    )
+            self._refresh_accept_button()
+
+    def _update_progress_status(self):
+        status = self.query_one("#legal-progress", Label)
+        read_count = len(self._scrolled)
+        total_count = len(self._documents)
+        if not self._all_documents_scrolled():
+            status.update(f"Read progress: {read_count}/{total_count} documents scrolled to >=95%.")
+            return
+        status.update("All legal documents were fully scrolled. You may now accept.")
+
+    def _render_current_document(self):
+        doc = self._documents[self._doc_index]
+        self.query_one("#legal-doc-label", Label).update(
+            f"Document {self._doc_index + 1}/{len(self._documents)}: {doc['name']}"
+        )
+        self.query_one("#legal-doc-markdown", Markdown).update(f"```\n{doc['content']}\n```")
+        scroll = self.query_one("#legal-doc-scroll", ScrollableContainer)
+        scroll.scroll_to(y=0, animate=False)
+        self.query_one("#btn-legal-next", Button).disabled = True
+        self.query_one("#btn-legal-next", Button).label = "NEXT DOCUMENT"
+        self._update_progress_status()
+        self._refresh_accept_button()
+        if self._load_error:
+            self.query_one("#license-status", Label).update(self._load_error)
+
+    def _refresh_accept_button(self):
+        checkbox_ok = self.query_one("#legal-checkbox", Checkbox).value
+        phrase_ok = self.query_one("#legal-phrase", Input).value == self.CONFIRM_PHRASE
+        can_accept = self._all_documents_scrolled() and checkbox_ok and phrase_ok and not self._load_error
+        btn = self.query_one("#btn-license-accept", Button)
+        btn.disabled = not can_accept
+        btn.label = "CONTINUE" if can_accept else "ACCEPT (LOCKED)"
+
+    @on(Button.Pressed, "#btn-legal-next")
+    def on_next_document(self):
+        if self._doc_index not in self._scrolled:
+            self.query_one("#license-status", Label).update("Scroll this document to >=95% before continuing.")
+            return
+        if self._doc_index >= len(self._documents) - 1:
+            self.query_one("#license-status", Label).update("All documents already displayed.")
+            return
+        self._doc_index += 1
+        self.query_one("#license-status", Label).update("")
+        self._render_current_document()
+
+    @on(Checkbox.Changed, "#legal-checkbox")
+    def on_checkbox_changed(self):
+        self._refresh_accept_button()
+
+    @on(Input.Changed, "#legal-phrase")
+    def on_phrase_changed(self):
+        self._refresh_accept_button()
+
     @on(Button.Pressed, "#btn-license-accept")
     def on_accept(self):
-        license_ok = self.query_one("#chk-license", Checkbox).value
-        policy_ok = self.query_one("#chk-policy", Checkbox).value
-        if license_ok and policy_ok:
-            self.post_message(self.AgreementAccepted())
+        self._refresh_accept_button()
+        if self.query_one("#btn-license-accept", Button).disabled:
+            self.query_one("#license-status", Label).update(
+                "Complete document scrolling, check acceptance, and type exactly 'I ACCEPT'."
+            )
             return
-        self.query_one("#license-status", Label).update("You must accept both the LICENSE and User Policy to continue.")
+        self.app.pending_legal_acceptance = {
+            "accepted": True,
+            "timestamp": datetime.utcnow().isoformat(),
+            "document_hash": self._legal_bundle["document_hash"],
+            "version": self._legal_bundle["version"],
+            "mode": self._legal_bundle["mode"],
+        }
+        self.post_message(self.AgreementAccepted())
 
     @on(Button.Pressed, "#btn-license-cancel")
     def on_cancel(self):
         self.post_message(self.AgreementCancelled())
+
+
+class OnboardingWizardView(Container):
+    class WizardCompleted(Message):
+        def __init__(self, tenant_id: str, detail: str) -> None:
+            self.tenant_id = tenant_id
+            self.detail = detail
+            super().__init__()
+
+    class BackRequested(Message):
+        pass
+
+    CSS = """
+    OnboardingWizardView { width: 100%; height: 100%; background: $bg-void; overflow: auto; }
+    #onboarding-root { width: 100%; height: auto; padding: 1 2; }
+    #onboarding-title { color: $p-green; text-style: bold; margin-bottom: 1; }
+    #onboarding-grid { width: 100%; height: auto; }
+    #onboarding-grid .row { margin-bottom: 1; }
+    #onboarding-status { margin-top: 1; color: $steel; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="onboarding-root"):
+            yield Label("CLIENT PORTAL ONBOARDING WIZARD (ADMIN)", id="onboarding-title")
+            yield Label("Create tenant + company metadata + portal users in one flow.", classes="cyber-label")
+            with Vertical(id="onboarding-grid"):
+                with Horizontal(classes="row"):
+                    yield Label("Tenant ID (UUID or auto):", classes="cyber-label")
+                    yield Input(placeholder="auto", id="onb-tenant-id")
+                with Horizontal(classes="row"):
+                    yield Label("Tenant Name:", classes="cyber-label")
+                    yield Input(placeholder="Customer Name", id="onb-tenant-name")
+                with Horizontal(classes="row"):
+                    yield Label("Portal Host:", classes="cyber-label")
+                    yield Input(placeholder="customer.vectorvue.local", id="onb-portal-host")
+                with Horizontal(classes="row"):
+                    yield Label("Company Name (Portal):", classes="cyber-label")
+                    yield Input(placeholder="Customer Name", id="onb-company-name")
+                with Horizontal(classes="row"):
+                    yield Label("Primary Color:", classes="cyber-label")
+                    yield Input(value="#0f172a", id="onb-primary-color")
+                    yield Label("Accent Color:", classes="cyber-label")
+                    yield Input(value="#22d3ee", id="onb-accent-color")
+                with Horizontal(classes="row"):
+                    yield Label("Tenant Admin User:", classes="cyber-label")
+                    yield Input(placeholder="tenant_admin", id="onb-admin-user")
+                    yield Label("Tenant Admin Pass:", classes="cyber-label")
+                    yield Input(password=True, id="onb-admin-pass")
+                with Horizontal(classes="row"):
+                    yield Label("Client User:", classes="cyber-label")
+                    yield Input(placeholder="tenant_viewer", id="onb-client-user")
+                    yield Label("Client Pass:", classes="cyber-label")
+                    yield Input(password=True, id="onb-client-pass")
+                with Horizontal(classes="row"):
+                    yield Label("Client Role:", classes="cyber-label")
+                    yield Select(
+                        [("viewer", "viewer"), ("operator", "operator"), ("lead", "lead"), ("admin", "admin")],
+                        value="viewer",
+                        id="onb-client-role",
+                    )
+                with Horizontal(classes="row"):
+                    yield Label("Operator User (optional):", classes="cyber-label")
+                    yield Input(placeholder="", id="onb-operator-user")
+                    yield Label("Operator Pass (optional):", classes="cyber-label")
+                    yield Input(password=True, id="onb-operator-pass")
+            with Horizontal():
+                yield Button("CREATE TENANT + USERS", id="onb-create-btn", variant="success")
+                yield Button("BACK TO EDITOR", id="onb-back-btn", variant="primary")
+            yield Label("", id="onboarding-status")
+
+    def on_mount(self) -> None:
+        self.query_one("#onb-tenant-id", Input).value = str(uuid.uuid4())
+        self.query_one("#onb-tenant-name", Input).focus()
+
+    @on(Button.Pressed, "#onb-create-btn")
+    def on_create(self) -> None:
+        status = self.query_one("#onboarding-status", Label)
+        tenant_name = self.query_one("#onb-tenant-name", Input).value.strip()
+        admin_user = self.query_one("#onb-admin-user", Input).value.strip()
+        admin_pass = self.query_one("#onb-admin-pass", Input).value
+        client_user = self.query_one("#onb-client-user", Input).value.strip()
+        client_pass = self.query_one("#onb-client-pass", Input).value
+        if not tenant_name:
+            status.update("TENANT NAME IS REQUIRED")
+            return
+        if not admin_user or not admin_pass:
+            status.update("TENANT ADMIN USER/PASSWORD REQUIRED")
+            return
+        if not client_user or not client_pass:
+            status.update("CLIENT USER/PASSWORD REQUIRED")
+            return
+
+        payload = {
+            "tenant_id": self.query_one("#onb-tenant-id", Input).value.strip() or "auto",
+            "tenant_name": tenant_name,
+            "portal_host": self.query_one("#onb-portal-host", Input).value.strip(),
+            "company_name": self.query_one("#onb-company-name", Input).value.strip() or tenant_name,
+            "primary_color": self.query_one("#onb-primary-color", Input).value.strip() or "#0f172a",
+            "accent_color": self.query_one("#onb-accent-color", Input).value.strip() or "#22d3ee",
+            "admin_user": admin_user,
+            "admin_pass": admin_pass,
+            "client_user": client_user,
+            "client_pass": client_pass,
+            "client_role": str(self.query_one("#onb-client-role", Select).value or "viewer"),
+            "operator_user": self.query_one("#onb-operator-user", Input).value.strip(),
+            "operator_pass": self.query_one("#onb-operator-pass", Input).value,
+        }
+        ok, detail, tenant_id = self.app.run_tenant_onboarding(payload)
+        if not ok:
+            status.update(detail)
+            return
+        status.update(f"ONBOARDING COMPLETE: tenant_id={tenant_id} | {detail}")
+        self.post_message(self.WizardCompleted(tenant_id=tenant_id, detail=detail))
+
+    @on(Button.Pressed, "#onb-back-btn")
+    def on_back(self) -> None:
+        self.post_message(self.BackRequested())
+
+
+class HelpCenterView(Container):
+    CSS = """
+    HelpCenterView { width: 100%; height: 100%; background: $bg-void; }
+    #help-title { color: $p-green; text-style: bold; margin: 1 1 0 1; }
+    #help-subtitle { color: $steel; margin: 0 1 1 1; }
+    #help-tabs { width: 100%; height: 1fr; }
+    #help-keybindings-md, #help-manual-md { width: 100%; height: 1fr; padding: 0 1; overflow-y: auto; }
+    #help-manual-controls { height: auto; margin: 0 1 1 1; }
+    #help-manual-controls Select, #help-manual-controls Button { margin-right: 1; }
+    #help-manual-status { margin: 0 1 1 1; color: $steel; }
+    """
+
+    def _manual_files(self):
+        manual_dir = Path(__file__).parent / "docs" / "manuals"
+        if not manual_dir.exists():
+            return []
+        files = sorted([p for p in manual_dir.glob("*.md") if p.is_file()], key=lambda p: p.name.lower())
+        return files
+
+    def _load_manual(self, manual_name: str):
+        manual_dir = Path(__file__).parent / "docs" / "manuals"
+        safe_name = os.path.basename(manual_name or "")
+        candidate = manual_dir / safe_name
+        if not candidate.exists() or not candidate.is_file():
+            return f"# Manual Not Found\n\n`{safe_name}` is not available in `docs/manuals`."
+        try:
+            return candidate.read_text(encoding="utf-8")
+        except Exception as exc:
+            return f"# Manual Read Error\n\nCould not load `{safe_name}`.\n\nError: `{exc}`"
+
+    def _keybindings_markdown(self):
+        rows = ["# Keybindings", "", "| Key | Action | Description |", "|---|---|---|"]
+        bindings = getattr(self.app, "BINDINGS", [])
+        for b in bindings:
+            key = getattr(b, "key", "")
+            action = getattr(b, "action", "")
+            desc = getattr(b, "description", "")
+            if not key or not action:
+                continue
+            rows.append(f"| `{key}` | `{action}` | {desc} |")
+        return "\n".join(rows)
+
+    def compose(self) -> ComposeResult:
+        yield Label("HELP CENTER", id="help-title")
+        yield Label("Keybindings reference and read-only manuals.", id="help-subtitle")
+        with TabbedContent(initial="help-tab-keys", id="help-tabs"):
+            with TabPane("Keybindings", id="help-tab-keys"):
+                yield Markdown("", id="help-keybindings-md")
+            with TabPane("Manuals", id="help-tab-manuals"):
+                with Horizontal(id="help-manual-controls"):
+                    yield Select([], prompt="SELECT MANUAL", id="help-manual-select")
+                    yield Button("REFRESH", id="help-manual-refresh", variant="primary")
+                yield Label("", id="help-manual-status")
+                yield Markdown("", id="help-manual-md")
+
+    def on_mount(self):
+        self.query_one("#help-keybindings-md", Markdown).update(self._keybindings_markdown())
+        self._populate_manuals()
+
+    def _populate_manuals(self):
+        files = self._manual_files()
+        select = self.query_one("#help-manual-select", Select)
+        options = [(p.name, p.name) for p in files]
+        select.set_options(options)
+        if not options:
+            self.query_one("#help-manual-status", Label).update("No manuals found under docs/manuals.")
+            self.query_one("#help-manual-md", Markdown).update("# No Manuals\n\n`docs/manuals` is empty.")
+            return
+
+        preferred = "INDEX.md"
+        current_value = str(select.value) if select.value not in (None, Select.BLANK) else ""
+        selected = preferred if any(v == preferred for _, v in options) else options[0][1]
+        if current_value and any(v == current_value for _, v in options):
+            selected = current_value
+        select.value = selected
+        self.query_one("#help-manual-md", Markdown).update(self._load_manual(selected))
+        self.query_one("#help-manual-status", Label).update(f"Loaded: {selected}")
+
+    @on(Button.Pressed, "#help-manual-refresh")
+    def on_manual_refresh(self):
+        self._populate_manuals()
+
+    @on(Select.Changed, "#help-manual-select")
+    def on_manual_selected(self, event: Select.Changed):
+        if event.value in (None, Select.BLANK):
+            return
+        selected = str(event.value)
+        self.query_one("#help-manual-md", Markdown).update(self._load_manual(selected))
+        self.query_one("#help-manual-status", Label).update(f"Loaded: {selected}")
 
 # =============================================================================
 # v3.2 EXECUTION & DETECTION VIEWS
@@ -2308,7 +2633,9 @@ class CyberTUI(App):
         Binding("alt+6", "toggle_security",       "Security"),
         Binding("ctrl+s", "save_db",              "Save"),
         Binding("ctrl+shift+v", "toggle_editor_preview", "Preview"),
+        Binding("ctrl+h", "toggle_help",          "Help"),
         Binding("ctrl+l", "action_logout",        "Logout"),
+        Binding("ctrl+shift+w", "toggle_onboarding", "Onboarding"),
         Binding("escape", "return_to_editor",     "Editor"),
         # ===== Phase 5.5 Cognition Layer Bindings =====
         Binding("ctrl+shift+1", "toggle_cognition_opportunities",   "Opportunities"),
@@ -2342,10 +2669,12 @@ class CyberTUI(App):
         "analytics-view": Role.OPERATOR,
         "compliance-view": Role.OPERATOR,
         "security-view": Role.OPERATOR,
+        "help-view": Role.OPERATOR,
         # Lead/admin management views
         "team-view": Role.LEAD,
         "integration-view": Role.LEAD,
         "users-view": Role.ADMIN,
+        "onboarding-view": Role.ADMIN,
     }
 
     def compose(self) -> ComposeResult:
@@ -2403,6 +2732,8 @@ class CyberTUI(App):
             # v4.1 Team Management & Federation Views
             yield TeamManagementView(id="team-view")
             yield UsersAdminView(id="users-view")
+            yield OnboardingWizardView(id="onboarding-view")
+            yield HelpCenterView(id="help-view")
             
             # Phase 5: Advanced Threat Intelligence
             yield ThreatIntelligenceView(id="threat-intel-view")
@@ -2467,10 +2798,15 @@ class CyberTUI(App):
             yield Label("SYSTEM:", classes="cyber-label")
             yield Button("FILESYSTEM", id="btn-file-mgr", disabled=True)
             yield Button("ADMIN TOOLS", id="btn-admin-tools", classes="btn-purple", disabled=True)
+            yield Button("ONBOARD WIZARD", id="btn-onboard", classes="btn-purple", disabled=True)
+            yield Button("HELP", id="btn-help", disabled=True)
             yield Button("LOGOUT",     id="btn-logout",   disabled=True)
             yield Button("SHUTDOWN",   id="btn-exit")
 
-        yield Label("SYSTEM LOCKED - AUTH REQUIRED", id="status-bar")
+        yield Label(
+            f"SYSTEM LOCKED - AUTH REQUIRED | {BRAND_ATTRIBUTION_LINE_1} | {BRAND_ATTRIBUTION_LINE_2}",
+            id="status-bar",
+        )
 
     def on_mount(self):
         self.crypto      = SessionCrypto()
@@ -2479,6 +2815,7 @@ class CyberTUI(App):
         self.current_id  = None
         self.runtime_executor = RuntimeExecutor(self.db)
         self._license_next_view = "register-view"
+        self.pending_legal_acceptance = None
 
         sw = self.query_one("#view-switcher")
         self._set_tab_bar_visibility(False)
@@ -2488,7 +2825,7 @@ class CyberTUI(App):
         else:
             sw.current = "license-view"
             self._license_next_view = "register-view"
-            self.update_status("LICENSE ACCEPTANCE REQUIRED FOR REGISTRATION", CyberColors.AMBER_WARNING)
+            self.update_status("LEGAL ACCEPTANCE REQUIRED FOR REGISTRATION", CyberColors.AMBER_WARNING)
 
     def _set_tab_bar_visibility(self, visible: bool):
         """Show/hide top tab bar + right sidebar and collapse their layout tracks."""
@@ -2503,6 +2840,7 @@ class CyberTUI(App):
 
     @on(RegisterView.RegisterSuccess)
     def on_register_success(self):
+        self.pending_legal_acceptance = None
         self.update_status("REGISTRATION COMPLETE — AUTHENTICATE NOW", CyberColors.PHOSPHOR_GREEN)
         self.query_one("#view-switcher").current = "login-view"
 
@@ -2513,9 +2851,10 @@ class CyberTUI(App):
 
     @on(LoginView.RegisterRequested)
     def on_login_register_requested(self):
+        self.pending_legal_acceptance = None
         self._license_next_view = "register-view"
         self.query_one("#view-switcher").current = "license-view"
-        self.update_status("ACCEPT LICENSE/POLICY TO REGISTER", CyberColors.AMBER_WARNING)
+        self.update_status("LEGAL ACCEPTANCE REQUIRED FOR REGISTRATION", CyberColors.AMBER_WARNING)
 
     @on(LoginView.LoginSuccess)
     def on_login_success(self):
@@ -2533,11 +2872,25 @@ class CyberTUI(App):
     def on_license_cancelled(self):
         self.exit()
 
+    @on(OnboardingWizardView.WizardCompleted)
+    def on_wizard_completed(self, event: OnboardingWizardView.WizardCompleted):
+        self.update_status(
+            f"ONBOARDING COMPLETE [{event.tenant_id}]",
+            CyberColors.PHOSPHOR_GREEN,
+        )
+
+    @on(OnboardingWizardView.BackRequested)
+    def on_onboarding_back(self):
+        self.switch_to_view("editor-view")
+
     def _post_login_setup(self):
         user = self.db.current_user
         role_label = user.role.upper() if user else "UNKNOWN"
         uname = user.username if user else "?"
-        self.update_status(f"ACCESS GRANTED [{role_label}] — {uname}", CyberColors.PHOSPHOR_GREEN)
+        self.update_status(
+            f"ACCESS GRANTED [{role_label}] — {uname} | QUICK HELP: CTRL+H HELP | CTRL+SHIFT+W ONBOARDING",
+            CyberColors.PHOSPHOR_GREEN,
+        )
         self.intel = IntelligenceEngine()
         self.query_one("#view-switcher").current = "editor-view"
         self.query_one("#hud-header").current_file = "NEW BUFFER"
@@ -2582,6 +2935,7 @@ class CyberTUI(App):
             self.query_one("#btn-del").disabled = True
         if user and not role_gte(user.role, Role.ADMIN):
             self.query_one("#btn-admin-tools").disabled = True
+            self.query_one("#btn-onboard").disabled = True
 
     def action_logout(self):
         self.runtime_executor.stop()
@@ -2609,7 +2963,9 @@ class CyberTUI(App):
     def update_status(self, msg, color="#ffffff"):
         bar = self.query_one("#status-bar")
         ts  = datetime.now().strftime('%H:%M:%S')
-        bar.update(f"[{ts}] {msg}")
+        bar.update(
+            f"[{ts}] {msg} | {BRAND_ATTRIBUTION_LINE_1} | {BRAND_ATTRIBUTION_LINE_2}"
+        )
         bar.styles.color = color
 
     def refresh_editor_preview(self):
@@ -2699,6 +3055,151 @@ class CyberTUI(App):
         self.switch_to_view("users-view")
         self.query_one("UsersAdminView").refresh_users()
         self.update_status("ADMIN TOOLS: USER ACCESS CONTROL", CyberColors.MAGENTA_AUDIT)
+
+    def action_toggle_onboarding(self):
+        """Admin-only guided onboarding for tenant/client bootstrap."""
+        user = self.db.current_user
+        if not user:
+            self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        if not role_gte(user.role, Role.ADMIN):
+            self.update_status("ACCESS DENIED: ADMIN REQUIRED", CyberColors.RED_ALERT)
+            return
+        self.switch_to_view("onboarding-view")
+        self.update_status("ONBOARDING WIZARD READY", CyberColors.ELECTRIC_CYAN)
+
+    def action_toggle_help(self):
+        if not self.db.current_user:
+            self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        self.switch_to_view("help-view")
+        self.update_status("HELP CENTER", CyberColors.ELECTRIC_CYAN)
+
+    def _upsert_tenant_theme(self, pg_url: str, tenant_id: str, company_name: str, primary_color: str, accent_color: str):
+        try:
+            import psycopg
+        except Exception as exc:
+            return False, f"psycopg import failed: {exc}"
+        try:
+            with psycopg.connect(pg_url, autocommit=False) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO tenant_theme (
+                            tenant_id, company_name, primary_color, accent_color, updated_at
+                        ) VALUES (%s, %s, %s, %s, NOW())
+                        ON CONFLICT (tenant_id) DO UPDATE SET
+                            company_name=EXCLUDED.company_name,
+                            primary_color=EXCLUDED.primary_color,
+                            accent_color=EXCLUDED.accent_color,
+                            updated_at=NOW()
+                        """,
+                        (tenant_id, company_name, primary_color, accent_color),
+                    )
+                conn.commit()
+            return True, "ok"
+        except Exception as exc:
+            return False, f"tenant_theme upsert failed: {exc}"
+
+    def _upsert_portal_host_hint(self, tenant_id: str, tenant_name: str, portal_host: str):
+        host = (portal_host or "").strip()
+        if not host:
+            return False, "portal host empty (skip)"
+        env_path = Path(".env")
+        if not env_path.exists():
+            return False, ".env not found (set VV_TENANT_HOST_MAP manually)"
+        try:
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+            key = "VV_TENANT_HOST_MAP="
+            idx = next((i for i, line in enumerate(lines) if line.startswith(key)), None)
+            current = ""
+            if idx is not None:
+                current = lines[idx][len(key):].strip()
+            entries = [chunk.strip() for chunk in current.split(",") if chunk.strip()]
+            new_entry = f"{host}={tenant_id}|{tenant_name}"
+            filtered = [item for item in entries if not item.startswith(f"{host}=")]
+            filtered.append(new_entry)
+            updated_value = ",".join(filtered)
+            if idx is None:
+                lines.append(f"{key}{updated_value}")
+            else:
+                lines[idx] = f"{key}{updated_value}"
+            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return True, "VV_TENANT_HOST_MAP updated in .env"
+        except Exception as exc:
+            return False, f"failed updating .env host map: {exc}"
+
+    def run_tenant_onboarding(self, payload):
+        user = self.db.current_user
+        if not user or not role_gte(user.role, Role.ADMIN):
+            return False, "ACCESS DENIED: ADMIN REQUIRED", ""
+
+        pg_url = (
+            os.environ.get("VV_DB_URL")
+            or os.environ.get("PG_URL")
+            or "postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db"
+        )
+        cmd = [
+            sys.executable,
+            "scripts/bootstrap_real_tenant.py",
+            "--backend", "postgres",
+            "--pg-url", pg_url,
+            "--tenant-id", str(payload.get("tenant_id") or "auto"),
+            "--tenant-name", str(payload.get("tenant_name") or ""),
+            "--admin-user", str(payload.get("admin_user") or ""),
+            "--admin-pass", str(payload.get("admin_pass") or ""),
+            "--client-user", str(payload.get("client_user") or ""),
+            "--client-pass", str(payload.get("client_pass") or ""),
+            "--client-role", str(payload.get("client_role") or "viewer"),
+        ]
+        operator_user = str(payload.get("operator_user") or "").strip()
+        operator_pass = str(payload.get("operator_pass") or "")
+        if operator_user and operator_pass:
+            cmd.extend([
+                "--operator-user", operator_user,
+                "--operator-pass", operator_pass,
+                "--operator-role", "operator",
+            ])
+
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            return False, "onboarding bootstrap timed out after 120s", ""
+        except Exception as exc:
+            return False, f"bootstrap execution failed: {exc}", ""
+
+        output = (proc.stdout or "").strip()
+        if proc.returncode != 0:
+            err = (proc.stderr or output or f"exit={proc.returncode}").strip()
+            return False, f"bootstrap failed: {err[:280]}", ""
+
+        tenant_id = ""
+        for line in output.splitlines():
+            if line.strip().startswith("tenant_id="):
+                tenant_id = line.split("=", 1)[1].strip()
+                break
+        if not tenant_id:
+            return False, "bootstrap completed but tenant_id was not returned", ""
+
+        company_name = str(payload.get("company_name") or payload.get("tenant_name") or tenant_id)
+        primary_color = str(payload.get("primary_color") or "#0f172a")
+        accent_color = str(payload.get("accent_color") or "#22d3ee")
+        ok_theme, msg_theme = self._upsert_tenant_theme(
+            pg_url=pg_url,
+            tenant_id=tenant_id,
+            company_name=company_name,
+            primary_color=primary_color,
+            accent_color=accent_color,
+        )
+        if not ok_theme:
+            return False, msg_theme, tenant_id
+
+        _, host_msg = self._upsert_portal_host_hint(
+            tenant_id=tenant_id,
+            tenant_name=str(payload.get("tenant_name") or tenant_id),
+            portal_host=str(payload.get("portal_host") or ""),
+        )
+        return True, host_msg, tenant_id
 
     # v3.2 View Toggles
     def action_toggle_exec_log(self):
@@ -3344,6 +3845,8 @@ class CyberTUI(App):
                 "reporting-view": "REPORTING & EXPORT",
                 "team-view": "TEAM MANAGEMENT",
                 "users-view": "ADMIN USERS",
+                "onboarding-view": "CLIENT ONBOARDING WIZARD",
+                "help-view": "HELP CENTER",
             }
             
             view_name = view_names.get(view_id, view_id.replace("-", " ").upper())
@@ -3495,6 +3998,8 @@ class CyberTUI(App):
         elif bid == "btn-export-nav":   self.export_format("navigator")
         elif bid == "btn-file-mgr":     self.action_toggle_file_manager()
         elif bid == "btn-admin-tools":  self.action_admin_tools()
+        elif bid == "btn-onboard":      self.action_toggle_onboarding()
+        elif bid == "btn-help":         self.action_toggle_help()
         elif bid == "btn-mitre-menu":   self.action_toggle_mitre_view()
         elif bid == "btn-camp-ops":     self.action_toggle_campaign()
         elif bid == "btn-nist":         self.load_nist_template()

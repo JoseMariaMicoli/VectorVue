@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+*/
+
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -16,6 +32,7 @@ import TrendChart from '@/components/TrendChart';
 import { Card } from '@/components/ui/card';
 import { trackDashboardView } from '@/lib/telemetry';
 import type { ClientFinding, ClientMLInsight, ClientReport, Paginated, RemediationTask, RiskSummary } from '@/lib/types';
+import { brandTheme } from '@/styles/theme';
 
 type TrendPoint = { day: string; score: number };
 type RemediationResponse = { items: RemediationTask[] };
@@ -191,12 +208,12 @@ export default function OverviewPage() {
       .slice(0, 14);
   }, [findings, remediation, reports]);
 
-  if (loading) return <p className="text-sm text-muted">Loading centralized dashboard...</p>;
-  if (error || !risk) return <p className="text-sm text-red-400">Unable to load overview: {error ?? 'unknown error'}</p>;
+  if (loading) return <p className="text-sm text-text-secondary">Loading centralized dashboard...</p>;
+  if (error || !risk) return <p className="text-sm text-danger">Unable to load overview: {error ?? 'unknown error'}</p>;
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Centralized Overview</h1>
+      <h1 className="text-xl font-semibold text-metallic">Centralized Overview</h1>
 
       <div className="grid gap-3 md:grid-cols-4">
         <RiskCard label="Overall Risk Score" value={risk.score.toFixed(2)} tone={risk.score >= 9 ? 'critical' : risk.score >= 7 ? 'high' : 'neutral'} />
@@ -218,11 +235,11 @@ export default function OverviewPage() {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={findingsByCampaign}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <CartesianGrid strokeDasharray="3 3" stroke={brandTheme.colors.borderSubtle} />
                 <XAxis dataKey="campaign" tick={{ fontSize: 12 }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Bar dataKey="findings" fill="#22d3ee" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="findings" fill={brandTheme.colors.accentPurple} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -233,11 +250,11 @@ export default function OverviewPage() {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={remediationByStatus}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <CartesianGrid strokeDasharray="3 3" stroke={brandTheme.colors.borderSubtle} />
                 <XAxis dataKey="status" tick={{ fontSize: 12 }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Bar dataKey="total" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="total" fill={brandTheme.colors.warning} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -251,15 +268,15 @@ export default function OverviewPage() {
           <h2 className="mb-3 text-sm font-semibold">Operational Timeline</h2>
           <ol className="space-y-3">
             {timeline.map((item) => (
-              <li key={item.key} className="rounded border border-slate-800 px-3 py-2">
+              <li key={item.key} className="rounded border border-[color:var(--vv-border-subtle)] px-3 py-2">
                 <p className="text-sm font-medium">
-                  <span className="mr-2 rounded border border-slate-700 px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted">{item.kind}</span>
+                  <span className="mr-2 rounded border border-[color:var(--vv-border-subtle)] px-2 py-0.5 text-[11px] uppercase tracking-wide text-text-secondary">{item.kind}</span>
                   {item.label}
                 </p>
-                <p className="mt-1 text-xs text-muted">{item.meta}</p>
+                <p className="mt-1 text-xs text-text-secondary">{item.meta}</p>
               </li>
             ))}
-            {timeline.length === 0 ? <li className="text-sm text-muted">No timeline events available.</li> : null}
+            {timeline.length === 0 ? <li className="text-sm text-text-secondary">No timeline events available.</li> : null}
           </ol>
         </Card>
       </div>

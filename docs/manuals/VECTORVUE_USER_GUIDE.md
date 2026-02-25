@@ -1,4 +1,18 @@
-<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
 # VectorVue User Guide
 
@@ -69,7 +83,44 @@ Core design rules:
 - Deployment procedures are repeatable
 - Support teams can troubleshoot using published runbooks
 
-## 6. Where to Go Next
+## 6. Guided Onboarding (Standard Language)
+
+Use guided workflows to reduce setup errors and keep operations consistent.
+
+### 6.1 CLI Guided Wizard (Recommended)
+
+```bash
+make wizard
+```
+
+Use menu options:
+
+- `1` full commercial deploy
+- `2` isolated customer portal deploy (tenant + users + host mapping)
+- `3` real tenant bootstrap without dummy campaigns
+- `4` seed multi-tenant demo dataset
+- `5` real scenario validation (Phase 7-9 smoke)
+
+### 6.2 TUI Guided Onboarding Wizard (Admin)
+
+1. Start TUI:
+
+```bash
+make run-tui
+```
+
+2. Login with admin role.
+3. Open onboarding:
+- `Ctrl+Shift+W`, or
+- sidebar `ONBOARD WIZARD`.
+4. Fill tenant and portal fields:
+- tenant id and tenant name
+- portal host and company name
+- primary/accent branding colors
+- tenant admin and client credentials
+5. Submit `CREATE TENANT + USERS`.
+
+## 7. Where to Go Next
 
 - Day-one setup: [Getting Started](./GETTING_STARTED.md)
 - Delivery operations: [Operator Manual](./OPERATOR_MANUAL.md)

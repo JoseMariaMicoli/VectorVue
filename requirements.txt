@@ -1,5 +1,16 @@
-# Copyright (c) 2026 José María Micoli
-# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+# Copyright (c) 2026 NyxeraLabs
+# Author: José María Micoli
+# Licensed under BSL 1.1
+# Change Date: 2033-02-17 → Apache-2.0
+#
+# You may:
+# ✔ Study
+# ✔ Modify
+# ✔ Use for internal security testing
+#
+# You may NOT:
+# ✘ Offer as a commercial service
+# ✘ Sell derived competing products
 #
 # You may:
 # ✔ Study
@@ -67,6 +78,7 @@ weasyprint==68.1
 webencodings==0.5.1
 zopfli==0.4.1
 fastapi==0.116.1
+httpx==0.28.1
 SQLAlchemy==2.0.44
 pydantic==2.12.0
 PyJWT==2.10.1

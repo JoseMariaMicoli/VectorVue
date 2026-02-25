@@ -1,5 +1,16 @@
-# Copyright (c) 2026 Jose Maria Micoli
-# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+# Copyright (c) 2026 NyxeraLabs
+# Author: José María Micoli
+# Licensed under BSL 1.1
+# Change Date: 2033-02-17 → Apache-2.0
+#
+# You may:
+# ✔ Study
+# ✔ Modify
+# ✔ Use for internal security testing
+#
+# You may NOT:
+# ✘ Offer as a commercial service
+# ✘ Sell derived competing products
 
 """Phase 7A tenant-isolated public client read-only API router."""
 
@@ -319,8 +330,9 @@ def download_report(
         raise HTTPException(status_code=404, detail="Report file missing")
 
     filename = f"{_safe_text(row.get('report_title'), 'report')}.pdf"
+    media_type = "application/pdf" if p.suffix.lower() == ".pdf" else "application/octet-stream"
     _ = build_public_url(request.url.path, request)
-    return FileResponse(path=str(p), filename=filename, media_type="application/octet-stream")
+    return FileResponse(path=str(p), filename=filename, media_type=media_type)
 
 
 @router.get("/risk", response_model=RiskSummary)

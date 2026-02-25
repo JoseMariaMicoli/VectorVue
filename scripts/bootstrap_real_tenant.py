@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+
+# Copyright (c) 2026 NyxeraLabs
+# Author: José María Micoli
+# Licensed under BSL 1.1
+# Change Date: 2033-02-17 → Apache-2.0
+#
+# You may:
+# ✔ Study
+# ✔ Modify
+# ✔ Use for internal security testing
+#
+# You may NOT:
+# ✘ Offer as a commercial service
+# ✘ Sell derived competing products
+
 """
 Bootstrap a real tenant (no demo/dummy records) for production-style validation.
 """
@@ -54,7 +69,7 @@ def ensure_user(db: Database, username: str, password: str, role: str) -> str:
     ok, _ = db.authenticate_user(username, password)
     if ok:
         return "present"
-    created, msg = db.register_user(username, password, role=role, group_name="default")
+    created, msg = db.register_user(username, password, role=role, group_name="default", bypass_legal=True)
     if created:
         return "created"
     if "already exists" in msg.lower():

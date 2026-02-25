@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Copyright (c) 2026 José María Micoli
-Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
 
 You may:
 ✔ Study
@@ -33,7 +35,7 @@ def ensure_login(db: Database, username: str, password: str) -> None:
     ok, _ = db.authenticate_user(username, password)
     if ok:
         return
-    db.register_user(username, password, role=Role.ADMIN, group_name="default")
+    db.register_user(username, password, role=Role.ADMIN, group_name="default", bypass_legal=True)
     ok, msg = db.authenticate_user(username, password)
     if not ok:
         raise RuntimeError(f"unable to authenticate seed user: {msg}")
@@ -61,7 +63,7 @@ def ensure_user_credentials(db: Database, username: str, password: str, role: st
     if ok:
         return "present"
 
-    created, msg = db.register_user(username, password, role=role, group_name="default")
+    created, msg = db.register_user(username, password, role=role, group_name="default", bypass_legal=True)
     if created:
         return "created"
 

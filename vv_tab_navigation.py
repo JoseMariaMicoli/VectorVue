@@ -1,6 +1,8 @@
 """
-Copyright (c) 2026 José María Micoli
-Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
 
 You may:
 ✔ Study
@@ -212,6 +214,8 @@ class TabNavigationPanel(Container):
                 {"id": "reporting-view", "name": "Reporting", "keybinding": "Ctrl+R"},
                 {"id": "team-view", "name": "Teams", "keybinding": "Ctrl+T"},
                 {"id": "users-view", "name": "Users", "keybinding": "Admin"},
+                {"id": "onboarding-view", "name": "Onboarding", "keybinding": "Ctrl+Shift+W"},
+                {"id": "help-view", "name": "Help", "keybinding": "Ctrl+H"},
                 {"id": "threat-intel-view", "name": "Threat Intel", "keybinding": "Ctrl+Shift+I"},
             ],
             "Phase 5.5 Cognition": [

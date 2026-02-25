@@ -1,4 +1,18 @@
-<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
 # VectorVue Troubleshooting Guide
 
@@ -41,6 +55,12 @@ make phase9-migrate
 
 ```bash
 make seed-clients
+```
+
+4. If onboarding used `make wizard` option `2`, confirm tenant host map is set in `.env`:
+
+```bash
+rg '^VV_TENANT_HOST_MAP=' .env
 ```
 
 ## 4. Worker Restart Loops
@@ -88,3 +108,21 @@ Include:
 - tenant/environment impacted
 - expected vs actual behavior
 
+## 9. TUI Onboarding Wizard Fails
+
+1. Confirm you are logged in as `admin` role.
+2. Confirm PostgreSQL is reachable from app container.
+3. Confirm base migrations and tenant theme migration are applied:
+
+```bash
+make pg-schema-bootstrap
+make phase65-migrate
+make phase7d-migrate
+```
+
+4. Retry onboarding in TUI with `Ctrl+Shift+W`.
+5. If failure persists, collect app logs:
+
+```bash
+docker compose logs --tail=120 vectorvue_app
+```

@@ -1,6 +1,8 @@
 """
-Copyright (c) 2026 José María Micoli
-Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
 
 You may:
 ✔ Study
@@ -29,7 +31,13 @@ class PostgresSmokeTests(unittest.TestCase):
         self.password = "SmokePass123!"
         ok, _ = self.db.authenticate_user(self.username, self.password)
         if not ok:
-            self.db.register_user(self.username, self.password, role=Role.ADMIN, group_name="default")
+            self.db.register_user(
+                self.username,
+                self.password,
+                role=Role.ADMIN,
+                group_name="default",
+                bypass_legal=True,
+            )
             ok, msg = self.db.authenticate_user(self.username, self.password)
             self.assertTrue(ok, msg)
 

@@ -1,4 +1,18 @@
-<sub>Copyright (c) 2026 Jose Maria Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+<!--
+Copyright (c) 2026 NyxeraLabs
+Author: José María Micoli
+Licensed under BSL 1.1
+Change Date: 2033-02-17 → Apache-2.0
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+-->
 
 # PostgreSQL Regression Checklist
 
@@ -16,6 +30,7 @@ Use this checklist before release cutover and after major migrations.
 - [ ] findings and evidence APIs return expected payloads
 - [ ] remediation and risk endpoints return expected payloads
 - [ ] report listing and download paths are functional
+- [ ] portal builder validation passes: `docker compose --profile qa run --rm vectorvue_portal_builder npm run build`
 
 ## 3. Analytics and Workers
 
@@ -29,6 +44,8 @@ Use this checklist before release cutover and after major migrations.
 - [ ] `/compliance/frameworks` returns signed response envelope
 - [ ] framework score/report endpoints return valid dataset hash
 - [ ] audit window endpoint returns expected counts
+- [ ] `/api/v1/client/legal/documents` returns full legal payload with current hash/version
+- [ ] `/api/v1/client/legal/accept` + `/api/v1/client/auth/register` enforce server-side legal acceptance
 
 ## 5. Data Integrity
 
@@ -41,4 +58,4 @@ Use this checklist before release cutover and after major migrations.
 - [ ] RBAC enforcement works by role
 - [ ] tenant claim enforcement blocks unauthorized scope access
 - [ ] telemetry ingestion respects privacy constraints
-
+- [ ] tenant theming cannot remove platform brand lock/attribution metadata from theme API payload
