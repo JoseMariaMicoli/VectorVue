@@ -1077,6 +1077,7 @@ class Database:
     def __init__(self, crypto_manager: Optional[SessionCrypto] = None):
         self.crypto = crypto_manager
         self.db_backend = os.environ.get("VV_DB_BACKEND", "sqlite").strip().lower()
+        self._pg_db_url = None
         if self.db_backend == "postgres":
             if not PSYCOPG_AVAILABLE:
                 raise RuntimeError("VV_DB_BACKEND=postgres requires psycopg. Install with: pip install psycopg[binary]")
@@ -1088,7 +1089,8 @@ class Database:
                 pg_port = os.environ.get("VV_DB_PORT", "5432")
                 pg_name = os.environ.get("VV_DB_NAME", "vectorvue")
                 db_url = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_name}"
-            raw_conn = psycopg.connect(db_url, autocommit=False)
+            self._pg_db_url = db_url
+            raw_conn = psycopg.connect(self._pg_db_url, autocommit=False)
             self.conn = PostgresConnectionCompat(raw_conn)
         else:
             self.conn = sqlite3.connect(self.DB_NAME, check_same_thread=False)
@@ -1100,6 +1102,21 @@ class Database:
         else:
             self._run_migrations()
 
+    def _reconnect_postgres(self) -> bool:
+        """Recreate postgres connection after server-side timeout/termination."""
+        if self.db_backend != "postgres" or not self._pg_db_url:
+            return False
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+        try:
+            raw_conn = psycopg.connect(self._pg_db_url, autocommit=False)
+            self.conn = PostgresConnectionCompat(raw_conn)
+            return True
+        except Exception:
+            return False
+
     def _run_postgres_migrations(self):
         """Initialize postgres schema from generated SQL schema file."""
         schema_path = Path("sql/postgres_schema.sql")
@@ -1110,6 +1127,12 @@ class Database:
             )
         raw_conn = self.conn._conn if hasattr(self.conn, "_conn") else self.conn
         sql_blob = schema_path.read_text(encoding="utf-8")
+        # Some generated schema files include shell-style metadata comments.
+        # Normalize them to SQL comments so statement splitting/execution remains valid.
+        sql_blob = "\n".join(
+            ("-- " + line[1:].lstrip()) if line.lstrip().startswith("#") else line
+            for line in sql_blob.splitlines()
+        )
         statements = _split_sql_statements(sql_blob)
         with raw_conn.cursor() as cur:
             for stmt in statements:
@@ -2160,9 +2183,23 @@ class Database:
             return True
 
     def has_users(self) -> bool:
-        c = self.conn.cursor()
-        c.execute("SELECT COUNT(*) FROM users")
-        return c.fetchone()[0] > 0
+        try:
+            c = self.conn.cursor()
+            c.execute("SELECT COUNT(*) FROM users")
+            count = c.fetchone()[0]
+            if self.db_backend == "postgres":
+                # Close implicit read transaction to avoid idle-in-transaction timeouts.
+                self.conn.commit()
+            return count > 0
+        except Exception as exc:
+            if self.db_backend == "postgres" and "IdleInTransactionSessionTimeout" in str(exc):
+                if self._reconnect_postgres():
+                    c = self.conn.cursor()
+                    c.execute("SELECT COUNT(*) FROM users")
+                    count = c.fetchone()[0]
+                    self.conn.commit()
+                    return count > 0
+            raise
 
     def register_user(self, username: str, password: str, role: str = Role.OPERATOR, group_name: str = "default") -> Tuple[bool, str]:
         if not username or not password: return False, "Username and password are required."
@@ -2228,7 +2265,7 @@ class Database:
         try:
             with open(self.session_file, "w") as f:
                 json.dump(payload, f)
-        except PermissionError:
+        except (PermissionError, OSError):
             fallback = f"/tmp/{Path(self.session_file).name}"
             self.session_file = fallback
             with open(self.session_file, "w") as f:

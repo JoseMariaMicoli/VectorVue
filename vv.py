@@ -20,12 +20,17 @@ from pathlib import Path
 import logging
 from types import SimpleNamespace
 
+# Stabilize color behavior across local and containerized terminals.
+os.environ.setdefault("TERM", "xterm-256color")
+os.environ.setdefault("COLORTERM", "truecolor")
+os.environ.setdefault("FORCE_COLOR", "1")
+
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
 from textual.widgets import (
     ListView, ListItem, Label, Input,
-    TextArea, Button, Static, ContentSwitcher, DataTable, TabbedContent, TabPane, Select, Markdown
+    TextArea, Button, Static, ContentSwitcher, DataTable, TabbedContent, TabPane, Select, Markdown, Checkbox
 )
 from textual.binding import Binding
 from textual.screen import Screen
@@ -88,6 +93,35 @@ def _load_readme_banner() -> str:
 
 
 README_ASCII_BANNER = _load_readme_banner()
+
+LICENSE_TEXT_CACHE = None
+USER_POLICY_TEXT_CACHE = None
+
+
+def _load_license_text() -> str:
+    """Load LICENSE file for pre-auth user acknowledgment."""
+    global LICENSE_TEXT_CACHE
+    if LICENSE_TEXT_CACHE is not None:
+        return LICENSE_TEXT_CACHE
+    license_path = Path(__file__).with_name("LICENSE")
+    try:
+        LICENSE_TEXT_CACHE = license_path.read_text(encoding="utf-8")
+    except Exception:
+        LICENSE_TEXT_CACHE = "License file could not be loaded."
+    return LICENSE_TEXT_CACHE
+
+
+def _load_user_policy_text() -> str:
+    """Load user policy markdown for pre-auth user acknowledgment."""
+    global USER_POLICY_TEXT_CACHE
+    if USER_POLICY_TEXT_CACHE is not None:
+        return USER_POLICY_TEXT_CACHE
+    policy_path = Path(__file__).parent / "docs" / "manuals" / "USER_POLICY.md"
+    try:
+        USER_POLICY_TEXT_CACHE = policy_path.read_text(encoding="utf-8")
+    except Exception:
+        USER_POLICY_TEXT_CACHE = "User policy file could not be loaded."
+    return USER_POLICY_TEXT_CACHE
 
 # =============================================================================
 # PHASE 2: RUNTIME EXECUTOR (Background Task Management)
@@ -432,6 +466,51 @@ class LoginView(Container):
         ok, msg = self.app.db.authenticate_user(username, phrase)
         if ok: self.post_message(self.LoginSuccess())
         else: status.update(f"AUTH FAILED: {msg}")
+
+
+class LicenseAgreementView(Container):
+    class AgreementAccepted(Message): pass
+    class AgreementCancelled(Message): pass
+
+    CSS = """
+    LicenseAgreementView { align: center middle; background: $bg-void; width: 100%; height: 100%; }
+    #license-container {
+        width: 90%;
+        height: 90%;
+        border: heavy $steel;
+        background: #141925EE;
+        padding: 1;
+    }
+    #license-title { color: $p-green; text-style: bold; margin-bottom: 1; content-align: center middle; }
+    #license-scroll { height: 1fr; border: solid $steel; background: #10141d; padding: 1; margin-bottom: 1; }
+    .license-check { margin: 0 0 1 0; }
+    #license-status { color: $r-alert; margin-top: 1; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Container(id="license-container"):
+            yield Label("VECTORVUE LICENSE & USER POLICY AGREEMENT", id="license-title")
+            with ScrollableContainer(id="license-scroll"):
+                yield Markdown(f"## LICENSE\n\n{_load_license_text()}\n\n{_load_user_policy_text()}")
+            yield Checkbox("I have read and understand the LICENSE terms.", id="chk-license", classes="license-check")
+            yield Checkbox("I accept the VectorVue User Policy and authorized-use requirements.", id="chk-policy", classes="license-check")
+            with Horizontal():
+                yield Button("ACCEPT", id="btn-license-accept", variant="success")
+                yield Button("CANCEL", id="btn-license-cancel", variant="error")
+            yield Label("", id="license-status")
+
+    @on(Button.Pressed, "#btn-license-accept")
+    def on_accept(self):
+        license_ok = self.query_one("#chk-license", Checkbox).value
+        policy_ok = self.query_one("#chk-policy", Checkbox).value
+        if license_ok and policy_ok:
+            self.post_message(self.AgreementAccepted())
+            return
+        self.query_one("#license-status", Label).update("You must accept both the LICENSE and User Policy to continue.")
+
+    @on(Button.Pressed, "#btn-license-cancel")
+    def on_cancel(self):
+        self.post_message(self.AgreementCancelled())
 
 # =============================================================================
 # v3.2 EXECUTION & DETECTION VIEWS
@@ -2149,7 +2228,7 @@ class HeaderHUD(Static):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield Label("VECTORVUE v3.8", classes="hud-title")
+            yield Label("VECTORVUE v3.9", classes="hud-title")
             yield Label(f"OPERATION: {self.operation_name}", id="hud-op-lbl", classes="hud-op")
             yield Input(value="DEFAULT", id="hud-project-input", classes="hud-input", disabled=True)
             yield Label(f"// BUFFER: {self.current_file}", id="hud-file-lbl", classes="hud-file")
@@ -2184,6 +2263,7 @@ class FindingItem(ListItem):
 # =============================================================================
 
 class CyberTUI(App):
+    COLOR_SYSTEM = "truecolor"
     CSS = CYBER_CSS + """
     .hud-op { color: #9aa3b6; width: 1fr; content-align: center middle; text-style: bold; }
     .hud-input    { width: 16; height: 1; border: none; background: #12161e; color: #8bbbd9; }
@@ -2197,7 +2277,7 @@ class CyberTUI(App):
     #editor-main { height: 1fr; width: 100%; overflow-y: auto; scrollbar-gutter: stable; }
     #editor-preview { height: 1fr; width: 100%; padding: 0 1; overflow-y: auto; scrollbar-gutter: stable; background: #12161e; color: #d8dee9; border: solid #2e3440; }
     #view-switcher > * { overflow-y: auto; scrollbar-gutter: stable; }
-    #login-view, #register-view { overflow-y: hidden; scrollbar-gutter: auto; }
+    #license-view, #login-view, #register-view { overflow-y: hidden; scrollbar-gutter: auto; }
     """
 
     BINDINGS = [
@@ -2275,6 +2355,7 @@ class CyberTUI(App):
         yield TabNavigationPanel(id="tab-nav-panel")
         
         with ContentSwitcher(initial="login-view", id="view-switcher"):
+            yield LicenseAgreementView(id="license-view")
             yield LoginView(id="login-view")
             yield RegisterView(id="register-view")
             
@@ -2397,16 +2478,17 @@ class CyberTUI(App):
         self.intel       = None
         self.current_id  = None
         self.runtime_executor = RuntimeExecutor(self.db)
+        self._license_next_view = "register-view"
 
         sw = self.query_one("#view-switcher")
         self._set_tab_bar_visibility(False)
-        if not self.db.has_users():
-            sw.current = "register-view"
-            self.update_status("FIRST RUN: REGISTER YOUR ADMIN ACCOUNT", CyberColors.AMBER_WARNING)
-        else:
-            # Always require fresh authentication (don't resume sessions automatically)
+        if self.db.has_users():
             sw.current = "login-view"
             self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
+        else:
+            sw.current = "license-view"
+            self._license_next_view = "register-view"
+            self.update_status("LICENSE ACCEPTANCE REQUIRED FOR REGISTRATION", CyberColors.AMBER_WARNING)
 
     def _set_tab_bar_visibility(self, visible: bool):
         """Show/hide top tab bar + right sidebar and collapse their layout tracks."""
@@ -2431,12 +2513,25 @@ class CyberTUI(App):
 
     @on(LoginView.RegisterRequested)
     def on_login_register_requested(self):
-        self.query_one("#view-switcher").current = "register-view"
-        self.update_status("REGISTER NEW USER", CyberColors.ELECTRIC_CYAN)
+        self._license_next_view = "register-view"
+        self.query_one("#view-switcher").current = "license-view"
+        self.update_status("ACCEPT LICENSE/POLICY TO REGISTER", CyberColors.AMBER_WARNING)
 
     @on(LoginView.LoginSuccess)
     def on_login_success(self):
         self._post_login_setup()
+
+    @on(LicenseAgreementView.AgreementAccepted)
+    def on_license_accepted(self):
+        self.query_one("#view-switcher").current = self._license_next_view
+        if not self.db.has_users():
+            self.update_status("FIRST RUN: REGISTER YOUR ADMIN ACCOUNT", CyberColors.AMBER_WARNING)
+        else:
+            self.update_status("REGISTER NEW USER", CyberColors.ELECTRIC_CYAN)
+
+    @on(LicenseAgreementView.AgreementCancelled)
+    def on_license_cancelled(self):
+        self.exit()
 
     def _post_login_setup(self):
         user = self.db.current_user
@@ -2500,7 +2595,7 @@ class CyberTUI(App):
         self.query_one("#info-user").update("LOCKED")
         self._set_tab_bar_visibility(False)
         self.query_one("#view-switcher").current = "login-view"
-        self.update_status("LOGGED OUT — SESSION TERMINATED", CyberColors.AMBER_WARNING)
+        self.update_status("LOGGED OUT — AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
 
     # -------------------------------------------------------------------------
     # VIEW NAVIGATION

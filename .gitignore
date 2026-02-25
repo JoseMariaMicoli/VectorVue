@@ -77,3 +77,11 @@ Thumbs.db
 example.md
 docs/dev-log/
 .github/ 
+
+# Phase 6 deployment generated artifacts
+deploy/certs/
+deploy/security_hardening_report.txt
+deploy/airgap/
+vectorvue_airgap_*.tar.gz
+vectorvue_db_backup.dump
+*.dump
