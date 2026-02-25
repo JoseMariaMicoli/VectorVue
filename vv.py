@@ -1648,7 +1648,7 @@ Attestation Date: {compliance_report.get('attestation_date', 'N/A')}
         status.styles.color = color
 
 # =============================================================================
-# v4.0 TEAM MANAGEMENT & FEDERATION VIEWS
+# v4.1 TEAM MANAGEMENT & FEDERATION VIEWS
 # =============================================================================
 
 class TeamManagementView(Container):
@@ -2228,7 +2228,7 @@ class HeaderHUD(Static):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield Label("VECTORVUE v4.0", classes="hud-title")
+            yield Label("VECTORVUE v4.1", classes="hud-title")
             yield Label(f"OPERATION: {self.operation_name}", id="hud-op-lbl", classes="hud-op")
             yield Input(value="DEFAULT", id="hud-project-input", classes="hud-input", disabled=True)
             yield Label(f"// BUFFER: {self.current_file}", id="hud-file-lbl", classes="hud-file")
@@ -2400,7 +2400,7 @@ class CyberTUI(App):
             # v3.5 Reporting & Export Views
             yield ReportingView(id="reporting-view")
             
-            # v4.0 Team Management & Federation Views
+            # v4.1 Team Management & Federation Views
             yield TeamManagementView(id="team-view")
             yield UsersAdminView(id="users-view")
             

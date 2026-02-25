@@ -1,63 +1,59 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v4.0 Documentation Index
+# VectorVue v4.1 Documentation Index
 
-This is the single entrypoint for all VectorVue documentation in v4.0.
+This is the single entrypoint for all VectorVue documentation in v4.1.
+Use this index by role and task, not by internal phase names.
 
-## Recommended Reading Path
+## Start Here by Role
 
-1. [VECTORVUE_USER_GUIDE.md](./VECTORVUE_USER_GUIDE.md)  
-   Commercial end-to-end guide for operators and security teams.
-2. [GETTING_STARTED.md](./GETTING_STARTED.md)  
-   Installation and first-run workflow.
-3. [OPERATOR_MANUAL.md](./OPERATOR_MANUAL.md)  
-   Day-to-day operations and phase-based workflows.
-4. [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)  
-   Known issues and practical fixes.
-5. [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md)  
-   Technical architecture and schema reference.
+### Client Stakeholder (Portal User)
+1. [CLIENT_PORTAL_MANUAL.md](./CLIENT_PORTAL_MANUAL.md)
+2. [DEMO_ACCESS_MATRIX.md](./DEMO_ACCESS_MATRIX.md)
+3. [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)
+
+### Security Operator / Delivery Team
+1. [GETTING_STARTED.md](./GETTING_STARTED.md)
+2. [OPERATOR_MANUAL.md](./OPERATOR_MANUAL.md)
+3. [VECTORVUE_USER_GUIDE.md](./VECTORVUE_USER_GUIDE.md)
+4. [DEMO_ACCESS_MATRIX.md](./DEMO_ACCESS_MATRIX.md)
+
+### API / Integration Engineer
+1. [CLIENT_API_MANUAL.md](./CLIENT_API_MANUAL.md)
+2. [PORTAL_TELEMETRY_MANUAL.md](./PORTAL_TELEMETRY_MANUAL.md)
+3. [POSTGRES_USAGE_GUIDE.md](./POSTGRES_USAGE_GUIDE.md)
+4. [Deployment.md](./Deployment.md)
+
+### Platform Engineer / SRE
+1. [Deployment.md](./Deployment.md)
+2. [POSTGRES_MIGRATION_GUIDE.md](./POSTGRES_MIGRATION_GUIDE.md)
+3. [POSTGRES_USAGE_GUIDE.md](./POSTGRES_USAGE_GUIDE.md)
+4. [POSTGRES_REGRESSION_CHECKLIST.md](./POSTGRES_REGRESSION_CHECKLIST.md)
+
+## Quick Tasks
+
+- Portal login and navigation: [CLIENT_PORTAL_MANUAL.md](./CLIENT_PORTAL_MANUAL.md)
+- Seed demo accounts and URLs: [DEMO_ACCESS_MATRIX.md](./DEMO_ACCESS_MATRIX.md)
+- API login and endpoint calls: [CLIENT_API_MANUAL.md](./CLIENT_API_MANUAL.md)
+- Deploy and harden stack: [Deployment.md](./Deployment.md)
+- Telemetry analytics SQL (MTTA/MTTR): [PHASE7E_TELEMETRY_QUERIES.sql](./PHASE7E_TELEMETRY_QUERIES.sql)
+- Telemetry behavior and privacy model: [PORTAL_TELEMETRY_MANUAL.md](./PORTAL_TELEMETRY_MANUAL.md)
 
 ## Navigation and UX
 
 - [Tab Navigation Guide](../TAB_NAVIGATION_GUIDE.md)
 - [Tab Quick Reference](../TAB_QUICK_REFERENCE.txt)
 
-## Planning and Roadmap
+## Product Planning and Governance
 
-- [Roadmap](../ROADMAP.md)
-- [Phase 6.5 API Quickstart](../PHASE65_API_QUICKSTART.md)
-
-## Documentation Governance
-
-- [Documentation Policy](./DOCUMENTATION_POLICY.md)
-- [PostgreSQL Migration Guide](./POSTGRES_MIGRATION_GUIDE.md)
-- [PostgreSQL Usage Guide](./POSTGRES_USAGE_GUIDE.md)
-- [Deployment & Hardening Guide](./Deployment.md)
-- [Client REST API Manual](./CLIENT_API_MANUAL.md)
-- [User Policy](./USER_POLICY.md)
-- [PostgreSQL Audit Report](./POSTGRES_AUDIT_REPORT.md)
-- [PostgreSQL Regression Checklist](./POSTGRES_REGRESSION_CHECKLIST.md)
-
-## Document Matrix
-
-| Document | Primary Audience | Purpose |
-|---|---|---|
-| `VECTORVUE_USER_GUIDE.md` | Operators, Security Engineers | Full commercial user guide |
-| `GETTING_STARTED.md` | New users | Install and first campaign |
-| `OPERATOR_MANUAL.md` | Active operators | Operational workflows by phase |
-| `TROUBLESHOOTING_GUIDE.md` | Operators/Admins | Error resolution and diagnostics |
-| `ARCHITECTURE_SPEC.md` | Engineers/Architects | Internal architecture and data model |
-| `POSTGRES_MIGRATION_GUIDE.md` | DevOps/Platform Engineers | SQLite→PostgreSQL and Docker migration |
-| `POSTGRES_USAGE_GUIDE.md` | Operators/DevOps | Day-2 runbook for PostgreSQL backend operations |
-| `Deployment.md` | DevOps/SRE/Security Engineers | Phase 6 production deployment, TLS, systemd, and hardening runbook |
-| `CLIENT_API_MANUAL.md` | DevOps/API Engineers | Phase 6.5 tenant-isolated read-only client API runbook |
-| `POSTGRES_AUDIT_REPORT.md` | Engineering Leads/Auditors | Method-level migration risk and validation focus |
-| `POSTGRES_REGRESSION_CHECKLIST.md` | QA/Engineering | End-to-end no-regression verification checklist |
-| `TAB_NAVIGATION_GUIDE.md` | All users | Visual navigation model and keybindings |
-| `ROADMAP.md` | Leads/Engineering | Current and planned capabilities |
+- Product roadmap (internal planning): [../ROADMAP.md](../ROADMAP.md)
+- Architecture specification: [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md)
+- Documentation policy: [DOCUMENTATION_POLICY.md](./DOCUMENTATION_POLICY.md)
+- User policy: [USER_POLICY.md](./USER_POLICY.md)
+- PostgreSQL audit report: [POSTGRES_AUDIT_REPORT.md](./POSTGRES_AUDIT_REPORT.md)
 
 ## Version Scope
 
-- Current: **v4.0**
-- Implemented: **Phases 0–6.5**
-- Planned: **Phases 7–8** (see roadmap)
+- Current: **v4.1**
+- Implemented product capabilities: operator platform + client portal + telemetry dataset pipeline
+- Planned: **Phase 8** (see roadmap)

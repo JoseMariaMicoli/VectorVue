@@ -8,6 +8,18 @@ CREATE TABLE IF NOT EXISTS tenants (
     active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+CREATE TABLE IF NOT EXISTS user_tenant_access (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    username TEXT NOT NULL,
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    access_role TEXT NOT NULL DEFAULT 'viewer',
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, tenant_id),
+    UNIQUE (username, tenant_id)
+);
+
 INSERT INTO tenants (id, name, created_at, active)
 VALUES ('00000000-0000-0000-0000-000000000001', 'legacy-default', NOW(), TRUE)
 ON CONFLICT (id) DO NOTHING;
@@ -119,3 +131,5 @@ CREATE INDEX IF NOT EXISTS idx_client_reports_tenant_id ON client_reports (tenan
 CREATE INDEX IF NOT EXISTS idx_evidence_tenant_id ON evidence (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_reports_tenant_id ON reports (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_remediation_tasks_tenant_id ON remediation_tasks (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_user_tenant_access_tenant_id ON user_tenant_access (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_user_tenant_access_username ON user_tenant_access (username);

@@ -40,3 +40,9 @@ class ClientReport(ClientSafeBase):
     summary: str | None = None
     visibility_status: str
     approval_status: str
+
+
+class ClientThemeOut(ClientSafeBase):
+    company_name: str
+    logo_url: str | None = None
+    colors: dict[str, str]
