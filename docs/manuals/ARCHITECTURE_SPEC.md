@@ -1,10 +1,10 @@
 <sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
-# VectorVue v3.8 Architecture Specification
+# VectorVue v3.9 Architecture Specification
 
-![Version](https://img.shields.io/badge/Version-v3.8-39FF14) ![Phase](https://img.shields.io/badge/Phase-5.5_Complete-39FF14) ![Tables](https://img.shields.io/badge/Database-78_Tables-FF00FF) ![Cognition](https://img.shields.io/badge/Cognition-10_Modules-39FF14)
+![Version](https://img.shields.io/badge/Version-v3.9-39FF14) ![Phase](https://img.shields.io/badge/Phase-6_Complete-39FF14) ![Tables](https://img.shields.io/badge/Database-78_Tables-FF00FF) ![Cognition](https://img.shields.io/badge/Cognition-10_Modules-39FF14)
 
-Complete technical architecture for VectorVue v3.8 - Red Team Campaign Management Platform with Operational Cognition. This specification details database schema, cryptography, cognition modules, background task execution, and system design patterns.
+Complete technical architecture for VectorVue v3.9 - Red Team Campaign Management Platform with Operational Cognition. This specification details database schema, cryptography, cognition modules, background task execution, and system design patterns.
 
 ---
 
@@ -12,7 +12,7 @@ Complete technical architecture for VectorVue v3.8 - Red Team Campaign Managemen
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         VectorVue v3.8                          │
+│                         VectorVue v3.9                          │
 │            Red Team Campaign Manager + Cognition Layer          │
 └─────────────────────────────────────────────────────────────────┘
               ↓
@@ -1537,7 +1537,7 @@ CREATE TABLE feed_data_cache (
 
 ### Phase 5.5: Operational Cognition (10 Modules + Integration Layer)
 
-**New in v3.8:** Deterministic decision-support system with 10 cognition modules for safe, explainable operator recommendations.
+**New in v3.9:** Deterministic decision-support system with 10 cognition modules for safe, explainable operator recommendations.
 
 **Core Modules:**
 

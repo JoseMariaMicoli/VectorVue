@@ -2,7 +2,7 @@
 
 # VectorVue User Guide
 
-Version: v3.8 (Phase 5.5 complete)  
+Version: v3.9 (Phase 6 complete)  
 Audience: Red Team operators, security engineers, authorized penetration testers
 
 ## Table of Contents
