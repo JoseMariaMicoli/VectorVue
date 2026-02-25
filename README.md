@@ -117,6 +117,10 @@ Expected outcomes:
 - legal acceptance manifest validates successfully
 - unit test suite passes in app runtime
 - portal build succeeds in builder image profile (`vectorvue_portal_builder`)
+<<<<<<< HEAD
+=======
+
+>>>>>>> QA-backup
 **Seed realistic demo data:**
 
 ```bash
