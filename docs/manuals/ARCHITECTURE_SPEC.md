@@ -1,16 +1,4 @@
-
-/*
-Copyright (c) 2026 José María Micoli
-Licensed under Apache-2.0
-
-You may:
-✔ Study
-✔ Modify
-✔ Use for internal security testing
-
-You may NOT:
-✘ Remove copyright notices
-*/
+<sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
 
 # VectorVue v3.8 Architecture Specification
 

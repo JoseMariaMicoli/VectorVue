@@ -1,6 +1,8 @@
+<sub>Copyright (c) 2026 José María Micoli | Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}</sub>
+
 ## License Update Notice
 
-Starting from version 3.7.1 this project will transition to Apache-2.0.
+Starting from version 3.8.0 this project will transition to BSL.
 
 Reason:
 To allow sustainable development, support, and long-term maintenance while keeping the project open and transparent.
@@ -27,7 +29,7 @@ Previous versions remain under the original license.
 ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14)
 ![Security](https://img.shields.io/badge/Audit-Traceable-purple)
 ![Evidence](https://img.shields.io/badge/Evidence-Defensible-blue)
-![License](https://img.shields.io/badge/License-Apache_2.0-green)
+![License](https://img.shields.io/badge/License-Business_Source_1.1-red)
 
 ---
 
@@ -71,6 +73,8 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 
 - Unified docs entrypoint: [Documentation Index](docs/manuals/INDEX.md)
 - Full commercial guide: [VectorVue User Guide](docs/manuals/VECTORVUE_USER_GUIDE.md)
+- PostgreSQL migration: [PostgreSQL Migration Guide](docs/manuals/POSTGRES_MIGRATION_GUIDE.md)
+- PostgreSQL operations: [PostgreSQL Usage Guide](docs/manuals/POSTGRES_USAGE_GUIDE.md)
 
 ## Maturity Model
 
@@ -80,6 +84,7 @@ See [Tab Navigation Guide](docs/TAB_NAVIGATION_GUIDE.md) for complete documentat
 | Manager   | Organize engagement  | ✅ Complete (v2.0+) |
 | Platform  | Enforce workflow     | ✅ Complete (v3.0+) |
 | Cognition | Guide decisions      | ✅ Complete (v3.8) |
+| PostgreSQL Migration | Database + container baseline | ✅ Complete (v3.8, Phase 5.6) |
 | Autonomy  | Supervised execution | 🔮 Phase 6+ |
 | **UI Navigation** | **Visual tabs for all views** | **✅ Complete (v3.8+)** |
 
@@ -87,6 +92,7 @@ Current state:
 
 **Phase 5 — Campaign Platform (stable)** ✅
 **Phase 5.5 — Operational Cognition (complete)** ✅
+**Phase 5.6 — PostgreSQL + Docker baseline (complete)** ✅
 **Phase 6 — Strategic Planning (upcoming)**
 
 ---
@@ -211,6 +217,15 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python vv.py
+```
+
+PostgreSQL one-command operations:
+
+```bash
+make pg-reset
+make pg-migrate
+make pg-seed
+make pg-smoke
 ```
 
 First launch:

@@ -1,0 +1,42 @@
+# Copyright (c) 2026 José María Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+#
+# You may:
+# ✔ Study
+# ✔ Modify
+# ✔ Use for internal security testing
+#
+# You may NOT:
+# ✘ Offer as a commercial service
+# ✘ Sell derived competing products
+
+.git
+.gitignore
+
+# Local Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# Runtime/session/db artifacts
+.vectorvue_session
+vectorvue.db
+adversary.db
+Reports/
+
+# Local caches and IDE
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
+
+# OS noise
+.DS_Store
+Thumbs.db

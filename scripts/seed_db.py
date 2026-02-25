@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-Seed VectorVue with two realistic dummy operations for Phase 5.5 testing.
+Copyright (c) 2026 José María Micoli
+Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
 """
 
 from datetime import datetime, timedelta, timezone
@@ -160,13 +170,20 @@ def seed_campaign(db: Database, campaign_id: int, op_name: str, operator: str, c
         )
 
     c.execute(
-        """INSERT OR REPLACE INTO c2_infrastructure
-           (id, campaign_id, node_name, node_type, exposure_score, reputation_score, burn_probability, burn_level, should_rotate, last_rotated, notes, updated_at)
-           VALUES (
-             (SELECT id FROM c2_infrastructure WHERE campaign_id=? AND node_name=?),
-             ?, ?, 'redirector', 0.58, 0.62, 0.67, 'hot', 1, ?, 'Seeded hot infra for burn-tracker testing', ?
-           )""",
-        (campaign_id, c2_name, campaign_id, c2_name, (now - timedelta(days=2)).isoformat() + "Z", now.isoformat() + "Z"),
+        """INSERT INTO c2_infrastructure
+           (campaign_id, node_name, node_type, exposure_score, reputation_score, burn_probability, burn_level, should_rotate, last_rotated, notes, updated_at)
+           VALUES (?, ?, 'redirector', 0.58, 0.62, 0.67, 'hot', 1, ?, 'Seeded hot infra for burn-tracker testing', ?)
+           ON CONFLICT(campaign_id, node_name) DO UPDATE SET
+             node_type=excluded.node_type,
+             exposure_score=excluded.exposure_score,
+             reputation_score=excluded.reputation_score,
+             burn_probability=excluded.burn_probability,
+             burn_level=excluded.burn_level,
+             should_rotate=excluded.should_rotate,
+             last_rotated=excluded.last_rotated,
+             notes=excluded.notes,
+             updated_at=excluded.updated_at""",
+        (campaign_id, c2_name, (now - timedelta(days=2)).isoformat() + "Z", now.isoformat() + "Z"),
     )
 
     for idx, opp in enumerate([
@@ -279,6 +296,17 @@ def pressure_val_for_rows(cursor) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed VectorVue DB with realistic Phase 5.5 data.")
+    parser.add_argument(
+        "--backend",
+        choices=["sqlite", "postgres"],
+        default=os.environ.get("VV_DB_BACKEND", "sqlite").strip().lower(),
+        help="Database backend (default: env VV_DB_BACKEND or sqlite).",
+    )
+    parser.add_argument(
+        "--pg-url",
+        default=None,
+        help="PostgreSQL URL override. Falls back to VV_DB_URL / VV_DB_* env vars.",
+    )
     parser.add_argument("--admin-user", default="admin")
     parser.add_argument("--admin-pass", default="AdminPassw0rd!")
     parser.add_argument(
@@ -291,6 +319,10 @@ def main() -> int:
     if Path.cwd() != ROOT:
         # Make relative DB paths deterministic.
         os.chdir(ROOT)
+
+    os.environ["VV_DB_BACKEND"] = args.backend
+    if args.backend == "postgres" and args.pg_url:
+        os.environ["VV_DB_URL"] = args.pg_url
 
     encryption_passphrase = args.passphrase or args.admin_pass
     crypto = SessionCrypto()
@@ -316,6 +348,7 @@ def main() -> int:
         print("Campaigns:")
         print(" - OP_REDWOLF_2026")
         print(" - OP_NIGHTGLASS_2026")
+        print(f"Backend: {args.backend}")
         print("Login:")
         print(f" - username: {args.admin_user}")
         print(f" - password: {args.admin_pass}")
