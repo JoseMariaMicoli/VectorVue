@@ -51,8 +51,17 @@ PANEL2_CLIENT_ROLE_2 ?= operator
 PANEL1_PORTAL_HOST ?= acme.vectorvue.local
 PANEL2_PORTAL_HOST ?= globex.vectorvue.local
 PORTAL_PROTO ?= https
+TENANT_PORTAL_HOST ?= $(CUSTOMER).vectorvue.local
+TENANT_ADMIN_USER ?= tenant_admin
+TENANT_ADMIN_PASS ?= TenantAdm1n!
+TENANT_CLIENT_USER ?= tenant_viewer
+TENANT_CLIENT_PASS ?= TenantView3r!
+TENANT_CLIENT_ROLE ?= viewer
+TENANT_OPERATOR_USER ?=
+TENANT_OPERATOR_PASS ?=
+TENANT_OPERATOR_ROLE ?= operator
 
-.PHONY: help venv-rebuild run-tui run-local-postgres deploy customer-deploy customer-deploy-isolated phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
+.PHONY: help venv-rebuild run-tui run-local-postgres deploy commercial-deploy customer-deploy customer-deploy-isolated customer-deploy-portal-isolated tenant-bootstrap-real phase79-real-smoke phase65-bootstrap api-up api-down api-logs api-smoke phase7a-check portal-install portal-dev portal-build portal-start phase7b-check phase6-up phase6-test phase6-down phase6-reset phase6-airgap phase6-hardening phase6-all pg-schema-bootstrap phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate pg-reset pg-migrate pg-seed seed-clients pg-smoke print-access-matrix
 
 help:
 	@echo "VectorVue PostgreSQL operational targets"
@@ -67,8 +76,12 @@ help:
 	@echo "  make run-tui    - Run interactive TUI in Docker (PostgreSQL backend)"
 	@echo "  make run-local-postgres - Run local Python TUI against Docker PostgreSQL"
 	@echo "  make deploy     - Build/start full stack + tenant/theme migrations + API smoke test"
+	@echo "  make commercial-deploy - Deploy + print access matrix for commercial demos"
 	@echo "  make customer-deploy - Deploy stack scoped by COMPOSE project name per customer"
 	@echo "  make customer-deploy-isolated - Deploy one tenant-per-stack and bootstrap tenant metadata"
+	@echo "  make customer-deploy-portal-isolated - One-command isolated stack + tenant users + portal host mapping"
+	@echo "  make tenant-bootstrap-real - Bootstrap tenant users without dummy campaign data"
+	@echo "  make phase79-real-smoke - Validate Phase 7-9 endpoints in real/no-dummy scenario"
 	@echo "  make phase65-bootstrap - Create customer dirs/env and bootstrap tenant metadata"
 	@echo "  make api-up     - Start full stack (postgres, redis, api, runtime worker, portal, nginx)"
 	@echo "  make api-down   - Stop REST API stack"
@@ -85,6 +98,7 @@ help:
 	@echo "  make phase65-migrate - Apply tenant isolation migration (Phase 6.5)"
 	@echo "  make phase7e-migrate - Apply portal usage telemetry schema (Phase 7E)"
 	@echo "  make phase8-migrate - Apply advanced ML/analytics schema (Phase 8)"
+	@echo "  make phase9-migrate - Apply compliance/regulatory assurance schema (Phase 9)"
 	@echo "  make phase6-down - Stop Phase 6 stack"
 	@echo "  make phase6-reset - Stop stack and remove volumes"
 	@echo "  make phase6-airgap - Export air-gap deployment bundle"
@@ -99,7 +113,10 @@ help:
 	@echo "  PANEL1_PORTAL_HOST=acme.vectorvue.local PANEL2_PORTAL_HOST=globex.vectorvue.local"
 	@echo "  HTTP_HOST_PORT=8080 HTTPS_HOST_PORT=8443 POSTGRES_HOST_PORT=5543"
 
-deploy: api-up phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate api-smoke
+deploy: api-up phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate api-smoke
+
+commercial-deploy: deploy
+	@$(MAKE) print-access-matrix --no-print-directory
 
 customer-deploy:
 	COMPOSE_PROJECT_NAME=$(CUSTOMER) \
@@ -119,6 +136,35 @@ customer-deploy-isolated:
 	HTTPS_HOST_PORT=$(HTTPS_HOST_PORT) \
 	POSTGRES_HOST_PORT=$(POSTGRES_HOST_PORT) \
 	$(MAKE) phase65-bootstrap CUSTOMER="$(CUSTOMER)" TENANT_NAME="$(TENANT_NAME)" TENANT_ID="$(TENANT_ID)"
+
+customer-deploy-portal-isolated:
+	@if [ "$(TENANT_ID)" = "auto" ]; then \
+		echo "TENANT_ID must be explicit for portal host mapping (example: TENANT_ID=30000000-0000-0000-0000-000000000003)"; \
+		exit 1; \
+	fi
+	COMPOSE_PROJECT_NAME=$(CUSTOMER) \
+	HTTP_HOST_PORT=$(HTTP_HOST_PORT) \
+	HTTPS_HOST_PORT=$(HTTPS_HOST_PORT) \
+	POSTGRES_HOST_PORT=$(POSTGRES_HOST_PORT) \
+	VV_TENANT_HOST_MAP="$(TENANT_PORTAL_HOST)=$(TENANT_ID)|$(TENANT_NAME),vectorvue.local=$(TENANT_ID)|$(TENANT_NAME)" \
+	$(MAKE) deploy
+	COMPOSE_PROJECT_NAME=$(CUSTOMER) \
+	HTTP_HOST_PORT=$(HTTP_HOST_PORT) \
+	HTTPS_HOST_PORT=$(HTTPS_HOST_PORT) \
+	POSTGRES_HOST_PORT=$(POSTGRES_HOST_PORT) \
+	$(MAKE) phase65-bootstrap CUSTOMER="$(CUSTOMER)" TENANT_NAME="$(TENANT_NAME)" TENANT_ID="$(TENANT_ID)"
+	COMPOSE_PROJECT_NAME=$(CUSTOMER) \
+	HTTP_HOST_PORT=$(HTTP_HOST_PORT) \
+	HTTPS_HOST_PORT=$(HTTPS_HOST_PORT) \
+	POSTGRES_HOST_PORT=$(POSTGRES_HOST_PORT) \
+	$(MAKE) tenant-bootstrap-real TENANT_ID="$(TENANT_ID)" TENANT_NAME="$(TENANT_NAME)"
+	@echo ""
+	@echo "Isolated client portal deployed:"
+	@echo " - customer: $(CUSTOMER)"
+	@echo " - tenant_id: $(TENANT_ID)"
+	@echo " - portal_url: $(PORTAL_PROTO)://$(TENANT_PORTAL_HOST)/login"
+	@echo " - admin_user: $(TENANT_ADMIN_USER) / $(TENANT_ADMIN_PASS)"
+	@echo " - client_user: $(TENANT_CLIENT_USER) / $(TENANT_CLIENT_PASS) ($(TENANT_CLIENT_ROLE))"
 
 venv-rebuild:
 	rm -rf venv
@@ -145,7 +191,7 @@ phase6-up:
 	else \
 		echo "SKIP_BUILD=1 -> skipping image build"; \
 	fi
-	$(DC) up -d --force-recreate postgres redis vectorvue_app vectorvue_runtime vectorvue_ml_worker vectorvue_portal nginx
+	$(DC) up -d --force-recreate postgres redis vectorvue_app vectorvue_runtime vectorvue_ml_worker vectorvue_compliance_observation_worker vectorvue_compliance_daily_worker vectorvue_portal nginx
 
 api-up: phase6-up
 
@@ -200,8 +246,35 @@ phase8-migrate:
 		--pg-url $(PG_URL) \
 		--sql sql/phase8_analytics.sql
 
+phase9-migrate:
+	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/apply_pg_sql.py \
+		--pg-url $(PG_URL) \
+		--sql sql/phase9_compliance.sql
+
 phase65-bootstrap: phase65-migrate
 	./deploy/scripts/bootstrap_customer.sh "$(CUSTOMER)" "$(TENANT_NAME)" "$(TENANT_ID)" "$(PG_URL)"
+
+tenant-bootstrap-real:
+	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/bootstrap_real_tenant.py \
+		--backend postgres \
+		--pg-url $(PG_URL) \
+		--tenant-id "$(TENANT_ID)" \
+		--tenant-name "$(TENANT_NAME)" \
+		--admin-user "$(TENANT_ADMIN_USER)" \
+		--admin-pass "$(TENANT_ADMIN_PASS)" \
+		--client-user "$(TENANT_CLIENT_USER)" \
+		--client-pass "$(TENANT_CLIENT_PASS)" \
+		--client-role "$(TENANT_CLIENT_ROLE)" \
+		--operator-user "$(TENANT_OPERATOR_USER)" \
+		--operator-pass "$(TENANT_OPERATOR_PASS)" \
+		--operator-role "$(TENANT_OPERATOR_ROLE)"
+
+phase79-real-smoke:
+	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/phase79_real_smoke.py \
+		--base-url http://vectorvue_app:8080 \
+		--tenant-id "$(TENANT_ID)" \
+		--username "$(TENANT_ADMIN_USER)" \
+		--password "$(TENANT_ADMIN_PASS)"
 
 phase6-test:
 	./scripts/test_phase6_functional.sh
@@ -235,7 +308,7 @@ pg-migrate:
 		--schema $(SCHEMA_SQL) \
 		--truncate
 
-seed-clients: phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate
+seed-clients: phase65-migrate phase7d-migrate phase7e-migrate phase8-migrate phase9-migrate
 	$(DC) run --rm -v "$(CURDIR):/opt/vectorvue" vectorvue_app $(PY) scripts/seed_db.py \
 		--backend postgres \
 		--pg-url $(PG_URL) \

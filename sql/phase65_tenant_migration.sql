@@ -1,3 +1,6 @@
+-- Copyright (c) 2026 Jose Maria Micoli
+-- Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 -- Phase 6.5 tenant isolation migration for PostgreSQL schema.
 -- Safe for existing deployments: creates/extends objects if missing.
 

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Jose Maria Micoli
+# Licensed under {'license_type': 'BSL1.1', 'change_date': '2033-02-17'}
+
 from __future__ import annotations
 
 import logging
@@ -7,7 +10,7 @@ import time
 from datetime import date, datetime, timezone
 
 from redis import Redis
-from rq import Connection, Queue, Worker
+from rq import Queue, Worker
 
 from analytics.config import redis_url
 from analytics.queue import enqueue_retrain_model
@@ -40,15 +43,13 @@ def run_worker() -> None:
     sched_thread = threading.Thread(target=_schedule_loop, args=(stop,), daemon=True)
     sched_thread.start()
     queues = [Queue("train_model", connection=conn), Queue("run_inference", connection=conn), Queue("retrain_model", connection=conn)]
-    with Connection(conn):
-        worker = Worker(queues)
-        LOGGER.info("ml-worker started; queues=train_model,run_inference,retrain_model")
-        try:
-            worker.work(with_scheduler=False)
-        finally:
-            stop.set()
+    worker = Worker(queues, connection=conn)
+    LOGGER.info("ml-worker started; queues=train_model,run_inference,retrain_model")
+    try:
+        worker.work(with_scheduler=False)
+    finally:
+        stop.set()
 
 
 if __name__ == "__main__":
     run_worker()
-
