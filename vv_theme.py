@@ -1,4 +1,18 @@
 """
+Copyright (c) 2026 José María Micoli
+Licensed under {'license_type': 'Apache-2.0'}
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+"""
+
+"""
 VectorVue v3.0 - Phosphor Cyberpunk Design System
 Centralized Theme & Layout Configuration for Red Team Platform
 
@@ -10,38 +24,50 @@ Color Philosophy:
 """
 
 class CyberColors:
-    # High-Vis Neon Palette (Primary)
-    PHOSPHOR_GREEN = "#39FF14"  # Primary: Success, Active Focus, Approved
-    ELECTRIC_CYAN  = "#00FFFF"  # Accent: Selection, Info, In-Progress
-    AMBER_WARNING  = "#FFBF00"  # Secondary: Warnings, Pending Review
-    RED_ALERT      = "#FF0000"  # Critical: Errors, Delete, Denied
-    PURPLE_HAZE    = "#BD00FF"  # Campaign / Ops / Team Operations
-    CRIMSON_BLOOD  = "#DC143C"  # Attack Path / Critical Impact / Sensitive Host
+    # Professional dark-mode palette (Burp-like neutral + amber accent)
+    PHOSPHOR_GREEN = "#FFB86B"  # Primary accent
+    ELECTRIC_CYAN  = "#8BBBD9"  # Secondary accent
+    AMBER_WARNING  = "#F0A94B"  # Warning
+    RED_ALERT      = "#E06C75"  # Critical
+    PURPLE_HAZE    = "#A3A9B8"  # Muted management accent
+    CRIMSON_BLOOD  = "#C57070"  # Sensitive-impact accent
     
     # v3.0 OPSEC Colors (New)
-    ORANGE_CAUTION  = "#FF8C00"  # Caution: Prohibited hours, Sensitive asset
-    LIME_EVIDENCE   = "#00FF41"  # Evidence: Immutable artifact, Chain-of-custody
-    MAGENTA_AUDIT   = "#FF1493"  # Audit: Action logged, Approval required
-    TEAL_APPROVAL   = "#20B2AA"  # Approval: Approved state, Verified finding
-    GRAY_DISABLED   = "#404040"  # Disabled: Locked evidence, Archived campaign
+    ORANGE_CAUTION  = "#D99A4E"
+    LIME_EVIDENCE   = "#8FC18A"
+    MAGENTA_AUDIT   = "#D087B1"
+    TEAL_APPROVAL   = "#88B3A1"
+    GRAY_DISABLED   = "#5C6370"
     
     # Phase 5 Threat Intelligence Colors
-    NEON_PINK       = "#FF10F0"  # Threat Intelligence: Feed data, IoC enrichment, Actor profiles
+    NEON_PINK       = "#C792EA"
+    
+    # Phase 5.5 Cognition Engine Colors (10 Engines)
+    COG_OPPORTUNITY = "#B8D67A"
+    COG_PATH        = "#A8A5D6"
+    COG_STATE       = "#8BBBD9"
+    COG_DETECTION   = "#E06C75"
+    COG_CONFIDENCE  = "#F0A94B"
+    COG_KNOWLEDGE   = "#8FC18A"
+    COG_TECHNIQUE   = "#C792EA"
+    COG_VALIDATION  = "#D087B1"
+    COG_EXPLAINABILITY = "#7FB6D8"
+    COG_DASHBOARD   = "#FFB86B"
     
     # Industrial Dark Mode Neutrals
-    VOID_DARK      = "#050505"  # Deepest background
-    PANEL_GREY     = "#121212"  # Component background
-    STEEL_BORDER   = "#444444"  # Inactive borders
-    TEXT_MAIN      = "#E0E0E0"  # Readable content
-    TEXT_DIM       = "#666666"  # Placeholder
-    TEXT_MUTED     = "#333333"  # Dimmed / Disabled text
+    VOID_DARK      = "#0f1115"
+    PANEL_GREY     = "#1a1d24"
+    STEEL_BORDER   = "#2e3440"
+    TEXT_MAIN      = "#d8dee9"
+    TEXT_DIM       = "#7d8596"
+    TEXT_MUTED     = "#4c5566"
     
     # MITRE Coverage Heatmap (technique distribution)
-    COVERAGE_NONE   = "#1a1a1a"  # 0% coverage
-    COVERAGE_LOW    = "#4d0000"  # 1-25% coverage
-    COVERAGE_MED    = "#ff3300"  # 26-50% coverage
-    COVERAGE_HIGH   = "#ffaa00"  # 51-75% coverage
-    COVERAGE_FULL   = "#39FF14"  # 76-100% coverage
+    COVERAGE_NONE   = "#1a1d24"
+    COVERAGE_LOW    = "#5c3a38"
+    COVERAGE_MED    = "#a56c45"
+    COVERAGE_HIGH   = "#d39a5c"
+    COVERAGE_FULL   = "#ffb86b"
 
 # Global CSS Injection
 CYBER_CSS = f"""
@@ -58,9 +84,21 @@ $m-audit: {CyberColors.MAGENTA_AUDIT};
 $t-approval: {CyberColors.TEAL_APPROVAL};
 $g-disabled: {CyberColors.GRAY_DISABLED};
 $n-pink: {CyberColors.NEON_PINK};
+$cog-opp: {CyberColors.COG_OPPORTUNITY};
+$cog-path: {CyberColors.COG_PATH};
+$cog-state: {CyberColors.COG_STATE};
+$cog-detect: {CyberColors.COG_DETECTION};
+$cog-conf: {CyberColors.COG_CONFIDENCE};
+$cog-know: {CyberColors.COG_KNOWLEDGE};
+$cog-tech: {CyberColors.COG_TECHNIQUE};
+$cog-val: {CyberColors.COG_VALIDATION};
+$cog-explain: {CyberColors.COG_EXPLAINABILITY};
+$cog-dash: {CyberColors.COG_DASHBOARD};
 $bg-void: {CyberColors.VOID_DARK};
 $bg-panel: {CyberColors.PANEL_GREY};
 $steel: {CyberColors.STEEL_BORDER};
+$text-main: {CyberColors.TEXT_MAIN};
+$text-dim: {CyberColors.TEXT_DIM};
 $text-muted: {CyberColors.TEXT_MUTED};
 $coverage-none: {CyberColors.COVERAGE_NONE};
 $coverage-low: {CyberColors.COVERAGE_LOW};
@@ -71,11 +109,11 @@ $coverage-full: {CyberColors.COVERAGE_FULL};
 /* --- GLOBAL LAYOUT --- */
 Screen {{
     background: $bg-void;
-    color: $p-green;
+    color: $text-main;
     layout: grid;
-    grid-size: 2 3;
-    grid-columns: 1fr 42; 
-    grid-rows: 3 1fr 1;
+    grid-size: 2 4;
+    grid-columns: 1fr 34;
+    grid-rows: 2 5 1fr 1;
 }}
 
 /* --- LOGIN SCREEN --- */
@@ -86,11 +124,11 @@ LoginView {{
 }}
 
 #login-container {{
-    width: 60;
+    width: 54;
     height: auto;
-    border: heavy $p-green;
-    background: #000;
-    padding: 2;
+    border: heavy $steel;
+    background: $bg-panel;
+    padding: 1;
     align: center middle;
 }}
 
@@ -106,22 +144,33 @@ LoginView {{
     width: 100%;
     margin-bottom: 1;
     border: solid $steel;
-    background: #111;
-    color: white;
+    background: #131720;
+    color: $text-main;
 }}
 
 #login-input {{
     width: 100%;
     margin-bottom: 2;
     border: solid $steel;
-    background: #111;
-    color: white;
+    background: #131720;
+    color: $text-main;
 }}
 
 #login-btn {{
-    width: 100%;
+    width: 1fr;
     border: solid $p-green;
     color: $p-green;
+}}
+
+#login-register-btn {{
+    width: 1fr;
+    border: solid $steel;
+    color: $text-main;
+}}
+
+#login-register-hint {{
+    color: $text-dim;
+    margin-top: 1;
 }}
 
 #login-status {{
@@ -138,11 +187,11 @@ RegisterView {{
 }}
 
 #register-container {{
-    width: 64;
+    width: 54;
     height: auto;
-    border: heavy $p-green;
-    background: #000;
-    padding: 2;
+    border: heavy $steel;
+    background: $bg-panel;
+    padding: 1;
     align: center middle;
 }}
 
@@ -155,9 +204,16 @@ RegisterView {{
 }}
 
 #reg-btn {{
-    width: 100%;
+    width: 1fr;
     border: solid $p-green;
     color: $p-green;
+    margin-top: 1;
+}}
+
+#reg-back-btn {{
+    width: 1fr;
+    border: solid $steel;
+    color: $text-main;
     margin-top: 1;
 }}
 
@@ -170,9 +226,9 @@ RegisterView {{
 /* --- HEADER HUD --- */
 #hud-header {{
     column-span: 2;
-    background: #000;
-    border-bottom: solid $p-green;
-    height: 3;
+    background: #151922;
+    border-bottom: solid $steel;
+    height: 2;
     layout: horizontal;
     align: center middle;
     padding: 0 1;
@@ -203,9 +259,9 @@ RegisterView {{
 /* --- LATERAL TOOLS --- */
 #lateral-tools {{
     row-span: 1;
-    background: #080808;
+    background: #151922;
     border-left: solid $steel;
-    padding: 1 2;
+    padding: 0 1;
     overflow-y: auto;
     scrollbar-gutter: stable;
 }}
@@ -213,8 +269,8 @@ RegisterView {{
 /* --- STATUS BAR --- */
 #status-bar {{
     column-span: 2;
-    background: #000;
-    color: $p-green;
+    background: #151922;
+    color: $text-main;
     border-top: solid $steel;
     content-align: left middle;
     padding-left: 1;
@@ -223,18 +279,20 @@ RegisterView {{
 /* --- WIDGET STYLING --- */
 
 TextArea {{
-    background: $bg-panel;
-    border: none;
+    background: #12161e;
+    border: solid $steel;
     padding: 0 1;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
 }}
 TextArea:focus {{
-    border-left: heavy $p-green;
+    border: heavy $p-green;
 }}
 
 Input {{
-    background: $bg-panel;
+    background: #12161e;
     border: solid $steel;
-    color: #ffffff;
+    color: $text-main;
     padding: 0 1;
     height: auto;
     margin-bottom: 1;
@@ -257,14 +315,14 @@ Input:focus {{
 Button {{
     width: 100%;
     height: 3;
-    margin-bottom: 1;
+    margin-bottom: 0;
     background: $bg-panel;
     border: solid $steel;
-    color: $steel;
+    color: $text-main;
     text-style: bold;
 }}
 Button:hover {{
-    background: $bg-panel;
+    background: #202734;
     border: heavy $e-cyan;
     color: $e-cyan;
 }}
@@ -280,8 +338,8 @@ Button:hover {{
 .info-box {{
     background: $bg-panel;
     border: solid $steel;
-    padding: 1;
-    margin-bottom: 1;
+    padding: 0;
+    margin-bottom: 0;
     text-align: center;
     color: $steel;
 }}
@@ -297,12 +355,26 @@ ListView {{
     margin-bottom: 1;
 }}
 ListItem {{ padding-left: 1; color: {CyberColors.TEXT_DIM}; }}
-ListItem:hover {{ background: #1a1a1a; color: $e-cyan; }}
+ListItem:hover {{ background: #202734; color: $e-cyan; }}
 
 .cyber-label {{
     color: $a-amber;
     text-style: bold;
-    margin-top: 1;
+    margin-top: 0;
+    margin-bottom: 0;
+}}
+
+#lateral-tools Button {{
+    margin-bottom: 0;
+    margin-top: 0;
+}}
+
+#lateral-tools Input {{
+    margin-bottom: 0;
+}}
+
+#lateral-tools .info-box {{
+    height: 3;
 }}
 
 /* --- CAMPAIGN VIEW --- */
@@ -315,7 +387,7 @@ CampaignView {{
 
 #camp-header {{
     height: auto;
-    background: #000;
+    background: #151922;
     border-bottom: solid $p-purple;
     padding: 1;
 }}
@@ -334,7 +406,7 @@ CampaignView {{
 }}
 
 .tab-btn {{
-    width: 1fr; border: none; background: #111; color: #666;
+    width: 1fr; border: none; background: #202734; color: $text-dim;
 }}
 .tab-btn:hover {{ color: white; }}
 .tab-active {{ color: $p-purple; text-style: bold; border-bottom: solid $p-purple; }}
@@ -353,7 +425,7 @@ CampaignView {{
     height: auto;
     border-top: solid $steel;
     padding: 1;
-    background: #080808;
+    background: #151922;
 }}
 
 /* --- v3.0 APPROVAL & AUDIT WORKFLOW --- */
@@ -746,5 +818,219 @@ Input.warning {{
 Input.success {{
     border: heavy $p-green;
     color: $p-green;
+}}
+
+/* --- PHASE 5.5 COGNITION ENGINE VIEWS --- */
+
+/* Opportunity View */
+OpportunitiesView {{
+    border-left: heavy $cog-opp;
+}}
+.opp-score-high {{ color: $p-green; }}
+.opp-score-med {{ color: $a-amber; }}
+.opp-score-low {{ color: $r-alert; }}
+
+/* Attack Paths View */
+AttackPathsView {{
+    border-left: heavy $cog-path;
+}}
+
+/* Campaign State View */
+CampaignStateView {{
+    border-left: heavy $cog-state;
+}}
+
+/* Detection Pressure View */
+DetectionPressureView {{
+    border-left: heavy $cog-detect;
+}}
+#pressure-gauge {{
+    background: $bg-panel;
+    border: solid $cog-detect;
+    padding: 1;
+}}
+
+/* Confidence Analysis View */
+ConfidenceAnalysisView {{
+    border-left: heavy $cog-conf;
+}}
+#conf-meter {{
+    background: $bg-panel;
+    border: solid $cog-conf;
+    padding: 1;
+}}
+
+/* Knowledge Completeness View */
+KnowledgeCompletenessView {{
+    border-left: heavy $cog-know;
+}}
+#knowledge-bar {{
+    background: $bg-panel;
+    border: solid $cog-know;
+    padding: 1;
+}}
+
+/* Technique Effectiveness View */
+TechniqueEffectivenessView {{
+    border-left: heavy $cog-tech;
+}}
+
+/* Validation Queue View */
+ValidationQueueView {{
+    border-left: heavy $cog-val;
+}}
+.val-pending {{ color: $a-amber; }}
+.val-approved {{ color: $p-green; }}
+.val-rejected {{ color: $r-alert; }}
+
+/* Explainability View */
+ExplainabilityView {{
+    border-left: heavy $cog-explain;
+}}
+#explain-text {{
+    background: $bg-panel;
+    border: solid $cog-explain;
+    padding: 1;
+}}
+
+/* Cognition Dashboard View */
+CognitionDashboardView {{
+    border-left: heavy $cog-dash;
+}}
+.dash-panel {{
+    background: $bg-panel;
+    border: solid $steel;
+    padding: 1;
+}}
+
+/* Cognition Tab Styling */
+.cog-tab {{
+    border-bottom: solid $steel;
+    color: $steel;
+}}
+.cog-tab:hover {{
+    color: $e-cyan;
+}}
+.cog-tab-active {{
+    color: $cog-dash;
+    text-style: bold;
+    border-bottom: heavy $cog-dash;
+}}
+
+/* Scoring Indicators */
+.score-excellent {{ color: $p-green; text-style: bold; }}
+.score-good {{ color: $e-cyan; }}
+.score-fair {{ color: $a-amber; }}
+.score-poor {{ color: $r-alert; }}
+
+/* Confidence Indicators */
+.conf-high {{ color: $p-green; }}
+.conf-medium {{ color: $a-amber; }}
+.conf-low {{ color: $r-alert; }}
+
+/* Path Planning Indicators */
+.path-viable {{ color: $p-green; }}
+.path-risky {{ color: $a-amber; }}
+.path-dangerous {{ color: $r-alert; }}
+
+/* ===== TAB NAVIGATION STYLING (Phase 5.5+) ===== */
+
+/* Tab Navigation Panel */
+#tab-nav-panel {{
+    column-span: 2;
+    height: 9;
+    background: $bg-panel;
+    border: solid $cog-dash;
+    border-bottom: solid $cog-dash;
+    padding: 0;
+    overflow-y: hidden;
+    overflow-x: hidden;
+}}
+
+/* Group Selector Row */
+#tab-group-selector {{
+    height: 3;
+    border-bottom: solid $steel;
+}}
+
+#tab-group-selector .tab-group-btn {{
+    width: 1fr;
+    min-width: 0;
+    height: 3;
+    margin: 0;
+    border: none;
+    border-right: solid $steel;
+    background: #141a24;
+    color: $text-main;
+    content-align: center middle;
+    text-style: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}}
+
+#tab-group-selector .tab-group-btn.active {{
+    background: $p-green;
+    color: #000000;
+    text-style: bold;
+    border-bottom: heavy $cog-dash;
+}}
+
+/* Context Tabs Row */
+.tab-row {{
+    height: 5;
+    padding: 0;
+    border-top: solid $steel;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-gutter: stable;
+}}
+
+#tab-active-caption {{
+    height: 1;
+    padding: 0 1;
+    color: $p-green;
+    background: #111621;
+    text-style: bold;
+    content-align: left middle;
+}}
+
+#tab-nav-panel .tab-view-btn {{
+    width: auto;
+    min-width: 10;
+    max-width: 18;
+    height: 5;
+    margin: 0;
+    border: none;
+    border-right: solid $steel;
+    background: $bg-panel;
+    color: $text-main;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}}
+
+#tab-nav-panel .tab-view-btn.active {{
+    background: $cog-opp;
+    border-bottom: heavy $p-green;
+    color: $text-main;
+    text-style: bold;
+}}
+
+#tab-nav-panel .tab-view-btn:hover {{
+    background: $cog-path;
+    color: $p-green;
+}}
+
+/* Tab Container */
+.tab-container {{
+    width: 100%;
+    height: auto;
+}}
+
+/* Tab Group */
+TabGroup {{
+    height: auto;
+    border: solid $steel;
+    padding: 1 0;
+    background: $bg-panel;
 }}
 """
