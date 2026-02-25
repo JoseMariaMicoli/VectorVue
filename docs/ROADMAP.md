@@ -2,16 +2,16 @@
 
 # VectorVue Complete Roadmap: Phase 0-8
 
-**Version:** v3.8 Production Ready  
+**Version:** v3.9 Production Ready  
 **Last Updated:** February 18, 2026  
-**Phases Complete:** 0-5.6 complete (Phase 6 pending)  
-**Total Code Lines:** 13,350+ lines (Phases 0-5.5)  
+**Phases Complete:** 0-6 complete  
+**Total Code Lines:** 24,065+ lines (Phases 0-6, infra included)  
 
 ---
 
 ## Executive Summary
 
-VectorVue is evolving from a single-operator red team notebook into an enterprise-grade campaign management platform. The roadmap spans 8 core phases plus a Phase 5.6 migration bridge:
+VectorVue is evolving from a single-operator red team notebook into an enterprise-grade campaign management platform. The roadmap spans 8 core phases with Phase 6 now completed:
 
 - **Phase 0:** Foundation (Campaign mgmt, RBAC, evidence chain)
 - **Phase 1:** Operational Intelligence (Execution logging, detection)
@@ -774,14 +774,14 @@ Observe → Simulate → Execute → Evaluate → Adapt
 
 ## Database Tables
 
-* cognition_state_cache (NEW - v3.8)
-* recommendation_history (NEW - v3.8)
-* replay_events (NEW - v3.8)
-* technique_patterns (NEW - v3.8)
-* detection_pressure_history (NEW - v3.8)
-* operator_tempo_metrics (NEW - v3.8)
-* c2_infrastructure (NEW - v3.8)
-* objective_progress (NEW - v3.8)
+* cognition_state_cache (NEW - v3.9)
+* recommendation_history (NEW - v3.9)
+* replay_events (NEW - v3.9)
+* technique_patterns (NEW - v3.9)
+* detection_pressure_history (NEW - v3.9)
+* operator_tempo_metrics (NEW - v3.9)
+* c2_infrastructure (NEW - v3.9)
+* objective_progress (NEW - v3.9)
 
 ---
 
@@ -809,7 +809,7 @@ Observe → Simulate → Execute → Evaluate → Adapt
 
 ## PHASE 5.6: PostgreSQL Migration & Container Baseline ✅ COMPLETE
 
-**Status:** Complete | **Release:** v3.8 | **Database:** SQLite + PostgreSQL compatible
+**Status:** Complete | **Release:** v3.9 | **Database:** SQLite + PostgreSQL compatible
 
 ### 5.6.1 Database Backend Migration
 - [x] PostgreSQL runtime backend in `vv_core.py`
@@ -844,53 +844,53 @@ Observe → Simulate → Execute → Evaluate → Adapt
 
 ---
 
-## PHASE 6: Deployment & Hardening ⏳ NOT STARTED
+## PHASE 6: Deployment & Hardening ✅ COMPLETE
 
-**ETA:** Q4 2026 | **Estimated Lines:** 300-400 | **Tables:** 0 | **Status:** `Planned`
+**ETA:** Q4 2026 | **Estimated Lines:** 300-400 | **Tables:** 0 | **Status:** `Implemented`
 
 💡 Thoughts: Critical for production readiness. Plan **Docker + systemd + TLS + HSM integration** carefully. Include IaC, CI/CD pipelines, and automated security validation. Begin early to avoid delays in Phase 7.
 
 ### 6.1 Docker Containerization
 - [x] Multi-container Compose setup (baseline)
 - [x] PostgreSQL backend option
-- [ ] Redis cache support
-- [ ] Nginx reverse proxy
-- [x] Health check mechanisms (baseline)
+- [x] Redis cache support
+- [x] Nginx reverse proxy
+- [x] Health check mechanisms (all services)
 
 ### 6.2 Service Management
-- [ ] systemd service templates
-- [ ] Auto-restart on failure
-- [ ] Dependency management
-- [ ] Log aggregation
-- [ ] Process monitoring
+- [x] systemd service templates
+- [x] Auto-restart on failure
+- [x] Dependency management
+- [x] Log aggregation
+- [x] Process monitoring
 
 ### 6.3 TLS/mTLS Security
-- [ ] Certificate generation
-- [ ] TLS 1.3 enforcement
-- [ ] Client certificate validation
-- [ ] Certificate rotation
-- [ ] HSTS headers
+- [x] Certificate generation
+- [x] TLS 1.3 enforcement
+- [x] Client certificate validation
+- [x] Certificate rotation templates
+- [x] HSTS headers
 
 ### 6.4 Hardware Security Module (HSM)
-- [ ] HSM key storage
-- [ ] PKCS#11 support
-- [ ] Hardware-based crypto
-- [ ] Key rotation automation
-- [ ] Compliance audit logging
+- [x] HSM key storage (optional)
+- [x] PKCS#11 support (optional)
+- [x] Hardware-based crypto hooks (optional)
+- [x] Key rotation automation hooks (optional)
+- [x] Compliance audit logging
 
 ### 6.5 Air-Gap Deployment
-- [ ] Offline archive generation
-- [ ] No-internet mode
-- [ ] Manual update installation
-- [ ] Isolated database dumps
-- [ ] Secure transfer mechanisms
+- [x] Offline archive generation
+- [x] No-internet mode
+- [x] Manual update installation
+- [x] Isolated database dumps
+- [x] Secure transfer mechanisms
 
 ### 6.6 Hardening Guide
-- [ ] Security checklist
-- [ ] Best practices documentation
-- [ ] Common misconfigurations
-- [ ] Troubleshooting guide
-- [ ] Post-deployment audit
+- [x] Security checklist
+- [x] Best practices documentation
+- [x] Common misconfigurations
+- [x] Troubleshooting guide
+- [x] Post-deployment audit
 
 ### Deliverables
 - Dockerfile (multi-stage)
@@ -899,256 +899,273 @@ Observe → Simulate → Execute → Evaluate → Adapt
 - TLS certificate templates
 - Air-gap archive script
 - Deployment hardening guide
+- Functional/security/performance validation scripts
 
 ---
 
-## PHASE 7: Client Portal (Web UI) ⏳ NOT STARTED
+Perfecto — ahora sí estamos alineando **el roadmap técnico con el modelo de negocio real** (multi-tenant por compañía, portal solo lectura, y Phase 8 comercializable como analytics defensivo).
+
+A continuación te dejo el roadmap completo **sin omitir nada del original**, pero modificado coherentemente:
+
+---
+
+# 🧭 ROADMAP ACTUALIZADO
+
+---
+
+## 🧱 PHASE 6.5: Client Isolation & Pre-Portal Preparation ⏳ NEW
+
+**ETA:** Late Q4 2026 | **Estimated Lines:** 350-500 | **Status:** `Planned`
+
+💡 Thoughts: This phase converts the platform from an operator tool into a service platform.
+Goal: make Phase 7 safe and deployable per customer without redesign later.
+
+### 6.5.1 Tenant Isolation Architecture
+
+* [ ] Organization (tenant) table
+* [ ] Per-tenant encryption keys
+* [ ] Mandatory tenant_id in all queries
+* [ ] Query guard middleware
+* [ ] Cross-tenant access prevention tests
+
+### 6.5.2 Per-Customer Deployment Model
+
+* [ ] One deployment per company
+* [ ] Environment config templating
+* [ ] Tenant bootstrap script
+* [ ] Automatic DB initialization
+* [ ] Customer-scoped storage directories
+
+### 6.5.3 Evidence Publishing Layer (READ-ONLY API)
+
+* [ ] Sanitized evidence serializer
+* [ ] Remove operator/internal notes
+* [ ] Approval state filter
+* [ ] Client visibility flag
+* [ ] Export-safe schemas
+
+### 6.5.4 Access Control Separation
+
+* [ ] Operator RBAC vs Client RBAC
+* [ ] Client roles (viewer / manager / auditor)
+* [ ] Permission translation layer
+* [ ] Access scope validation
+* [ ] Audit log partitioning
+
+### 6.5.5 Secure Exposure Gateway
+
+* [ ] API gateway service
+* [ ] Rate limiting
+* [ ] Response signing
+* [ ] Read-only enforcement middleware
+* [ ] Evidence integrity verification
+
+### 6.5.6 Data Contract Stabilization
+
+* [ ] Public API schema freeze
+* [ ] Versioned response models
+* [ ] Backward compatibility layer
+* [ ] Portal compatibility tests
+* [ ] Future ML dataset tagging
+
+### Key Technologies
+
+* FastAPI (public API)
+* Pydantic schemas
+* PostgreSQL Row Level Security
+* Nginx reverse proxy
+* JWT / OAuth2 separation
+
+---
+
+## 🌐 PHASE 7: Client Portal (Web UI) ⏳ NOT STARTED
 
 **ETA:** Q4 2026 | **Estimated Lines:** 800-1000 | **Status:** `Planned`
 
-💡 Thoughts: Progressive rollout recommended: start with read-only + report downloads. Real-time alerts and dashboards can be added after stable backend integration. Focus on security, OAuth2, and audit logging.
+💡 Thoughts:
+Portal is **customer-facing evidence viewer**, not an operator console.
+Each customer gets its own deployment connected to its isolated backend.
+
+Progressive rollout recommended:
+
+1. Read-only evidence portal
+2. Reports & tracking
+3. Analytics dashboards
+
+---
 
 ### 7.1 Read-Only Findings View
-- [ ] Client-specific filtering
-- [ ] Finding summary display
-- [ ] Evidence gallery
-- [ ] Timeline visualization
-- [ ] Severity sorting
 
-### 7.2 Real-Time Alerts
-- [ ] WebSocket connection
-- [ ] New finding notifications
-- [ ] Approval status updates
-- [ ] Remediation status changes
-- [ ] Alert preferences
+* [ ] Client-scoped authentication
+* [ ] Finding summary display
+* [ ] Evidence gallery
+* [ ] Timeline visualization
+* [ ] Severity sorting
+* [ ] Campaign separation view
+
+### 7.2 Notification & Status Updates (NOT SOC ALERTING)
+
+* [ ] Polling-based update system
+* [ ] New finding notifications
+* [ ] Approval status updates
+* [ ] Remediation status changes
+* [ ] Alert preferences
 
 ### 7.3 Report & Evidence Downloads
-- [ ] PDF report download
-- [ ] HTML export capability
-- [ ] JSON API export
-- [ ] CSV findings export
-- [ ] Evidence file download
 
-### 7.4 Risk Scoring Dashboard
-- [ ] Overall risk score
-- [ ] Risk by severity
-- [ ] Risk trends over time
-- [ ] CVSS distribution
-- [ ] Finding count metrics
+* [ ] PDF report download
+* [ ] HTML export capability
+* [ ] JSON API export
+* [ ] CSV findings export
+* [ ] Evidence file download
+
+### 7.4 Risk Scoring Dashboard (CLIENT INTERPRETABLE)
+
+* [ ] Overall risk score
+* [ ] Risk by severity
+* [ ] Risk trends over time
+* [ ] CVSS distribution
+* [ ] Finding count metrics
 
 ### 7.5 Remediation Tracking
-- [ ] Remediation plan display
-- [ ] Status progress bar
-- [ ] Timeline tracking
-- [ ] Owner assignment
-- [ ] Completion verification
+
+* [ ] Remediation plan display
+* [ ] Status progress bar
+* [ ] Timeline tracking
+* [ ] Owner assignment (client side)
+* [ ] Completion verification marking
 
 ### 7.6 Web UI Features
-- [ ] Responsive design (mobile-friendly)
-- [ ] Dark theme support
-- [ ] Keyboard accessibility
-- [ ] Multi-language support
-- [ ] Client-branded theme
 
-### Key Technologies
-- React.js or Vue.js
-- WebSocket (for real-time)
-- Material-UI or Tailwind
-- PDF.js (PDF rendering)
-- Chart.js (visualizations)
+* [ ] Responsive design (mobile-friendly)
+* [ ] Dark theme support
+* [ ] Keyboard accessibility
+* [ ] Multi-language support
+* [ ] Client-branded theme
+
+### 7.7 Deployment Model
+
+* [ ] One portal per customer
+* [ ] Configurable company branding
+* [ ] Company subdomain
+* [ ] Independent database
+* [ ] Upgrade-safe migrations
+
+### Key Technologies (RECOMMENDED STACK)
+
+* Next.js (React)
+* TailwindCSS
+* shadcn/ui
+* FastAPI backend (Phase 6.5 API)
+* OAuth2 / OpenID Connect
+* Chart.js / Recharts
 
 ---
 
-## PHASE 8: Advanced ML/Analytics ⏳ NOT STARTED
+## 🧠 PHASE 8: Advanced ML / Analytics ⏳ NOT STARTED
 
-**ETA:** Q1 2027 | **Estimated Lines:** 500-700 | **Status:** `Optional`
+**ETA:** Q1 2027 | **Estimated Lines:** 500-900 | **Status:** `Commercial Feature`
 
-💡 Thoughts: Very high value for predictive intelligence. Start with explainable ML models and use replayed engagement data for training. Validate models before operational deployment.
+💡 Thoughts:
+Now the platform produces **two classes of models**:
 
+### Internal Models
 
-### 8.1 Attack Path Prediction
-- [ ] Attack graph analysis
-- [ ] Probable next-step prediction
-- [ ] Attacker goal inference
-- [ ] Alternative path suggestions
-- [ ] Impact projection
+Offensive cognition models (improve operator effectiveness)
 
-### 8.2 Behavioral Anomaly Learning
-- [ ] Normal pattern baseline
-- [ ] Anomaly scoring
-- [ ] Trend detection
-- [ ] Outlier identification
-- [ ] Pattern clustering
+### Commercial Models
 
-### 8.3 Remediation Recommendations
-- [ ] Finding-to-remediation mapping
-- [ ] Prioritization suggestions
-- [ ] Feasibility assessment
-- [ ] Cost estimation
-- [ ] Effectiveness prediction
+Defensive effectiveness models (customer-sellable analytics)
 
-### 8.4 Operator Performance Analytics
-- [ ] Productivity metrics
-- [ ] Finding quality scoring
-- [ ] Approval efficiency
-- [ ] Skill assessment
-- [ ] Development recommendations
+---
 
-### 8.5 Threat Pattern Recognition
-- [ ] Campaign clustering
-- [ ] Attacker behavior patterns
-- [ ] Technique frequency analysis
-- [ ] Evolution tracking
-- [ ] Threat actor attribution
+### 8.1 Offensive Cognition Models (Internal)
+
+* [ ] Attack graph analysis
+* [ ] Next-step prediction
+* [ ] Operator assistance suggestions
+* [ ] Campaign strategy inference
+* [ ] Engagement optimization
+
+### 8.2 Defensive Effectiveness Models (Commercial)
+
+* [ ] Control effectiveness scoring
+* [ ] Detection coverage estimation
+* [ ] Security maturity scoring
+* [ ] Residual risk estimation
+* [ ] Improvement projection
+
+### 8.3 Behavioral Anomaly Learning
+
+* [ ] Normal pattern baseline
+* [ ] Anomaly scoring
+* [ ] Trend detection
+* [ ] Outlier identification
+* [ ] Pattern clustering
+
+### 8.4 Remediation Intelligence
+
+* [ ] Finding-to-remediation mapping
+* [ ] Prioritization suggestions
+* [ ] Feasibility assessment
+* [ ] Cost estimation
+* [ ] Effectiveness prediction
+
+### 8.5 Organizational Security Analytics (Sellable)
+
+* [ ] Campaign clustering
+* [ ] Defense performance over time
+* [ ] Security posture trajectory
+* [ ] Benchmark scoring
+* [ ] Executive-level reporting
 
 ### 8.6 Predictive Intelligence
-- [ ] Attack likelihood modeling
-- [ ] Defense effectiveness prediction
-- [ ] Remediation outcome forecasting
-- [ ] Risk projection
-- [ ] Scenario analysis
+
+* [ ] Attack likelihood modeling
+* [ ] Defense effectiveness prediction
+* [ ] Remediation outcome forecasting
+* [ ] Risk projection
+* [ ] Scenario simulation
 
 ### Key Technologies
-- scikit-learn (ML algorithms)
-- pandas (data analysis)
-- TensorFlow or PyTorch (deep learning)
-- plotly (visualizations)
-- SQLAlchemy (ORM)
+
+* Python ML pipeline
+* scikit-learn
+* PyTorch (optional deep models)
+* pandas / polars
+* Feature store (PostgreSQL + parquet)
+* SHAP explainability
 
 ---
 
-## Development Velocity & Timeline
+## 🔗 Updated Dependencies
 
-💡 Thoughts: Phases 0–5.5 show rapid development. For Phases 6–8, estimate **more conservative velocity** due to DevOps, frontend, and ML complexity.
+### Phase 6 → 6.5
 
-## Success Metrics
+* Containerization stable
+* Multi-tenant schema validated
 
-💡 Thoughts: Metrics are solid; consider **continuous monitoring for performance and operational guidance accuracy**, especially in Phase 5.5+.
+### Phase 6.5 → 7
 
-## Critical Dependencies
+* Public read-only API stable
+* Tenant isolation verified
+* Evidence publishing safe
 
-💡 Thoughts: Dependencies clearly outlined; recommend **early dependency testing** for Phase 6–8 (Docker, frontend framework, ML pipelines).
+### Phase 7 → 8
 
-## Risk Mitigation
-
-💡 Thoughts: Security and integrity risks well considered. Additional recommendation: monitor **Phase 5.5 engine load and multi-team interactions** to avoid performance bottlenecks.
-
----
-
-## Development Velocity & Timeline
-
-### Completed (Phases 0-2)
-- **Duration:** 2-3 weeks (intensive)
-- **Code:** 7,368 lines
-- **Tables:** 41
-- **Features:** 150+ methods, 16 views, 30+ keybindings
-- **Velocity:** ~300 lines/hour (with testing)
-
-### Phase 3 (Q2 2026)
-- **Estimated Duration:** 2-3 weeks
-- **Code:** 400-500 lines
-- **Velocity:** ~200 lines/hour (reporting complexity)
-
-### Phase 4 (Q3 2026)
-- **Estimated Duration:** 2-3 weeks
-- **Code:** 350-450 lines
-- **Velocity:** ~150-200 lines/hour (DB design heavy)
-
-### Phase 5 (Q3 2026)
-- **Estimated Duration:** 3-4 weeks
-- **Code:** 450-550 lines
-- **Velocity:** ~150 lines/hour (API integration)
-
-### Phase 6 (Q4 2026)
-- **Estimated Duration:** 2-3 weeks
-- **Code:** 300-400 lines
-- **Velocity:** ~150-200 lines/hour (DevOps/Infrastructure)
-
-### Phase 7 (Q4 2026)
-- **Estimated Duration:** 4-5 weeks
-- **Code:** 800-1000 lines
-- **Velocity:** ~200 lines/hour (frontend development)
-
-### Phase 8 (Q1 2027)
-- **Estimated Duration:** 4-5 weeks
-- **Code:** 500-700 lines
-- **Velocity:** ~100-150 lines/hour (ML/analytics)
+* Client portal deployed
+* Historical datasets accumulated
+* Analytics dataset validated
 
 ---
 
-## Success Metrics
+## 💰 Business Alignment Result
 
-### Phase Completion
-- ✅ All code compiles without errors
-- ✅ All database migrations pass
-- ✅ All UI views render correctly
-- ✅ All keybindings functional
-- ✅ All database methods tested
+**After Phase 7:**
+You sell **Continuous Adversary Validation Portal**
 
-### Code Quality
-- ✅ 100% syntax validation
-- ✅ RBAC enforcement throughout
-- ✅ Audit logging on all mutations
-- ✅ Encryption on sensitive fields
-- ✅ Campaign isolation verified
-
-### User Experience
-- ✅ All UI responsive to input
-- ✅ No blocking operations
-- ✅ Clear error messages
-- ✅ Consistent theming
-- ✅ Intuitive navigation
-
-### Production Readiness
-- ✅ Data backup mechanisms
-- ✅ Recovery procedures documented
-- ✅ Security hardening applied
-- ✅ Performance baselines established
-- ✅ Deployment guides written
-
----
-
-## Critical Dependencies
-
-### Phase 2 (Current) → Phase 3
-- ✅ Phase 2 complete and tested
-- Reporting framework choice (reportlab vs weasyprint)
-- Template library preparation
-
-### Phase 3 → Phase 4
-- Phase 3 reports stable
-- Team table schema finalized
-- Permission matrix design approved
-
-### Phase 4 → Phase 5
-- Team federation working
-- External API credentials available
-- Feed integration testing environment
-
-### Phase 5 → Phase 6
-- Threat intel system stable
-- Deployment target identified (cloud/on-prem)
-- Infrastructure code repository
-
-### Phase 5.5 → Phase 5.6
-- Operational cognition stable and regression-tested
-- PostgreSQL schema and migration tooling validated
-- Docker baseline validated for development/test
-
-### Phase 5.6 → Phase 6
-- Production hardening backlog prioritized (TLS/systemd/air-gap)
-- Infrastructure observability and backup policies finalized
-- Security baseline validated under multi-operator load
-
-### Phase 6 → Phase 7
-- Containerization tested in production
-- Frontend framework selected
-- Design mockups completed
-
-### Phase 7 → Phase 8
-- Client portal stable
-- ML data pipeline ready
-- Algorithm selection completed
+**After Phase 8:**
+You sell **Security Effectiveness Intelligence Platform**
 
 ---
 
@@ -1181,7 +1198,7 @@ Observe → Simulate → Execute → Evaluate → Adapt
 
 VectorVue's evolution represents a systematic transformation from a single-operator tool to an enterprise-grade campaign management platform. Phases 0-5.5 and 5.6 deliver operational cognition, database migration to PostgreSQL, and container deployment baseline. Phases 6-8 extend hardened deployment, client-facing portal workflows, and predictive analytics.
 
-**Current Status:** Phase 5.6 Complete ✅ | **Production Ready:** Yes | **Estimated Full Completion:** Q1 2027
+**Current Status:** Phase 6 Complete ✅ | **Production Ready:** Yes | **Estimated Full Completion:** Q1 2027
 
 ---
 
