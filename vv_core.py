@@ -1,3 +1,17 @@
+"""
+Copyright (c) 2026 José María Micoli
+Licensed under {'license_type': 'Apache-2.0'}
+
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Offer as a commercial service
+✘ Sell derived competing products
+"""
+
 import sqlite3
 import math
 import os
@@ -64,6 +78,23 @@ class Role:
     ADMIN    = "admin"
 
 ROLE_HIERARCHY = {Role.VIEWER: 0, Role.OPERATOR: 1, Role.LEAD: 2, Role.ADMIN: 3}
+
+CAPABILITY_PROFILES = {
+    "read-only": "Read-only triage and evidence review.",
+    "operator-core": "Campaign operations, findings, and execution views.",
+    "lead-ops": "Operator capabilities plus campaign leadership controls.",
+    "admin-full": "Full administrative access, governance, and platform controls.",
+}
+
+
+def default_capability_profile_for_role(role: str) -> str:
+    if role == Role.ADMIN:
+        return "admin-full"
+    if role == Role.LEAD:
+        return "lead-ops"
+    if role == Role.OPERATOR:
+        return "operator-core"
+    return "read-only"
 
 def role_gte(role: str, minimum: str) -> bool:
     return ROLE_HIERARCHY.get(role, 0) >= ROLE_HIERARCHY.get(minimum, 99)
@@ -861,6 +892,11 @@ class Database:
             group_id      INTEGER REFERENCES groups(id),
             created_at    TEXT NOT NULL,
             last_login    TEXT DEFAULT '')''')
+        c.execute('''CREATE TABLE IF NOT EXISTS user_capabilities (
+            user_id             INTEGER PRIMARY KEY REFERENCES users(id),
+            capability_profile  TEXT NOT NULL DEFAULT 'operator-core',
+            updated_at          TEXT NOT NULL,
+            updated_by          TEXT NOT NULL)''')
         c.execute('''CREATE TABLE IF NOT EXISTS sessions (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id       INTEGER NOT NULL REFERENCES users(id),
@@ -1887,6 +1923,12 @@ class Database:
         try:
             c.execute("INSERT INTO users (username, password_hash, salt, role, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                       (username, pw_hash, salt_b64, role, group_id, now))
+            user_id = c.lastrowid
+            c.execute(
+                """INSERT INTO user_capabilities (user_id, capability_profile, updated_at, updated_by)
+                   VALUES (?, ?, ?, ?)""",
+                (user_id, default_capability_profile_for_role(role), now, "SYSTEM"),
+            )
             self.conn.commit()
             self._audit("SYSTEM", "REGISTER", "user", username)
             return True, f"User '{username}' registered as {role}."
@@ -1972,9 +2014,63 @@ class Database:
             return False, "Invalid role."
         c = self.conn.cursor()
         c.execute("UPDATE users SET role=? WHERE username=?", (new_role, username))
+        c.execute("SELECT id FROM users WHERE username=?", (username,))
+        row = c.fetchone()
+        if row:
+            now = datetime.utcnow().isoformat()
+            c.execute(
+                """INSERT OR IGNORE INTO user_capabilities (user_id, capability_profile, updated_at, updated_by)
+                   VALUES (?, ?, ?, ?)""",
+                (row["id"], default_capability_profile_for_role(new_role), now, self.current_user.username),
+            )
         self.conn.commit()
         self._audit(self.current_user.username, "SET_ROLE", "user", username, new_value=new_role)
         return True, "Role updated."
+
+    def list_user_access(self) -> list:
+        """List users with role and capability profile (admin only)."""
+        self._require_role(Role.ADMIN)
+        c = self.conn.cursor()
+        c.execute("""
+            SELECT u.id, u.username, u.role, u.last_login, uc.capability_profile
+            FROM users u
+            LEFT JOIN user_capabilities uc ON uc.user_id = u.id
+            ORDER BY u.created_at
+        """)
+        rows = []
+        for row in c.fetchall():
+            rows.append({
+                "id": row["id"],
+                "username": row["username"],
+                "role": row["role"],
+                "capability_profile": row["capability_profile"] or default_capability_profile_for_role(row["role"]),
+                "last_login": row["last_login"] or "",
+            })
+        return rows
+
+    def set_user_capability_profile(self, username: str, profile: str) -> Tuple[bool, str]:
+        """Set capability profile for a user (admin only)."""
+        self._require_role(Role.ADMIN)
+        if profile not in CAPABILITY_PROFILES:
+            return False, "Invalid capability profile."
+        c = self.conn.cursor()
+        c.execute("SELECT id FROM users WHERE username=?", (username,))
+        row = c.fetchone()
+        if not row:
+            return False, f"User '{username}' not found."
+        now = datetime.utcnow().isoformat()
+        c.execute(
+            """INSERT INTO user_capabilities (user_id, capability_profile, updated_at, updated_by)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                 capability_profile=excluded.capability_profile,
+                 updated_at=excluded.updated_at,
+                 updated_by=excluded.updated_by""",
+            (row["id"], profile, now, self.current_user.username),
+        )
+        self.conn.commit()
+        self._audit(self.current_user.username, "SET_CAPABILITY", "user", username, new_value=profile)
+        return True, "Capability profile updated."
 
     # -------------------------------------------------------------------------
     # GROUP MANAGEMENT
@@ -6375,6 +6471,108 @@ class Database:
             c.execute("CREATE INDEX IF NOT EXISTS idx_intelligence_archive_actor ON intelligence_archive(actor_id)")
         except Exception:
             pass
+
+        # --- v3.8 PHASE 5.5 COGNITION PERSISTENCE ---
+        c.execute('''CREATE TABLE IF NOT EXISTS cognition_state_cache (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL UNIQUE REFERENCES campaigns(id),
+            snapshot_json   TEXT NOT NULL,
+            detection_pressure REAL DEFAULT 0.0,
+            pressure_state  TEXT DEFAULT 'LOW',
+            infra_burn      TEXT DEFAULT 'fresh',
+            confidence_score REAL DEFAULT 0.0,
+            updated_at      TEXT NOT NULL,
+            updated_by      INTEGER REFERENCES users(id))''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS recommendation_history (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL REFERENCES campaigns(id),
+            opportunity_id  TEXT NOT NULL,
+            action          TEXT NOT NULL,
+            technique       TEXT DEFAULT '',
+            target_asset    TEXT DEFAULT '',
+            score           REAL DEFAULT 0.0,
+            stealth         REAL DEFAULT 0.0,
+            value           REAL DEFAULT 0.0,
+            risk            REAL DEFAULT 0.0,
+            confidence      REAL DEFAULT 0.0,
+            explanation     TEXT DEFAULT '',
+            safer_alternative TEXT DEFAULT '',
+            created_at      TEXT NOT NULL,
+            created_by      INTEGER REFERENCES users(id))''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS replay_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL REFERENCES campaigns(id),
+            event_type      TEXT NOT NULL,
+            event_time      TEXT NOT NULL,
+            operator        TEXT DEFAULT 'SYSTEM',
+            asset_id        INTEGER,
+            technique       TEXT DEFAULT '',
+            success         INTEGER DEFAULT 1,
+            summary         TEXT DEFAULT '',
+            details_json    TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS technique_patterns (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL REFERENCES campaigns(id),
+            technique       TEXT NOT NULL,
+            asset_type      TEXT DEFAULT 'unknown',
+            executions      INTEGER DEFAULT 0,
+            successes       INTEGER DEFAULT 0,
+            failures        INTEGER DEFAULT 0,
+            avg_time_to_compromise REAL DEFAULT 0.0,
+            last_seen       TEXT NOT NULL,
+            confidence      REAL DEFAULT 0.5,
+            UNIQUE(campaign_id, technique, asset_type))''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS detection_pressure_history (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL REFERENCES campaigns(id),
+            recorded_at     TEXT NOT NULL,
+            total_pressure  REAL DEFAULT 0.0,
+            pressure_state  TEXT DEFAULT 'LOW',
+            recent_alerts   INTEGER DEFAULT 0,
+            repetition_penalty REAL DEFAULT 0.0,
+            failed_actions  INTEGER DEFAULT 0,
+            pressure_trend  TEXT DEFAULT 'stable')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS operator_tempo_metrics (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL REFERENCES campaigns(id),
+            operator_id     INTEGER REFERENCES users(id),
+            recorded_at     TEXT NOT NULL,
+            actions_per_hour REAL DEFAULT 0.0,
+            action_intensity TEXT DEFAULT 'normal',
+            spike_detected  INTEGER DEFAULT 0,
+            suggested_slow_window TEXT DEFAULT '',
+            staging_recommendation TEXT DEFAULT '')''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS c2_infrastructure (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL REFERENCES campaigns(id),
+            node_name       TEXT NOT NULL,
+            node_type       TEXT DEFAULT 'listener',
+            exposure_score  REAL DEFAULT 0.0,
+            reputation_score REAL DEFAULT 0.0,
+            burn_probability REAL DEFAULT 0.0,
+            burn_level      TEXT DEFAULT 'fresh',
+            should_rotate   INTEGER DEFAULT 0,
+            last_rotated    TEXT,
+            notes           TEXT DEFAULT '',
+            updated_at      TEXT NOT NULL,
+            UNIQUE(campaign_id, node_name))''')
+
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_cognition_state_cache_campaign ON cognition_state_cache(campaign_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_history_campaign ON recommendation_history(campaign_id, created_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_replay_events_campaign ON replay_events(campaign_id, event_time)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_technique_patterns_campaign ON technique_patterns(campaign_id, technique)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_detection_pressure_history_campaign ON detection_pressure_history(campaign_id, recorded_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_operator_tempo_metrics_campaign ON operator_tempo_metrics(campaign_id, recorded_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_c2_infrastructure_campaign ON c2_infrastructure(campaign_id, node_name)")
+        except Exception:
+            pass
         
         self.conn.commit()
 
@@ -6740,6 +6938,167 @@ class Database:
         })
         
         return "\n".join(report)
+
+    # ==================== v3.8 PHASE 5.5 COGNITION PERSISTENCE ====================
+
+    def get_campaign(self, campaign_id: int) -> Dict[str, Any]:
+        """Return campaign context used by cognition services."""
+        c = self.conn.cursor()
+        c.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,))
+        row = c.fetchone()
+        if not row:
+            return {}
+
+        c.execute("SELECT COUNT(*) AS n FROM assets WHERE campaign_id=?", (campaign_id,))
+        assets_owned = c.fetchone()["n"]
+        c.execute("SELECT COUNT(*) AS n FROM credentials WHERE campaign_id=?", (campaign_id,))
+        creds = c.fetchone()["n"]
+        c.execute("SELECT COUNT(*) AS n FROM detection_events WHERE campaign_id=?", (campaign_id,))
+        detections = c.fetchone()["n"]
+
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "project_id": row["project_id"],
+            "status": row["status"],
+            "assets_owned": assets_owned,
+            "credentials_obtained": creds,
+            "detections": detections,
+        }
+
+    def save_opportunity(self, campaign_id: int, opp: Dict[str, Any]) -> int:
+        """Persist scored opportunity snapshot."""
+        self._require_role(Role.OPERATOR)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        action = opp.get("action") or opp.get("technique", "UNKNOWN")
+        opportunity_id = str(opp.get("id") or f"opp-{hash(action) & 0xfffffff}")
+        c.execute(
+            """INSERT INTO recommendation_history
+               (campaign_id, opportunity_id, action, technique, target_asset, score, stealth, value, risk, confidence, explanation, safer_alternative, created_at, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                campaign_id,
+                opportunity_id,
+                action,
+                str(opp.get("technique", "")),
+                str(opp.get("target_asset", "")),
+                float(opp.get("score", 0.0)),
+                float(opp.get("stealth", 0.0)),
+                float(opp.get("value", 0.0)),
+                float(opp.get("risk", 0.0)),
+                float(opp.get("confidence", 0.0)),
+                str(opp.get("explanation", "")),
+                str(opp.get("safer_alternative", "")),
+                ts,
+                self.current_user.id if self.current_user else None,
+            ),
+        )
+        self.conn.commit()
+        return c.lastrowid
+
+    def save_attack_path(self, campaign_id: int, path: Dict[str, Any]) -> int:
+        """Persist generated attack path as replay event."""
+        self._require_role(Role.OPERATOR)
+        c = self.conn.cursor()
+        ts = datetime.utcnow().isoformat() + "Z"
+        summary = f"Path to {path.get('objective', 'objective')} ({len(path.get('steps', []))} steps)"
+        c.execute(
+            """INSERT INTO replay_events
+               (campaign_id, event_type, event_time, operator, asset_id, technique, success, summary, details_json)
+               VALUES (?, 'attack_path', ?, ?, ?, ?, 1, ?, ?)""",
+            (
+                campaign_id,
+                ts,
+                self.current_user.username if self.current_user else "SYSTEM",
+                None,
+                "",
+                summary,
+                json.dumps(path, default=str),
+            ),
+        )
+        self.conn.commit()
+        return c.lastrowid
+
+    def get_opportunity(self, campaign_id: int, opportunity_id: str) -> Dict[str, Any]:
+        """Fetch persisted opportunity by id."""
+        c = self.conn.cursor()
+        c.execute(
+            """SELECT * FROM recommendation_history
+               WHERE campaign_id=? AND opportunity_id=?
+               ORDER BY created_at DESC LIMIT 1""",
+            (campaign_id, opportunity_id),
+        )
+        row = c.fetchone()
+        return dict(row) if row else {}
+
+    def save_learning(self, campaign_id: int, learning: Dict[str, Any]) -> bool:
+        """Persist technique learning and success trends."""
+        self._require_role(Role.OPERATOR)
+        technique = str(learning.get("technique", "UNKNOWN"))
+        succeeded = bool(learning.get("succeeded", False))
+        asset_type = str(learning.get("asset_type", "unknown"))
+        ts = datetime.utcnow().isoformat() + "Z"
+        c = self.conn.cursor()
+        c.execute(
+            """INSERT INTO technique_patterns
+               (campaign_id, technique, asset_type, executions, successes, failures, avg_time_to_compromise, last_seen, confidence)
+               VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)
+               ON CONFLICT(campaign_id, technique, asset_type) DO UPDATE SET
+                    executions = executions + 1,
+                    successes = successes + excluded.successes,
+                    failures = failures + excluded.failures,
+                    last_seen = excluded.last_seen,
+                    confidence = MIN(0.99, confidence + 0.02)""",
+            (
+                campaign_id,
+                technique,
+                asset_type,
+                1 if succeeded else 0,
+                0 if succeeded else 1,
+                float(learning.get("time_to_compromise", 0.0)),
+                ts,
+                float(learning.get("confidence", 0.6)),
+            ),
+        )
+        self.conn.commit()
+        return True
+
+    def save_detection(self, campaign_id: int, detection: Dict[str, Any]) -> bool:
+        """Persist detection pressure snapshot + replay marker."""
+        self._require_role(Role.OPERATOR)
+        ts = datetime.utcnow().isoformat() + "Z"
+        severity = int(detection.get("severity", 1))
+        total_pressure = min(100.0, severity * 12.5)
+        pressure_state = (
+            "CRITICAL" if total_pressure >= 80 else
+            "HIGH" if total_pressure >= 60 else
+            "ELEVATED" if total_pressure >= 40 else
+            "LOW"
+        )
+        c = self.conn.cursor()
+        c.execute(
+            """INSERT INTO detection_pressure_history
+               (campaign_id, recorded_at, total_pressure, pressure_state, recent_alerts, repetition_penalty, failed_actions, pressure_trend)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (campaign_id, ts, total_pressure, pressure_state, 1, 0.0, 0, "increasing"),
+        )
+        c.execute(
+            """INSERT INTO replay_events
+               (campaign_id, event_type, event_time, operator, asset_id, technique, success, summary, details_json)
+               VALUES (?, 'detection', ?, ?, ?, ?, 1, ?, ?)""",
+            (
+                campaign_id,
+                ts,
+                self.current_user.username if self.current_user else "SYSTEM",
+                detection.get("asset_id"),
+                "",
+                f"Detection: {detection.get('type', 'event')}",
+                json.dumps(detection, default=str),
+            ),
+        )
+        self.conn.commit()
+        return True
 
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID (helper for various lookups)."""
