@@ -3,7 +3,7 @@
 """
 VectorVue Tab Navigation System - Operator Guide
 
-Version: v3.8+
+Version: v3.9+
 Phase: 5.5 UI Enhancement
 
 The visual tab system provides three ways to navigate between views:

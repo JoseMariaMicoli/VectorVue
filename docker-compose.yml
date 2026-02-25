@@ -11,44 +11,142 @@
 # ✘ Sell derived competing products
 
 services:
+  vectorvue_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vectorvue:phase6
+    container_name: vectorvue_app
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: vectorvue
+      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_DB: vectorvue_db
+      VV_DB_BACKEND: postgres
+      VV_DB_HOST: postgres
+      VV_DB_PORT: "5432"
+      VV_DB_NAME: vectorvue_db
+      VV_DB_USER: vectorvue
+      VV_DB_PASSWORD: strongpassword
+      VV_DB_URL: postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
+      VV_REDIS_HOST: redis
+      VV_REDIS_PORT: "6379"
+      VV_REDIS_PASSWORD: strongpassword
+      VV_HEALTH_PORT: "8080"
+      VV_RUN_MODE: service
+      VV_REPORTS_DIR: /var/lib/vectorvue/reports
+      VV_LOG_DIR: /var/lib/vectorvue/logs
+      TERM: xterm-256color
+      COLORTERM: truecolor
+      FORCE_COLOR: "1"
+    volumes:
+      - vectorvue_reports:/var/lib/vectorvue/reports
+      - vectorvue_logs:/var/lib/vectorvue/logs
+      - vectorvue_runtime:/var/lib/vectorvue/run
+      - vectorvue_tmp:/var/lib/vectorvue/tmp
+      - vectorvue_config:/opt/vectorvue/config
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /run:size=16m,nosuid,nodev
+    tty: true
+    stdin_open: true
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   postgres:
     image: postgres:16
+    container_name: vectorvue_postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: vectorvue
       POSTGRES_USER: vectorvue
-      POSTGRES_PASSWORD: vectorvue
+      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_DB: vectorvue_db
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     ports:
       - "5433:5432"
     volumes:
       - vectorvue_pg_data:/var/lib/postgresql/data
+      - ./deploy/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./deploy/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./deploy/certs:/var/lib/postgresql/certs:ro
+      - vectorvue_logs:/var/log/vectorvue
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vectorvue -d vectorvue"]
+      test: ["CMD-SHELL", "pg_isready -U vectorvue -d vectorvue_db"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
-  vectorvue:
-    build: .
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      VV_DB_BACKEND: postgres
-      VV_DB_HOST: postgres
-      VV_DB_PORT: "5432"
-      VV_DB_NAME: vectorvue
-      VV_DB_USER: vectorvue
-      VV_DB_PASSWORD: vectorvue
-      VV_DB_URL: postgresql://vectorvue:vectorvue@postgres:5432/vectorvue
-    tty: true
-    stdin_open: true
+  redis:
+    image: redis:7-alpine
+    container_name: vectorvue_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000", "--requirepass", "strongpassword"]
     volumes:
-      - ./:/app
+      - vectorvue_redis_data:/data
+      - vectorvue_logs:/var/log/vectorvue
     healthcheck:
-      test: ["CMD-SHELL", "python -m py_compile vv.py vv_core.py >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "redis-cli -a strongpassword ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: vectorvue_nginx
+    restart: unless-stopped
+    depends_on:
+      vectorvue_app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+      - vectorvue_logs:/var/log/vectorvue
+    tmpfs:
+      - /var/cache/nginx:size=64m,nosuid,nodev
+      - /var/run:size=16m,nosuid,nodev
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/healthz | grep -q healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
 
 volumes:
   vectorvue_pg_data:
+  vectorvue_redis_data:
+  vectorvue_reports:
+  vectorvue_logs:
+  vectorvue_runtime:
+  vectorvue_tmp:
+  vectorvue_config:
