@@ -1,23 +1,39 @@
-# Getting Started with VectorVue v3.7 
 
-![Setup](https://img.shields.io/badge/Setup-v3.7_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_5/8_Complete-00FFFF?style=flat-square) ![Features](https://img.shields.io/badge/Features-72_Tables_200%2B_Methods-39FF14)
+/*
+Copyright (c) 2026 José María Micoli
+Licensed under Apache-2.0
 
-This guide covers deployment of **VectorVue v3.7**, the complete Red Team Campaign Management Platform with Phases 0-5 implemented: campaign management, RBAC, evidence chain of custody, operational intelligence, advanced runtime features, reporting & export, multi-team federation, and advanced threat intelligence. Follow these steps to get operationally ready.
+You may:
+✔ Study
+✔ Modify
+✔ Use for internal security testing
+
+You may NOT:
+✘ Remove copyright notices
+*/
+
+# Getting Started with VectorVue v3.8
+
+![Setup](https://img.shields.io/badge/Setup-v3.8_Production_Ready-39FF14?style=flat-square) ![Status](https://img.shields.io/badge/Status-Phase_5.5_Complete-39FF14?style=flat-square) ![Cognition](https://img.shields.io/badge/Cognition-Operational-39FF14?style=flat-square) ![Features](https://img.shields.io/badge/Features-78_Tables_250%2B_Methods-39FF14)
+
+This guide covers deployment of **VectorVue v3.8**, the complete Red Team Campaign Management Platform with Phases 0-5 and Phase 5.5 (Operational Cognition) implemented: campaign management, RBAC, evidence chain of custody, operational intelligence, operational cognition decision-support, reporting & export, multi-team federation, and advanced threat intelligence. Follow these steps to get operationally ready.
 
 ---
 
-## 🎯 What is VectorVue v3.7?
+## 🎯 What is VectorVue v3.8?
 
 VectorVue is a terminal-based (TUI) platform for red team operators to:
 - **Manage campaigns** with client context, ROE, objectives, and team assignments
 - **Document findings** with CVSS scoring, MITRE ATT&CK mapping, approval workflows
 - **Track operations** including command execution, active sessions, persistence, detections
+- **Support decisions** with deterministic analysis, risk scoring, and explainable recommendations (Phase 5.5)
 - **Correlate intelligence** with threat feeds, threat actors, IoCs, enrichment data
 - **Generate reports** in multiple formats with evidence manifests and compliance mapping
 - **Coordinate teams** with role-based access, shared pools, performance tracking
 - **Analyze threats** with automated risk scoring, behavioral analytics, defense prediction
+- **Make better decisions** with operational cognition: pathfinding, objective tracking, detection pressure, confidence scoring (Phase 5.5)
 
-**New in v3.7:** Advanced threat intelligence (Phase 5) - feed ingestion, threat actor profiling, IoC management, correlation engine, automated risk scoring.
+**New in v3.8:** Operational Cognition (Phase 5.5) - Attack graph pathfinding, objective distance, recommendation scoring, detection pressure tracking, OpSec simulation, event replay, operator tempo analysis, infrastructure burn tracking, confidence analysis, and pattern learning.
 
 ---
 
@@ -341,7 +357,7 @@ VectorVue has **4 role levels** with increasing privileges:
 3. Select format: PDF or HTML
 4. Add executive summary
 5. Click **GENERATE REPORT**
-6. Report saved to `05-Delivery/` directory
+6. Report saved to `Reports/` directory
 
 ---
 
