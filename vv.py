@@ -7,7 +7,7 @@ import logging
 
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
 from textual.widgets import (
     ListView, ListItem, Label, Input,
     TextArea, Button, Static, ContentSwitcher, DataTable, TabbedContent, TabPane, Select
@@ -586,31 +586,6 @@ class PostEngagementAnalysisView(Container):
         ttp_report = app.db.get_ttp_effectiveness_report(campaign_id)
         table.add_row("Total Techniques", str(ttp_report.get("total_techniques_executed", 0)), "")
         table.add_row("Avg Effectiveness", f"{ttp_report.get('average_effectiveness', 0):.1f}%", "")
-
-class ThreatIntelligenceView(Container):
-    CSS = """
-    #intel-controls Button { margin: 0 1; margin-bottom: 1; }
-    """
-    def compose(self) -> ComposeResult:
-        yield Label("[bold magenta]THREAT INTELLIGENCE FUSION[/]", classes="reg-title")
-        with Horizontal(id="intel-controls"):
-            yield Button("CORRELATE INDICATOR", id="btn-intel-corr", variant="primary")
-            yield Button("REFRESH", id="btn-intel-refresh", variant="primary")
-        yield VimDataTable(id="table-intel", cursor_type="row")
-
-    def on_mount(self):
-        table = self.query_one("#table-intel")
-        table.add_columns("Indicator", "Type", "Threat Level", "Matched", "Feed")
-
-    def refresh_intelligence(self, app, campaign_id):
-        if not campaign_id: return
-        table = self.query_one("#table-intel")
-        table.clear()
-        intel = app.db.get_correlated_intelligence(campaign_id)
-        for ind in intel:
-            table.add_row(ind.get("indicator_value", "")[:30], ind.get("indicator_type", ""),
-                         ind.get("threat_level", ""), ind.get("matched_at", "")[:19],
-                         ind.get("feed_name", "-"))
 
 class RemediationTrackingView(Container):
     CSS = """
@@ -1322,6 +1297,154 @@ class TeamManagementView(Container):
         status.styles.color = color
 
 # =============================================================================
+# PHASE 5: THREAT INTELLIGENCE VIEW
+# =============================================================================
+
+class ThreatIntelligenceView(Container):
+    """Phase 5: Advanced Threat Intelligence - Feed Ingestion, Correlation, Risk Scoring"""
+    
+    CSS = """
+    ThreatIntelligenceView { align: left top; background: $bg-void; color: $p-green; }
+    ThreatIntelligenceView #threat-title { color: $n-pink; text-style: bold; height: 3; }
+    ThreatIntelligenceView #threat-container { height: 1fr; }
+    ThreatIntelligenceView #threat-content { height: 1fr; }
+    ThreatIntelligenceView .section-label { color: $n-pink; text-style: bold; margin-top: 1; margin-bottom: 1; }
+    ThreatIntelligenceView #btn-add-feed {{ border: solid $n-pink; color: $n-pink; }}
+    ThreatIntelligenceView #btn-add-feed:hover {{ background: $n-pink; color: white; }}
+    ThreatIntelligenceView #btn-create-actor {{ border: solid $n-pink; color: $n-pink; }}
+    ThreatIntelligenceView #btn-create-actor:hover {{ background: $n-pink; color: white; }}
+    ThreatIntelligenceView #btn-ingest-ioc {{ border: solid $n-pink; color: $n-pink; }}
+    ThreatIntelligenceView #btn-ingest-ioc:hover {{ background: $n-pink; color: white; }}
+    ThreatIntelligenceView #table-threat-feeds {{ height: 8; }}
+    ThreatIntelligenceView #table-threat-actors {{ height: 8; }}
+    ThreatIntelligenceView #table-iocs {{ height: 10; }}
+    ThreatIntelligenceView #table-risk-scores {{ height: 8; }}
+    ThreatIntelligenceView #status-threat {{ color: $p-green; height: 1; }}
+    """
+    
+    def compose(self):
+        yield Label("🔗 THREAT INTELLIGENCE & IOC MANAGEMENT", id="threat-title")
+        
+        with ScrollableContainer(id="threat-container"):
+            with Container(id="threat-content"):
+                # Section 1: Threat Feeds
+                yield Label("📡 External Threat Feeds", classes="section-label")
+                yield Button("Add Feed (VirusTotal/Shodan/OTX/MISP)", id="btn-add-feed", variant="primary")
+                yield VimDataTable(
+                    id="table-threat-feeds",
+                    cursor_type="row"
+                )
+                
+                # Section 2: Threat Actors
+                yield Label("👥 Threat Actor Profiles", classes="section-label")
+                yield Button("Create Threat Actor Profile", id="btn-create-actor", variant="primary")
+                yield VimDataTable(
+                    id="table-threat-actors",
+                    cursor_type="row"
+                )
+                
+                # Section 3: Indicators of Compromise (IoCs)
+                yield Label("🎯 Indicators of Compromise", classes="section-label")
+                yield Button("Ingest IoC (IP/Domain/Hash/Email)", id="btn-ingest-ioc", variant="primary")
+                yield VimDataTable(
+                    id="table-iocs",
+                    cursor_type="row"
+                )
+                
+                # Section 4: Risk Assessment
+                yield Label("⚠️ Risk Scores & Threats", classes="section-label")
+                yield VimDataTable(
+                    id="table-risk-scores",
+                    cursor_type="row"
+                )
+                
+        yield Static(id="status-threat")
+    
+    def on_mount(self):
+        """Initialize threat intelligence tables."""
+        self.refresh_threat_data()
+    
+    def refresh_threat_data(self):
+        """Refresh all threat intelligence displays."""
+        if not self.app.current_campaign_id:
+            self.update_threat_status("❌ No campaign selected", CyberColors.RED_ALERT)
+            return
+        
+        try:
+            # Load threat feeds
+            feeds_table = self.query_one("#table-threat-feeds", VimDataTable)
+            feeds_table.clear()
+            feeds_table.add_columns("ID", "Feed", "Type", "Status", "Updated")
+            # TODO: Load feed data from db.get_threat_feeds()
+            
+            # Load threat actors
+            actors_table = self.query_one("#table-threat-actors", VimDataTable)
+            actors_table.clear()
+            actors_table.add_columns("ID", "Actor", "Country", "Confidence", "TTPs")
+            # TODO: Load actor data from db.list_threat_actors()
+            
+            # Load IoCs
+            iocs_table = self.query_one("#table-iocs", VimDataTable)
+            iocs_table.clear()
+            iocs_table.add_columns("ID", "Type", "Value", "Threat", "Actor", "Confidence")
+            # TODO: Load IoC data from db.get_iocs_for_campaign()
+            
+            # Load risk scores
+            risk_table = self.query_one("#table-risk-scores", VimDataTable)
+            risk_table.clear()
+            risk_table.add_columns("Finding", "Risk Level", "Score", "Threat", "Likelihood", "Impact")
+            # TODO: Load risk data from db.get_risk_scores_for_campaign()
+            
+            self.update_threat_status("✓ Threat data loaded", CyberColors.PHOSPHOR_GREEN)
+        except Exception as e:
+            self.update_threat_status(f"Error loading threat data: {str(e)}", CyberColors.RED_ALERT)
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses in threat intelligence view."""
+        btn_id = event.button.id
+        
+        if btn_id == "btn-add-feed":
+            self.on_add_feed()
+        elif btn_id == "btn-create-actor":
+            self.on_create_actor()
+        elif btn_id == "btn-ingest-ioc":
+            self.on_ingest_ioc()
+    
+    def on_add_feed(self):
+        """Handle adding external threat feed."""
+        if not self.app.current_campaign_id:
+            self.update_threat_status("❌ Campaign required to add feed", CyberColors.RED_ALERT)
+            return
+        
+        # TODO: Show dialog for feed URL, type (VirusTotal/Shodan/OTX/MISP), API key
+        self.update_threat_status("➕ Feed addition not yet implemented", CyberColors.AMBER_WARNING)
+    
+    def on_create_actor(self):
+        """Handle creating threat actor profile."""
+        if not self.app.current_campaign_id:
+            self.update_threat_status("❌ Campaign required to create actor profile", CyberColors.RED_ALERT)
+            return
+        
+        # TODO: Show dialog for actor name, origin, organization, description
+        self.update_threat_status("➕ Actor creation not yet implemented", CyberColors.AMBER_WARNING)
+    
+    def on_ingest_ioc(self):
+        """Handle ingesting indicator of compromise."""
+        if not self.app.current_campaign_id:
+            self.update_threat_status("❌ Campaign required to ingest IoC", CyberColors.RED_ALERT)
+            return
+        
+        # TODO: Show dialog for indicator type (IP/Domain/Hash/Email), value, threat level
+        self.update_threat_status("➕ IoC ingestion not yet implemented", CyberColors.AMBER_WARNING)
+    
+    def update_threat_status(self, message: str, color: str = CyberColors.PHOSPHOR_GREEN):
+        """Update threat intelligence status bar."""
+        status = self.query_one("#status-threat", Static)
+        status.update(f"{message} [{datetime.now().strftime('%H:%M:%S')}]")
+        status.styles.color = color
+
+
+# =============================================================================
 # SHUTDOWN VIEWS
 # =============================================================================
 
@@ -1444,6 +1567,7 @@ class CyberTUI(App):
         Binding("ctrl+5", "toggle_capability",    "Capability"),
         Binding("ctrl+r", "toggle_reporting",     "Reporting"),
         Binding("ctrl+t", "toggle_teams",         "Teams"),
+        Binding("ctrl+shift+i", "toggle_threat_intel", "Threat Intel"),
         Binding("alt+1", "toggle_collaboration",  "Collab"),
         Binding("alt+2", "toggle_tasks",          "Tasks"),
         Binding("alt+3", "toggle_behavioral",     "Analytics"),
@@ -1482,7 +1606,6 @@ class CyberTUI(App):
             # v3.3 Intelligence & Analysis Views
             yield SituationalAwarenessView(id="dashboard-view")
             yield PostEngagementAnalysisView(id="analysis-view")
-            yield ThreatIntelligenceView(id="intel-view")
             yield RemediationTrackingView(id="remediation-view")
             yield CapabilityAssessmentView(id="capability-view")
             
@@ -1499,6 +1622,9 @@ class CyberTUI(App):
             
             # v4.0 Team Management & Federation Views
             yield TeamManagementView(id="team-view")
+            
+            # Phase 5: Advanced Threat Intelligence
+            yield ThreatIntelligenceView(id="threat-intel-view")
             
             yield ShutdownConfirmationView(id="shutdown-view")
 
@@ -1562,8 +1688,9 @@ class CyberTUI(App):
             sw.current = "register-view"
             self.update_status("FIRST RUN: REGISTER YOUR ADMIN ACCOUNT", CyberColors.AMBER_WARNING)
         else:
-            if self.db.resume_session(): self._post_login_setup()
-            else: sw.current = "login-view"
+            # Always require fresh authentication (don't resume sessions automatically)
+            sw.current = "login-view"
+            self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
 
     # -------------------------------------------------------------------------
     # AUTH FLOW
@@ -1803,6 +1930,21 @@ class CyberTUI(App):
             sw.current = "team-view"
             self.query_one("TeamManagementView").refresh_teams()
             self.update_status("MODE: TEAM MANAGEMENT & FEDERATION (Phase 4)", CyberColors.PURPLE_HAZE)
+
+    def action_toggle_threat_intel(self):
+        """Toggle Threat Intelligence View (Phase 5)."""
+        if not self.db.current_user:
+            self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
+            return
+        if not self.current_campaign_id:
+            self.update_status("CAMPAIGN REQUIRED FOR THREAT INTELLIGENCE", CyberColors.AMBER_WARNING)
+            return
+        sw = self.query_one("#view-switcher")
+        if sw.current == "threat-intel-view": self.action_return_to_editor()
+        else:
+            sw.current = "threat-intel-view"
+            self.query_one("ThreatIntelligenceView").refresh_threat_data()
+            self.update_status("MODE: THREAT INTELLIGENCE & IOC MANAGEMENT (Phase 5)", CyberColors.NEON_PINK)
 
     # v3.4 View Toggles
     def action_toggle_collaboration(self):

@@ -25,6 +25,9 @@ class CyberColors:
     TEAL_APPROVAL   = "#20B2AA"  # Approval: Approved state, Verified finding
     GRAY_DISABLED   = "#404040"  # Disabled: Locked evidence, Archived campaign
     
+    # Phase 5 Threat Intelligence Colors
+    NEON_PINK       = "#FF10F0"  # Threat Intelligence: Feed data, IoC enrichment, Actor profiles
+    
     # Industrial Dark Mode Neutrals
     VOID_DARK      = "#050505"  # Deepest background
     PANEL_GREY     = "#121212"  # Component background
@@ -54,6 +57,7 @@ $l-evidence: {CyberColors.LIME_EVIDENCE};
 $m-audit: {CyberColors.MAGENTA_AUDIT};
 $t-approval: {CyberColors.TEAL_APPROVAL};
 $g-disabled: {CyberColors.GRAY_DISABLED};
+$n-pink: {CyberColors.NEON_PINK};
 $bg-void: {CyberColors.VOID_DARK};
 $bg-panel: {CyberColors.PANEL_GREY};
 $steel: {CyberColors.STEEL_BORDER};
@@ -270,6 +274,8 @@ Button:hover {{
 .btn-delete:hover {{ background: $r-alert; color: black; }}
 .btn-purple {{ border: solid $p-purple; color: $p-purple; }}
 .btn-purple:hover {{ background: $p-purple; color: white; }}
+.btn-threat-intel {{ border: solid $n-pink; color: $n-pink; }}
+.btn-threat-intel:hover {{ background: $n-pink; color: white; }}
 
 .info-box {{
     background: $bg-panel;
