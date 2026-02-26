@@ -1,0 +1,54 @@
+name: Security Enforcement
+
+on:
+  push:
+    branches:
+      - dev
+      - QA
+      - qa
+      - "feat/**"
+  pull_request:
+    branches:
+      - dev
+      - QA
+      - qa
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-enforcement-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-enforcement:
+    name: Security Enforcement
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Policy Gate
+        run: python scripts/security_ci_policy_gate.py
+
+      - name: Security Regression Tests
+        run: |
+          python -m unittest tests/unit/test_tenant_isolation.py -v
+          python -m unittest tests/unit/test_phase1_sprint11_telemetry_gateway.py -v
+          python -m unittest tests/unit/test_phase6_sprint61_tamper_log.py -v
+          python -m unittest tests/unit/test_phase7_sprint71_federation.py -v
+          python -m unittest tests/unit/test_phase8_sprint81_security_ci_gate.py -v
+          python -m unittest tests/unit/test_phase9_sprint91_redteam_attacks.py -v
