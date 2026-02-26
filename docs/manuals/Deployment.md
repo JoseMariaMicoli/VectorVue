@@ -91,6 +91,9 @@ make customer-deploy-isolated \
   POSTGRES_HOST_PORT=5544
 ```
 
+Default local docker host mapping for PostgreSQL is `55433` (override with
+`POSTGRES_HOST_PORT` when needed).
+
 For full isolated portal onboarding in one flow:
 
 ```bash
