@@ -261,6 +261,29 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         res = self.client.post("/internal/v1/telemetry", headers=self._signed_headers(payload), json=payload)
         self.assertEqual(res.status_code, 403)
 
+    def test_rejects_missing_schema_version_when_enforced(self):
+        os.environ["VV_TG_ENFORCE_SCHEMA_VERSION"] = "1"
+        os.environ["VV_TG_ALLOWED_SCHEMA_VERSION"] = "1.0"
+        payload = self._payload("nonce-018")
+        res = self.client.post(
+            "/internal/v1/telemetry",
+            headers=self._signed_headers(payload),
+            json=payload,
+        )
+        self.assertEqual(res.status_code, 422)
+
+    def test_accepts_matching_schema_version_when_enforced(self):
+        os.environ["VV_TG_ENFORCE_SCHEMA_VERSION"] = "1"
+        os.environ["VV_TG_ALLOWED_SCHEMA_VERSION"] = "1.0"
+        payload = self._payload("nonce-019")
+        payload["payload"]["attributes"]["schema_version"] = "1.0"
+        res = self.client.post(
+            "/internal/v1/telemetry",
+            headers=self._signed_headers(payload),
+            json=payload,
+        )
+        self.assertEqual(res.status_code, 202)
+
 
 if __name__ == "__main__":
     unittest.main()

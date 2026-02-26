@@ -99,6 +99,8 @@ class GatewaySettings:
     rate_limit_backend: str
     queue_backend: str
     operator_tenant_map: dict[str, str]
+    enforce_schema_version: bool
+    allowed_schema_version: str
 
 
 class ReplayGuard:
@@ -199,6 +201,8 @@ def _load_settings() -> GatewaySettings:
         rate_limit_backend=os.environ.get("VV_TG_RATE_LIMIT_BACKEND", "redis").strip().lower(),
         queue_backend=os.environ.get("VV_TG_QUEUE_BACKEND", "nats").strip().lower(),
         operator_tenant_map=_load_operator_tenant_map(),
+        enforce_schema_version=_parse_bool("VV_TG_ENFORCE_SCHEMA_VERSION", "0"),
+        allowed_schema_version=os.environ.get("VV_TG_ALLOWED_SCHEMA_VERSION", "1.0").strip(),
     )
 
 
@@ -359,6 +363,25 @@ def _enforce_signed_tenant_metadata(payload: TelemetryIngestRequest, settings: G
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator tenant mapping violation")
 
 
+def _enforce_schema_version(
+    payload: TelemetryIngestRequest,
+    settings: GatewaySettings,
+) -> None:
+    if not settings.enforce_schema_version:
+        return
+    schema_version = str(payload.payload.get("attributes", {}).get("schema_version", "")).strip()
+    if not schema_version:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Telemetry schema version is required by gateway policy",
+        )
+    if schema_version != settings.allowed_schema_version:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Telemetry schema version is not allowed",
+        )
+
+
 app = FastAPI(title="VectorVue Telemetry Gateway", version="3.2.0")
 
 
@@ -374,6 +397,8 @@ def healthz() -> dict[str, Any]:
         "require_mtls": settings.require_mtls,
         "trusted_identities": sorted(settings.allowed_service_identities.keys()),
         "require_payload_signature": settings.require_payload_signature,
+        "enforce_schema_version": settings.enforce_schema_version,
+        "allowed_schema_version": settings.allowed_schema_version,
         "nonce_ttl_seconds": settings.nonce_ttl_seconds,
         "nonce_backend": settings.nonce_backend,
         "rate_limit_per_minute": settings.rate_limit_per_minute,
@@ -487,6 +512,7 @@ async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Canonical telemetry schema validation failed") from exc
 
         _enforce_signed_tenant_metadata(parsed, settings)
+        _enforce_schema_version(parsed, settings)
         _enforce_operator_rate_limit(parsed.operator_id, settings)
 
         try:

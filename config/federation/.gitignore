@@ -1,0 +1,8 @@
+*.crt
+*.csr
+*.key
+*.pem
+*.p12
+*.pfx
+*.srl
+.env.local

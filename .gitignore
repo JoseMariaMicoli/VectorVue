@@ -101,6 +101,12 @@ Thumbs.db
 example.md
 docs/dev-log/
 config/
+!config/
+config/*
+!config/federation/
+!config/federation/.env.federation.example
+!config/federation/.gitignore
+!config/federation/README.md
 
 # Phase 6 deployment generated artifacts
 deploy/certs/
