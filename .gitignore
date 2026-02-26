@@ -27,7 +27,9 @@ vector.key
 .env
 *.env
 .env.*
+.env.demo-preflight.local
 portal/.env*
+integration-deliverables/
 
 # Python environments and caches
 venv/

@@ -110,6 +110,10 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Validate Compose config
+        env:
+          VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON: '{"spectrastrike-producer":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+          VV_TG_SPECTRASTRIKE_ED25519_PUBKEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+          VV_FEDERATION_SPECTRASTRIKE_ED25519_PUBKEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
         run: docker compose config -q
 
   tag-and-release:

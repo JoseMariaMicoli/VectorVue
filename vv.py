@@ -642,61 +642,103 @@ class OnboardingWizardView(Container):
 
     CSS = """
     OnboardingWizardView { width: 100%; height: 100%; background: $bg-void; overflow: auto; }
-    #onboarding-root { width: 100%; height: auto; padding: 1 2; }
+    #onboarding-root { width: 100%; height: 100%; padding: 1 3; overflow: hidden; }
     #onboarding-title { color: $p-green; text-style: bold; margin-bottom: 1; }
-    #onboarding-grid { width: 100%; height: auto; }
-    #onboarding-grid .row { margin-bottom: 1; }
-    #onboarding-status { margin-top: 1; color: $steel; }
+    #onboarding-scroll {
+        width: 100%;
+        height: 1fr;
+        layout: vertical;
+        overflow-y: scroll;
+        scrollbar-gutter: stable;
+        border-right: solid #23345a;
+        padding-right: 1;
+        margin-bottom: 1;
+    }
+    .onb-label {
+        width: 100%;
+        height: 1;
+        color: $amber-warning;
+    }
+    .onb-input {
+        width: 100%;
+        height: 3;
+        margin-bottom: 1;
+        color: #d8e6ff;
+        background: #0b1533;
+        border: solid #34507a;
+    }
+    .onb-input:focus {
+        border: heavy #7c3aed;
+        color: #ffffff;
+    }
+    #onboarding-actions { height: auto; margin-top: 1; }
+    #onboarding-actions Button { margin-right: 1; }
+    #onboarding-status {
+        margin-top: 1;
+        padding: 0 1;
+        min-height: 1;
+        color: #d8e6ff;
+        border: solid #23345a;
+        background: #0d1635;
+    }
+    #onboarding-result {
+        margin-top: 1;
+        padding: 1;
+        border: solid $steel;
+        color: $electric-cyan;
+        min-height: 3;
+        background: #0d1635;
+    }
     """
 
     def compose(self) -> ComposeResult:
         with Vertical(id="onboarding-root"):
             yield Label("CLIENT PORTAL ONBOARDING WIZARD (ADMIN)", id="onboarding-title")
             yield Label("Create tenant + company metadata + portal users in one flow.", classes="cyber-label")
-            with Vertical(id="onboarding-grid"):
-                with Horizontal(classes="row"):
-                    yield Label("Tenant ID (UUID or auto):", classes="cyber-label")
-                    yield Input(placeholder="auto", id="onb-tenant-id")
-                with Horizontal(classes="row"):
-                    yield Label("Tenant Name:", classes="cyber-label")
-                    yield Input(placeholder="Customer Name", id="onb-tenant-name")
-                with Horizontal(classes="row"):
-                    yield Label("Portal Host:", classes="cyber-label")
-                    yield Input(placeholder="customer.vectorvue.local", id="onb-portal-host")
-                with Horizontal(classes="row"):
-                    yield Label("Company Name (Portal):", classes="cyber-label")
-                    yield Input(placeholder="Customer Name", id="onb-company-name")
-                with Horizontal(classes="row"):
-                    yield Label("Primary Color:", classes="cyber-label")
-                    yield Input(value="#0f172a", id="onb-primary-color")
-                    yield Label("Accent Color:", classes="cyber-label")
-                    yield Input(value="#22d3ee", id="onb-accent-color")
-                with Horizontal(classes="row"):
-                    yield Label("Tenant Admin User:", classes="cyber-label")
-                    yield Input(placeholder="tenant_admin", id="onb-admin-user")
-                    yield Label("Tenant Admin Pass:", classes="cyber-label")
-                    yield Input(password=True, id="onb-admin-pass")
-                with Horizontal(classes="row"):
-                    yield Label("Client User:", classes="cyber-label")
-                    yield Input(placeholder="tenant_viewer", id="onb-client-user")
-                    yield Label("Client Pass:", classes="cyber-label")
-                    yield Input(password=True, id="onb-client-pass")
-                with Horizontal(classes="row"):
-                    yield Label("Client Role:", classes="cyber-label")
-                    yield Select(
-                        [("viewer", "viewer"), ("operator", "operator"), ("lead", "lead"), ("admin", "admin")],
-                        value="viewer",
-                        id="onb-client-role",
-                    )
-                with Horizontal(classes="row"):
-                    yield Label("Operator User (optional):", classes="cyber-label")
-                    yield Input(placeholder="", id="onb-operator-user")
-                    yield Label("Operator Pass (optional):", classes="cyber-label")
-                    yield Input(password=True, id="onb-operator-pass")
-            with Horizontal():
+            with ScrollableContainer(id="onboarding-scroll"):
+                yield Label("Tenant ID (UUID or auto):", classes="onb-label")
+                yield Input(placeholder="auto", id="onb-tenant-id", classes="onb-input")
+                yield Label("Tenant Name:", classes="onb-label")
+                yield Input(placeholder="Customer Name", id="onb-tenant-name", classes="onb-input")
+                yield Label("Portal Host:", classes="onb-label")
+                yield Input(placeholder="customer.vectorvue.local", id="onb-portal-host", classes="onb-input")
+                yield Label("Company Name (Portal):", classes="onb-label")
+                yield Input(placeholder="Customer Name", id="onb-company-name", classes="onb-input")
+                yield Label("Primary Color:", classes="onb-label")
+                yield Input(value="#0f172a", id="onb-primary-color", classes="onb-input")
+                yield Label("Accent Color:", classes="onb-label")
+                yield Input(value="#22d3ee", id="onb-accent-color", classes="onb-input")
+                yield Label("Tenant Admin User:", classes="onb-label")
+                yield Input(placeholder="tenant_admin", id="onb-admin-user", classes="onb-input")
+                yield Label("Tenant Admin Pass:", classes="onb-label")
+                yield Input(password=True, id="onb-admin-pass", classes="onb-input")
+                yield Label("Client User:", classes="onb-label")
+                yield Input(placeholder="tenant_viewer", id="onb-client-user", classes="onb-input")
+                yield Label("Client Pass:", classes="onb-label")
+                yield Input(password=True, id="onb-client-pass", classes="onb-input")
+                yield Label("Client Role:", classes="onb-label")
+                yield Select(
+                    [("viewer", "viewer"), ("operator", "operator"), ("lead", "lead"), ("admin", "admin")],
+                    value="viewer",
+                    id="onb-client-role",
+                    classes="onb-input",
+                )
+                yield Label("Operator User (optional):", classes="onb-label")
+                yield Input(placeholder="", id="onb-operator-user", classes="onb-input")
+                yield Label("Operator Pass (optional):", classes="onb-label")
+                yield Input(password=True, id="onb-operator-pass", classes="onb-input")
+                yield Label("DB Passphrase (optional):", classes="onb-label")
+                yield Input(
+                    password=True,
+                    placeholder="use when DB canary uses different passphrase",
+                    id="onb-db-passphrase",
+                    classes="onb-input",
+                )
+            with Horizontal(id="onboarding-actions"):
                 yield Button("CREATE TENANT + USERS", id="onb-create-btn", variant="success")
                 yield Button("BACK TO EDITOR", id="onb-back-btn", variant="primary")
             yield Label("", id="onboarding-status")
+            yield Static("No onboarding run yet.", id="onboarding-result")
 
     def on_mount(self) -> None:
         self.query_one("#onb-tenant-id", Input).value = str(uuid.uuid4())
@@ -734,12 +776,25 @@ class OnboardingWizardView(Container):
             "client_role": str(self.query_one("#onb-client-role", Select).value or "viewer"),
             "operator_user": self.query_one("#onb-operator-user", Input).value.strip(),
             "operator_pass": self.query_one("#onb-operator-pass", Input).value,
+            "db_passphrase": self.query_one("#onb-db-passphrase", Input).value,
         }
         ok, detail, tenant_id = self.app.run_tenant_onboarding(payload)
         if not ok:
             status.update(detail)
             return
         status.update(f"ONBOARDING COMPLETE: tenant_id={tenant_id} | {detail}")
+        self.query_one("#onboarding-result", Static).update(
+            "\n".join(
+                [
+                    f"Tenant ID: {tenant_id}",
+                    f"Tenant Name: {payload['tenant_name']}",
+                    f"Portal Host: {payload['portal_host'] or '(not set)'}",
+                    f"Tenant Admin: {payload['admin_user']}",
+                    f"Client User: {payload['client_user']} ({payload['client_role']})",
+                    f"Result: {detail}",
+                ]
+            )
+        )
         self.post_message(self.WizardCompleted(tenant_id=tenant_id, detail=detail))
 
     @on(Button.Pressed, "#onb-back-btn")
@@ -773,7 +828,10 @@ class HelpCenterView(Container):
         if not candidate.exists() or not candidate.is_file():
             return f"# Manual Not Found\n\n`{safe_name}` is not available in `docs/manuals`."
         try:
-            return candidate.read_text(encoding="utf-8")
+            body = candidate.read_text(encoding="utf-8")
+            if safe_name != "INDEX.md":
+                body = f"[← Back to INDEX](INDEX.md)\n\n---\n\n{body}"
+            return body
         except Exception as exc:
             return f"# Manual Read Error\n\nCould not load `{safe_name}`.\n\nError: `{exc}`"
 
@@ -836,6 +894,28 @@ class HelpCenterView(Container):
         selected = str(event.value)
         self.query_one("#help-manual-md", Markdown).update(self._load_manual(selected))
         self.query_one("#help-manual-status", Label).update(f"Loaded: {selected}")
+
+    @on(Markdown.LinkClicked, "#help-manual-md")
+    def on_help_manual_link_clicked(self, event: Markdown.LinkClicked):
+        href = (event.href or "").strip()
+        if not href:
+            return
+        target = href.split("#", 1)[0].strip()
+        if target.startswith("http://") or target.startswith("https://"):
+            self.query_one("#help-manual-status", Label).update(f"External links blocked in TUI: {target}")
+            return
+        base = Path(target).name
+        if not base.lower().endswith(".md"):
+            self.query_one("#help-manual-status", Label).update(f"Unsupported link target: {target}")
+            return
+        files = {p.name for p in self._manual_files()}
+        if base not in files:
+            self.query_one("#help-manual-status", Label).update(f"Manual not found in docs/manuals: {base}")
+            return
+        select = self.query_one("#help-manual-select", Select)
+        select.value = base
+        self.query_one("#help-manual-md", Markdown).update(self._load_manual(base))
+        self.query_one("#help-manual-status", Label).update(f"Loaded: {base}")
 
 # =============================================================================
 # v3.2 EXECUTION & DETECTION VIEWS
@@ -2816,9 +2896,12 @@ class CyberTUI(App):
         self.runtime_executor = RuntimeExecutor(self.db)
         self._license_next_view = "register-view"
         self.pending_legal_acceptance = None
+        self._last_view_switcher_current = None
 
         sw = self.query_one("#view-switcher")
+        self._last_view_switcher_current = sw.current
         self._set_tab_bar_visibility(False)
+        self.set_interval(0.2, self._sync_view_layout)
         if self.db.has_users():
             sw.current = "login-view"
             self.update_status("AUTHENTICATION REQUIRED", CyberColors.AMBER_WARNING)
@@ -2833,6 +2916,23 @@ class CyberTUI(App):
         self.query_one("#lateral-tools").visible = visible
         self.screen.styles.grid_rows = "2 9 1fr 1" if visible else "2 0 1fr 1"
         self.screen.styles.grid_columns = "1fr 34" if visible else "1fr 0"
+
+    def _set_view_layout(self, view_id: str) -> None:
+        """Keep standard layout with lateral rail visible after authentication."""
+        if not self.query_one("#tab-nav-panel").visible:
+            return
+        self.query_one("#lateral-tools").visible = True
+        self.screen.styles.grid_columns = "1fr 34"
+
+    def _sync_view_layout(self) -> None:
+        """Version-safe layout sync without relying on widget-specific events."""
+        try:
+            current = self.query_one("#view-switcher").current
+            if current != self._last_view_switcher_current:
+                self._last_view_switcher_current = current
+                self._set_view_layout(str(current))
+        except Exception:
+            pass
 
     # -------------------------------------------------------------------------
     # AUTH FLOW
@@ -2863,10 +2963,13 @@ class CyberTUI(App):
     @on(LicenseAgreementView.AgreementAccepted)
     def on_license_accepted(self):
         self.query_one("#view-switcher").current = self._license_next_view
-        if not self.db.has_users():
-            self.update_status("FIRST RUN: REGISTER YOUR ADMIN ACCOUNT", CyberColors.AMBER_WARNING)
-        else:
-            self.update_status("REGISTER NEW USER", CyberColors.ELECTRIC_CYAN)
+        try:
+            if not self.db.has_users():
+                self.update_status("FIRST RUN: REGISTER YOUR ADMIN ACCOUNT", CyberColors.AMBER_WARNING)
+            else:
+                self.update_status("REGISTER NEW USER", CyberColors.ELECTRIC_CYAN)
+        except Exception as exc:
+            self.update_status(f"DATABASE ERROR AFTER LEGAL ACCEPTANCE: {exc}", CyberColors.RED_ALERT)
 
     @on(LicenseAgreementView.AgreementCancelled)
     def on_license_cancelled(self):
@@ -3160,6 +3263,9 @@ class CyberTUI(App):
                 "--operator-pass", operator_pass,
                 "--operator-role", "operator",
             ])
+        db_passphrase = str(payload.get("db_passphrase") or os.environ.get("VV_DB_PASSPHRASE") or "").strip()
+        if db_passphrase:
+            cmd.extend(["--passphrase", db_passphrase])
 
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -3777,7 +3883,7 @@ class CyberTUI(App):
     def on_tab_navigation_panel_selected(self, event: TabNavigationPanel.TabSelected):
         """Handle grouped tab panel selection."""
         self.switch_to_view(event.view_id)
-    
+
     def switch_to_view(self, view_id: str):
         """Switch to a view by ID."""
         try:
@@ -3815,6 +3921,7 @@ class CyberTUI(App):
             
             # Switch view
             switcher.current = view_id
+            self._set_view_layout(view_id)
             self.refresh_view_data(view_id)
             
             # Update tab bar active state
@@ -3981,6 +4088,26 @@ class CyberTUI(App):
         lv.clear()
         for f in self.db.get_findings(project_id=self.current_project_id):
             lv.append(FindingItem(f))
+
+    @on(ListView.Selected, "#findings-list")
+    def on_finding_selected(self, event: ListView.Selected):
+        item = event.item
+        if not isinstance(item, FindingItem):
+            return
+        finding = item.finding
+        self.current_id = finding.id
+        self.query_one("#inp-title").value = finding.title or ""
+        self.query_one("#inp-score").value = str(finding.cvss_score if finding.cvss_score is not None else "0.0")
+        self.query_one("#inp-mitre").value = finding.mitre_id or ""
+        self.query_one("#inp-vector").value = finding.cvss_vector or ""
+        self.query_one("#editor-main").load_text(finding.description or "")
+        self.refresh_editor_preview()
+        self.query_one("#hud-header").current_file = f"{(finding.title or 'UNTITLED')[:40]}.md"
+        try:
+            self.update_risk(float(finding.cvss_score or 0.0))
+        except Exception:
+            self.update_risk(0.0)
+        self.update_status(f"FINDING LOADED: {finding.title}", CyberColors.ELECTRIC_CYAN)
 
     # -------------------------------------------------------------------------
     # BUTTON HANDLERS

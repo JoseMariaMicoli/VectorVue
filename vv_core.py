@@ -1098,6 +1098,7 @@ class Database:
                 db_url = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_name}"
             self._pg_db_url = db_url
             raw_conn = psycopg.connect(self._pg_db_url, autocommit=False)
+            self._configure_postgres_session(raw_conn)
             self.conn = PostgresConnectionCompat(raw_conn)
         else:
             self.conn = sqlite3.connect(self.DB_NAME, check_same_thread=False)
@@ -1109,6 +1110,20 @@ class Database:
         else:
             self._run_migrations()
 
+    @staticmethod
+    def _configure_postgres_session(raw_conn) -> None:
+        """Set defensive session parameters for long-lived TUI/API connections."""
+        try:
+            with raw_conn.cursor() as cur:
+                # Avoid server-side termination on implicit long-lived read transactions.
+                cur.execute("SET idle_in_transaction_session_timeout = 0")
+            raw_conn.commit()
+        except Exception:
+            try:
+                raw_conn.rollback()
+            except Exception:
+                pass
+
     def _reconnect_postgres(self) -> bool:
         """Recreate postgres connection after server-side timeout/termination."""
         if self.db_backend != "postgres" or not self._pg_db_url:
@@ -1119,6 +1134,7 @@ class Database:
             pass
         try:
             raw_conn = psycopg.connect(self._pg_db_url, autocommit=False)
+            self._configure_postgres_session(raw_conn)
             self.conn = PostgresConnectionCompat(raw_conn)
             return True
         except Exception:
@@ -2200,6 +2216,30 @@ class Database:
             self.conn.commit()
             return True
 
+    @staticmethod
+    def _is_postgres_idle_tx_timeout(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        if "idleintransactionsessiontimeout" in msg:
+            return True
+        if "idle-in-transaction timeout" in msg:
+            return True
+        cls_name = exc.__class__.__name__.lower()
+        return cls_name == "idleintransactionsessiontimeout"
+
+    @staticmethod
+    def _is_postgres_connection_terminated(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        needles = (
+            "terminating connection",
+            "server closed the connection",
+            "connection not open",
+            "connection already closed",
+        )
+        if any(n in msg for n in needles):
+            return True
+        cls_name = exc.__class__.__name__.lower()
+        return cls_name in {"operationalerror", "interfaceerror"}
+
     def has_users(self) -> bool:
         try:
             c = self.conn.cursor()
@@ -2210,7 +2250,9 @@ class Database:
                 self.conn.commit()
             return count > 0
         except Exception as exc:
-            if self.db_backend == "postgres" and "IdleInTransactionSessionTimeout" in str(exc):
+            if self.db_backend == "postgres" and (
+                self._is_postgres_idle_tx_timeout(exc) or self._is_postgres_connection_terminated(exc)
+            ):
                 if self._reconnect_postgres():
                     c = self.conn.cursor()
                     c.execute("SELECT COUNT(*) FROM users")
