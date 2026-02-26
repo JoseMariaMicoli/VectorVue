@@ -53,7 +53,7 @@ class TelemetryIngestRequest(BaseModel):
     tenant_id: str = Field(pattern=r"^[a-fA-F0-9-]{36}$")
     execution_hash: str = Field(min_length=64, max_length=64)
     timestamp: int
-    nonce: str = Field(min_length=12, max_length=128)
+    nonce: str = Field(min_length=8, max_length=128)
     signed_metadata: "SignedTenantMetadata"
     payload: dict[str, Any]
 
