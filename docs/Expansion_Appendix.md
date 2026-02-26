@@ -194,16 +194,17 @@ Security Gate:
 ## Sprint 6.1 — Immutable Logging
 
 ### VV-6.1.1 Append-Only Logs
+- [x] Append-only logs enabled
 - Commit:
   - `feat(logging): implement append-only audit log`
 
 ### VV-6.1.2 Hash Chain Logging
-- [ ] Each log references previous hash
+- [x] Each log references previous hash
 - Commit:
   - `feat(logging): implement hash chain integrity`
 
 ### VV-6.1.3 Log Sealing
-- [ ] Periodic snapshot sealing
+- [x] Periodic snapshot sealing
 - Commit:
   - `feat(logging): implement periodic log sealing`
 

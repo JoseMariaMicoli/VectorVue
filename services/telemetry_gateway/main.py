@@ -34,6 +34,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from redis import Redis
 from redis.exceptions import RedisError
+from security.tamper_log import get_tamper_audit_log
 from services.telemetry_gateway.queue import SecureQueuePublisher, clear_memory_messages, load_queue_settings
 from services.telemetry_processing.validator import validate_canonical_payload
 
@@ -369,86 +370,111 @@ def healthz() -> dict[str, Any]:
 
 @app.post("/internal/v1/telemetry", response_model=TelemetryIngestResponse, status_code=status.HTTP_202_ACCEPTED)
 async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
+    request_id = str(uuid4())
+    audit_log = get_tamper_audit_log()
     try:
         settings = _load_settings()
     except RuntimeError as exc:
+        audit_log.append_event(
+            event_type="telemetry.rejected",
+            actor="SYSTEM",
+            details={"request_id": request_id, "reason": "gateway_settings_invalid", "detail": str(exc)},
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-
     queue_settings = load_queue_settings()
     queue = SecureQueuePublisher(queue_settings)
-
-    _enforce_service_identity_auth(request, settings)
-
     raw = await request.body()
-    if not raw:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Telemetry payload is required")
-
-    if settings.require_payload_signature:
-        ts, nonce = _verify_signature(request, settings, raw)
-    else:
-        # Unsigned telemetry is forbidden by platform policy.
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unsigned telemetry is disabled by policy")
 
     try:
-        body = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        await _publish_dead_letter_or_fail(
-            queue=queue,
-            raw_body=raw,
-            error_code="invalid_json",
-            error_message="Invalid JSON payload",
-            trace={"reason": "json_decode"},
-        )
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON payload") from exc
+        _enforce_service_identity_auth(request, settings)
 
-    try:
-        parsed = TelemetryIngestRequest.model_validate(body)
-    except ValidationError as exc:
-        await _publish_dead_letter_or_fail(
-            queue=queue,
-            raw_body=raw,
-            error_code="schema_validation_failed",
-            error_message="Telemetry schema validation failed",
-            trace={"reason": "schema_validation", "errors": exc.errors()},
-        )
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Telemetry schema validation failed") from exc
+        if not raw:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Telemetry payload is required")
 
-    if parsed.timestamp != ts:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body timestamp mismatch with signed header")
-    if parsed.nonce != nonce:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body nonce mismatch with signed header")
+        if settings.require_payload_signature:
+            ts, nonce = _verify_signature(request, settings, raw)
+        else:
+            # Unsigned telemetry is forbidden by platform policy.
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unsigned telemetry is disabled by policy")
 
-    try:
-        canonical_payload = validate_canonical_payload(parsed.payload)
-    except ValidationError as exc:
-        await _publish_dead_letter_or_fail(
-            queue=queue,
-            raw_body=raw,
-            error_code="canonical_schema_failed",
-            error_message="Canonical telemetry schema validation failed",
-            trace={"reason": "canonical_schema", "errors": exc.errors()},
-        )
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Canonical telemetry schema validation failed") from exc
+        try:
+            body = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            await _publish_dead_letter_or_fail(
+                queue=queue,
+                raw_body=raw,
+                error_code="invalid_json",
+                error_message="Invalid JSON payload",
+                trace={"reason": "json_decode"},
+            )
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON payload") from exc
 
-    _enforce_signed_tenant_metadata(parsed, settings)
-    _enforce_operator_rate_limit(parsed.operator_id, settings)
+        try:
+            parsed = TelemetryIngestRequest.model_validate(body)
+        except ValidationError as exc:
+            await _publish_dead_letter_or_fail(
+                queue=queue,
+                raw_body=raw,
+                error_code="schema_validation_failed",
+                error_message="Telemetry schema validation failed",
+                trace={"reason": "schema_validation", "errors": exc.errors()},
+            )
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Telemetry schema validation failed") from exc
 
-    try:
-        await queue.publish_ingest(
-            payload={
-                **parsed.model_dump(mode="json"),
-                "payload": canonical_payload.model_dump(mode="json"),
-            },
-            trace={
+        if parsed.timestamp != ts:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body timestamp mismatch with signed header")
+        if parsed.nonce != nonce:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body nonce mismatch with signed header")
+
+        try:
+            canonical_payload = validate_canonical_payload(parsed.payload)
+        except ValidationError as exc:
+            await _publish_dead_letter_or_fail(
+                queue=queue,
+                raw_body=raw,
+                error_code="canonical_schema_failed",
+                error_message="Canonical telemetry schema validation failed",
+                trace={"reason": "canonical_schema", "errors": exc.errors()},
+            )
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Canonical telemetry schema validation failed") from exc
+
+        _enforce_signed_tenant_metadata(parsed, settings)
+        _enforce_operator_rate_limit(parsed.operator_id, settings)
+
+        try:
+            await queue.publish_ingest(
+                payload={
+                    **parsed.model_dump(mode="json"),
+                    "payload": canonical_payload.model_dump(mode="json"),
+                },
+                trace={
+                    "operator_id": parsed.operator_id,
+                    "campaign_id": parsed.campaign_id,
+                    "tenant_id": parsed.tenant_id,
+                },
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Telemetry queue publish failed") from exc
+
+        audit_log.append_event(
+            event_type="telemetry.accepted",
+            actor="telemetry_gateway",
+            details={
+                "request_id": request_id,
+                "tenant_id": parsed.tenant_id,
                 "operator_id": parsed.operator_id,
                 "campaign_id": parsed.campaign_id,
-                "tenant_id": parsed.tenant_id,
             },
         )
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Telemetry queue publish failed") from exc
+        return TelemetryIngestResponse(accepted=True, request_id=request_id)
 
-    return TelemetryIngestResponse(accepted=True, request_id=str(uuid4()))
+    except HTTPException as exc:
+        audit_log.append_event(
+            event_type="telemetry.rejected",
+            actor="telemetry_gateway",
+            details={"request_id": request_id, "status_code": exc.status_code, "detail": str(exc.detail)},
+        )
+        raise
 
 
 async def _publish_dead_letter_or_fail(

@@ -54,7 +54,10 @@ services:
       VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
       VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
       VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
+      VV_TAMPER_LOG_PATH: /var/lib/vectorvue/logs/tamper_audit.jsonl
+      VV_TAMPER_LOG_SEAL_EVERY: "50"
     volumes:
+      - vectorvue_logs:/var/lib/vectorvue/logs
       - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
