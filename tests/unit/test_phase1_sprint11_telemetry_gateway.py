@@ -63,7 +63,16 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
             "execution_hash": "f" * 64,
             "timestamp": now,
             "nonce": nonce,
-            "payload": {"event_type": "PROCESS_ANOMALY"},
+            "payload": {
+                "event_id": f"evt-{nonce}",
+                "event_type": "PROCESS_ANOMALY",
+                "source_system": "spectrastrike-sensor",
+                "severity": "high",
+                "observed_at": "2026-02-26T12:00:00Z",
+                "mitre_techniques": ["T1059.001"],
+                "mitre_tactics": ["TA0002"],
+                "attributes": {"asset_ref": "host-nyc-01"},
+            },
         }
 
     def _signed_headers(self, payload: dict, cert_fp: str = "a" * 64) -> dict[str, str]:
@@ -171,6 +180,22 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         self.assertEqual(len(dlq), 1)
         self.assertEqual(dlq[0]["kind"], "dead_letter")
         self.assertEqual(len(dlq[0]["integrity_hash"]), 64)
+
+    def test_rejects_additional_canonical_properties(self):
+        payload = self._payload("nonce-012")
+        payload["payload"]["unexpected_field"] = "not-allowed"
+        res = self.client.post("/internal/v1/telemetry", headers=self._signed_headers(payload), json=payload)
+        self.assertEqual(res.status_code, 422)
+        dlq = get_memory_messages("vectorvue.telemetry.dlq")
+        self.assertEqual(len(dlq), 1)
+
+    def test_rejects_invalid_mitre_ttp_code(self):
+        payload = self._payload("nonce-013")
+        payload["payload"]["mitre_techniques"] = ["TX9999"]
+        res = self.client.post("/internal/v1/telemetry", headers=self._signed_headers(payload), json=payload)
+        self.assertEqual(res.status_code, 422)
+        dlq = get_memory_messages("vectorvue.telemetry.dlq")
+        self.assertEqual(len(dlq), 1)
 
 
 if __name__ == "__main__":

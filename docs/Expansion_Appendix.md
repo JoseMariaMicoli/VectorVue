@@ -124,13 +124,13 @@ Security Gate:
 ## Sprint 3.1 — Schema Enforcement
 
 ### VV-3.1.1 Strict JSON Schema Validation
-- [ ] Define canonical telemetry schema
-- [ ] Reject additional properties
+- [x] Define canonical telemetry schema
+- [x] Reject additional properties
 - Commit:
   - `feat(schema): enforce strict telemetry schema`
 
 ### VV-3.1.2 MITRE Mapping Validation
-- [ ] Validate TTP codes
+- [x] Validate TTP codes
 - Commit:
   - `feat(validation): validate MITRE ATT&CK mappings`
 

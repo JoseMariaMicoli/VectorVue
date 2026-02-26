@@ -30,10 +30,11 @@ from uuid import uuid4
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, HTTPException, Request, status
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from redis import Redis
 from redis.exceptions import RedisError
 from services.telemetry_gateway.queue import SecureQueuePublisher, clear_memory_messages, load_queue_settings
+from services.telemetry_processing.validator import validate_canonical_payload
 
 
 HEX_64_RE = re.compile(r"^[a-fA-F0-9]{64}$")
@@ -41,6 +42,8 @@ B64_SIGNATURE_RE = re.compile(r"^[A-Za-z0-9+/=]+$")
 
 
 class TelemetryIngestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     operator_id: str = Field(min_length=1, max_length=128)
     campaign_id: str = Field(min_length=1, max_length=128)
     execution_hash: str = Field(min_length=64, max_length=64)
@@ -260,7 +263,7 @@ def _enforce_operator_rate_limit(operator_id: str, settings: GatewaySettings) ->
     raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unsupported rate-limit backend")
 
 
-app = FastAPI(title="VectorVue Telemetry Gateway", version="2.1.0")
+app = FastAPI(title="VectorVue Telemetry Gateway", version="3.1.0")
 
 
 @app.get("/healthz")
@@ -331,11 +334,27 @@ async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body timestamp mismatch with signed header")
     if parsed.nonce != nonce:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body nonce mismatch with signed header")
+
+    try:
+        canonical_payload = validate_canonical_payload(parsed.payload)
+    except ValidationError as exc:
+        await _publish_dead_letter_or_fail(
+            queue=queue,
+            raw_body=raw,
+            error_code="canonical_schema_failed",
+            error_message="Canonical telemetry schema validation failed",
+            trace={"reason": "canonical_schema", "errors": exc.errors()},
+        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Canonical telemetry schema validation failed") from exc
+
     _enforce_operator_rate_limit(parsed.operator_id, settings)
 
     try:
         await queue.publish_ingest(
-            payload=parsed.model_dump(mode="json"),
+            payload={
+                **parsed.model_dump(mode="json"),
+                "payload": canonical_payload.model_dump(mode="json"),
+            },
             trace={"operator_id": parsed.operator_id, "campaign_id": parsed.campaign_id},
         )
     except Exception as exc:
