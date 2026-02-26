@@ -26,3 +26,12 @@ Certificate trust chain:
 2. `deploy/certs/server.crt` and `deploy/certs/server.key` gateway identity.
 3. SpectraStrike client cert fingerprint pinned in
    `VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON`.
+
+Local dockerized layout on this host:
+
+- Gateway cert/key/CA:
+  - `/home/xoce/Workspace/VectorVue/deploy/certs/server.crt`
+  - `/home/xoce/Workspace/VectorVue/deploy/certs/server.key`
+  - `/home/xoce/Workspace/VectorVue/deploy/certs/ca.crt`
+- SpectraStrike federation verify key:
+  - `/home/xoce/Workspace/VectorVue/deploy/certs/spectrastrike_ed25519.pub.pem`
