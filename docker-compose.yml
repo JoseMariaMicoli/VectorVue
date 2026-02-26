@@ -34,6 +34,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
       VV_TG_REQUIRE_MTLS: "1"
       VV_TG_REQUIRE_PAYLOAD_SIGNATURE: "1"
@@ -43,6 +45,10 @@ services:
       VV_TG_RATE_LIMIT_BACKEND: "redis"
       VV_TG_RATE_LIMIT_PER_MINUTE: "120"
       VV_TG_REDIS_URL: redis://:strongpassword@redis:6379/0
+      VV_TG_QUEUE_BACKEND: "nats"
+      VV_TG_NATS_URL: nats://nats:4222
+      VV_TG_QUEUE_SUBJECT: vectorvue.telemetry.ingest
+      VV_TG_DLQ_SUBJECT: vectorvue.telemetry.dlq
       VV_TG_SPECTRASTRIKE_CERT_SHA256: "${VV_TG_SPECTRASTRIKE_CERT_SHA256:?required}"
       VV_TG_SPECTRASTRIKE_ED25519_PUBKEY: "${VV_TG_SPECTRASTRIKE_ED25519_PUBKEY:?required}"
     tmpfs:
@@ -334,6 +340,22 @@ services:
       retries: 10
       start_period: 5s
 
+  nats:
+    image: nats:2.11-alpine
+    container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_nats"
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "--http_port", "8222"]
+    networks:
+      - telemetry_private
+    volumes:
+      - vectorvue_nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   nginx:
     image: nginx:1.27-alpine
     container_name: "${COMPOSE_PROJECT_NAME:-vectorvue}_nginx"
@@ -380,6 +402,7 @@ volumes:
   vectorvue_tmp:
   vectorvue_config:
   vectorvue_analytics:
+  vectorvue_nats_data:
 
 networks:
   telemetry_private:

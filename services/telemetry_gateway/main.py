@@ -30,9 +30,10 @@ from uuid import uuid4
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from redis import Redis
 from redis.exceptions import RedisError
+from services.telemetry_gateway.queue import SecureQueuePublisher, clear_memory_messages, load_queue_settings
 
 
 HEX_64_RE = re.compile(r"^[a-fA-F0-9]{64}$")
@@ -65,6 +66,7 @@ class GatewaySettings:
     redis_url: str
     rate_limit_per_minute: int
     rate_limit_backend: str
+    queue_backend: str
 
 
 class ReplayGuard:
@@ -156,6 +158,7 @@ def _load_settings() -> GatewaySettings:
         redis_url=os.environ.get("VV_TG_REDIS_URL", "").strip(),
         rate_limit_per_minute=rate_limit_per_min,
         rate_limit_backend=os.environ.get("VV_TG_RATE_LIMIT_BACKEND", "redis").strip().lower(),
+        queue_backend=os.environ.get("VV_TG_QUEUE_BACKEND", "nats").strip().lower(),
     )
 
 
@@ -257,7 +260,7 @@ def _enforce_operator_rate_limit(operator_id: str, settings: GatewaySettings) ->
     raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unsupported rate-limit backend")
 
 
-app = FastAPI(title="VectorVue Telemetry Gateway", version="1.2.0")
+app = FastAPI(title="VectorVue Telemetry Gateway", version="2.1.0")
 
 
 @app.get("/healthz")
@@ -274,6 +277,7 @@ def healthz() -> dict[str, Any]:
         "nonce_ttl_seconds": settings.nonce_ttl_seconds,
         "nonce_backend": settings.nonce_backend,
         "rate_limit_per_minute": settings.rate_limit_per_minute,
+        "queue_backend": settings.queue_backend,
     }
 
 
@@ -283,6 +287,9 @@ async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
         settings = _load_settings()
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    queue_settings = load_queue_settings()
+    queue = SecureQueuePublisher(queue_settings)
 
     _enforce_mtls_and_pinning(request, settings)
 
@@ -299,16 +306,56 @@ async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
     try:
         body = json.loads(raw)
     except json.JSONDecodeError as exc:
+        await _publish_dead_letter_or_fail(
+            queue=queue,
+            raw_body=raw,
+            error_code="invalid_json",
+            error_message="Invalid JSON payload",
+            trace={"reason": "json_decode"},
+        )
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON payload") from exc
 
-    parsed = TelemetryIngestRequest.model_validate(body)
+    try:
+        parsed = TelemetryIngestRequest.model_validate(body)
+    except ValidationError as exc:
+        await _publish_dead_letter_or_fail(
+            queue=queue,
+            raw_body=raw,
+            error_code="schema_validation_failed",
+            error_message="Telemetry schema validation failed",
+            trace={"reason": "schema_validation", "errors": exc.errors()},
+        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Telemetry schema validation failed") from exc
+
     if parsed.timestamp != ts:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body timestamp mismatch with signed header")
     if parsed.nonce != nonce:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Body nonce mismatch with signed header")
     _enforce_operator_rate_limit(parsed.operator_id, settings)
 
+    try:
+        await queue.publish_ingest(
+            payload=parsed.model_dump(mode="json"),
+            trace={"operator_id": parsed.operator_id, "campaign_id": parsed.campaign_id},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Telemetry queue publish failed") from exc
+
     return TelemetryIngestResponse(accepted=True, request_id=str(uuid4()))
+
+
+async def _publish_dead_letter_or_fail(
+    *,
+    queue: SecureQueuePublisher,
+    raw_body: bytes,
+    error_code: str,
+    error_message: str,
+    trace: dict[str, Any],
+) -> None:
+    try:
+        await queue.publish_dlq(raw_body=raw_body, error_code=error_code, error_message=error_message, trace=trace)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Telemetry DLQ publish failed") from exc
 
 
 # Test-only helper
@@ -316,3 +363,4 @@ async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
 def _clear_replay_cache_for_tests() -> None:
     _replay_guard.clear()
     _rate_limiter.clear()
+    clear_memory_messages()

@@ -102,18 +102,18 @@ Security Gate:
 ## Sprint 2.1 — Queue Layer
 
 ### VV-2.1.1 Introduce Secure Queue (Kafka/NATS)
-- [ ] Internal-only network
-- [ ] No public exposure
+- [x] Internal-only network
+- [x] No public exposure
 - Commit:
   - `infra(queue): deploy secure telemetry queue`
 
 ### VV-2.1.2 Dead Letter Queue
-- [ ] Route malformed events
+- [x] Route malformed events
 - Commit:
   - `feat(queue): add dead letter handling`
 
 ### VV-2.1.3 Integrity Hashing
-- [ ] Add SHA-256 checksum per message
+- [x] Add SHA-256 checksum per message
 - Commit:
   - `feat(integrity): add message integrity hashing`
 

@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from services.telemetry_gateway.main import _clear_replay_cache_for_tests, app
+from services.telemetry_gateway.queue import get_memory_messages
 
 
 class TelemetryGatewaySecurityTests(unittest.TestCase):
@@ -42,6 +43,9 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         os.environ["VV_TG_NONCE_BACKEND"] = "memory"
         os.environ["VV_TG_RATE_LIMIT_BACKEND"] = "memory"
         os.environ["VV_TG_RATE_LIMIT_PER_MINUTE"] = "2"
+        os.environ["VV_TG_QUEUE_BACKEND"] = "memory"
+        os.environ["VV_TG_QUEUE_SUBJECT"] = "vectorvue.telemetry.ingest"
+        os.environ["VV_TG_DLQ_SUBJECT"] = "vectorvue.telemetry.dlq"
 
         _clear_replay_cache_for_tests()
         self.client = TestClient(app)
@@ -106,6 +110,10 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         res = self.client.post("/internal/v1/telemetry", headers=self._signed_headers(payload), json=payload)
         self.assertEqual(res.status_code, 202)
         self.assertTrue(res.json().get("accepted"))
+        queued = get_memory_messages("vectorvue.telemetry.ingest")
+        self.assertEqual(len(queued), 1)
+        self.assertEqual(queued[0]["kind"], "ingest")
+        self.assertEqual(len(queued[0]["integrity_hash"]), 64)
 
     def test_rejects_replay_nonce(self):
         payload = self._payload("nonce-005")
@@ -150,6 +158,19 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         self.assertEqual(r2.status_code, 202)
         r3 = self.client.post("/internal/v1/telemetry", headers=self._signed_headers(third), json=third)
         self.assertEqual(r3.status_code, 429)
+
+    def test_malformed_payload_goes_to_dlq(self):
+        malformed = {
+            "timestamp": int(time.time()),
+            "nonce": "nonce-011",
+            "payload": {"event_type": "x"},
+        }
+        res = self.client.post("/internal/v1/telemetry", headers=self._signed_headers(malformed), json=malformed)
+        self.assertEqual(res.status_code, 422)
+        dlq = get_memory_messages("vectorvue.telemetry.dlq")
+        self.assertEqual(len(dlq), 1)
+        self.assertEqual(dlq[0]["kind"], "dead_letter")
+        self.assertEqual(len(dlq[0]["integrity_hash"]), 64)
 
 
 if __name__ == "__main__":
