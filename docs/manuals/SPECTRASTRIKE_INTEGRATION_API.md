@@ -1,9 +1,11 @@
 # SpectraStrike Integration API
 
-## Base Path
-All SpectraStrike routes are tenant-scoped and under:
+> Status: Retired in Phase 0 Sprint 0.1. Public client API ingestion endpoints were removed.
 
-- `/api/v1/integrations/spectrastrike/*`
+## Base Path
+No active runtime routes. Historical base path was:
+
+- `/api/v1/integrations/spectrastrike/*` (removed)
 
 ## Authentication and Tenant Requirements
 - Bearer JWT is required in `Authorization: Bearer <token>`.

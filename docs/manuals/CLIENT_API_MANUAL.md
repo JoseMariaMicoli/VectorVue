@@ -23,7 +23,7 @@ This manual provides production-safe integration guidance for client-facing APIs
 - JWT authentication with tenant claim required
 - Tenant-scoped reads only for client data APIs
 - Compliance APIs return signed response envelopes
-- Telemetry ingestion is limited to security workflow behavior
+- Client API telemetry ingestion is disabled (Phase 0 Sprint 0.1)
 
 ## 2. Base URL and Authentication
 
@@ -52,12 +52,6 @@ Use access token in all calls:
 - `GET /api/v1/client/risk-trend`
 - `GET /api/v1/client/remediation`
 - `GET /api/v1/client/remediation-status`
-- `POST /api/v1/client/events`
-- `POST /api/v1/integrations/spectrastrike/events`
-- `POST /api/v1/integrations/spectrastrike/events/batch`
-- `POST /api/v1/integrations/spectrastrike/findings`
-- `POST /api/v1/integrations/spectrastrike/findings/batch`
-- `GET /api/v1/integrations/spectrastrike/ingest/status/{request_id}`
 
 ## 4. Analytics Endpoints
 
@@ -102,28 +96,15 @@ curl -k -X POST https://127.0.0.1/api/v1/client/auth/login \
   }'
 ```
 
-## 7. Example Telemetry Event
+## 7. Telemetry Endpoint Status
 
-```bash
-curl -k -X POST https://127.0.0.1/api/v1/client/events \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "event_type": "FINDING_VIEWED",
-    "object_type": "finding",
-    "object_id": "123",
-    "severity": "critical",
-    "metadata_json": {"source":"portal"}
-  }'
-```
-
-Expected response: `202 Accepted`.
+`POST /api/v1/client/events` and `/api/v1/integrations/spectrastrike/*` are retired and not exposed by the runtime API.
 
 ## 8. Integration Validation Checklist
 
 1. Authenticate and resolve tenant context.
 2. Read findings, risk, and remediation data.
-3. Submit one telemetry event.
+3. Confirm telemetry ingestion endpoints are not exposed.
 4. Call one analytics endpoint.
 5. Call one compliance endpoint and validate signature envelope presence.
 
@@ -139,4 +120,4 @@ make api-smoke
 
 - [Compliance API Spec](../COMPLIANCE_API_SPEC.md)
 - [Auditor Guide](../AUDITOR_GUIDE.md)
-- [Portal Telemetry Manual](./PORTAL_TELEMETRY_MANUAL.md)
+- [Phase 0 Sprint 0.1 Roadmap](../roadmap/phase-0-sprint-0.1.md)

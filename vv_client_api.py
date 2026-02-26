@@ -24,16 +24,12 @@ import base64
 import hashlib
 import json
 import os
-import time
-from collections import defaultdict, deque
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from threading import Lock
 from typing import Any
-from uuid import uuid4
 
 import jwt
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import MetaData, Table, and_, create_engine, or_, select, text
@@ -43,7 +39,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from api_contract.client_api_models import Paginated, RemediationStatus, RiskSummary
 from api.compliance_routes import router as compliance_router
-from app.client_api.spectrastrike_router import router as spectrastrike_router
 from app.client_api.schemas import (
     ClientEvidenceGalleryItem,
     ClientEvidenceGalleryResponse,
@@ -67,27 +62,6 @@ APP_TITLE = "VectorVue Client API"
 APP_VERSION = "4.1"
 JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = 12 * 60 * 60
-EVENT_RATE_LIMIT_WINDOW_SECONDS = 60
-EVENT_RATE_LIMIT_MAX = 120
-ALLOWED_EVENT_TYPES = {
-    "FINDING_VIEWED",
-    "FINDING_ACKNOWLEDGED",
-    "REMEDIATION_OPENED",
-    "REMEDIATION_COMPLETED",
-    "REPORT_DOWNLOADED",
-    "DASHBOARD_VIEWED",
-}
-ALLOWED_OBJECT_TYPES = {"finding", "report", "dashboard", "remediation"}
-SENSITIVE_METADATA_KEYS = {
-    "ip",
-    "ip_address",
-    "ipaddr",
-    "user_agent",
-    "ua",
-    "keystrokes",
-    "keypress",
-    "keyboard",
-}
 DEFAULT_THEME = {
     "company_name": "VectorVue Customer",
     "logo_path": "",
@@ -129,9 +103,6 @@ metadata = MetaData()
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 app.include_router(compliance_router)
-app.include_router(spectrastrike_router)
-_event_rate_limit_lock = Lock()
-_event_rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
 
 
 class ClientAuthLoginRequest(BaseModel):
@@ -199,19 +170,6 @@ class ClientAuthRegisterResponse(BaseModel):
 class RiskTrendPoint(BaseModel):
     day: str
     score: float
-
-
-class ClientActivityEventIn(BaseModel):
-    event_type: str = Field(..., min_length=3, max_length=64)
-    object_type: str = Field(..., min_length=3, max_length=32)
-    object_id: str | None = Field(default=None, max_length=128)
-    severity: str | None = Field(default=None, max_length=32)
-    timestamp: datetime | None = None
-    metadata_json: dict[str, Any] | None = None
-
-
-class ClientActivityEventAccepted(BaseModel):
-    accepted: bool = True
 
 
 class ModelPromoteResponse(BaseModel):
@@ -338,87 +296,6 @@ def _auth_secret() -> str:
             detail="VV_CLIENT_JWT_SECRET is not configured",
         )
     return secret
-
-
-def _extract_bearer_token(request: Request) -> str:
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
-    token = auth.split(" ", 1)[1].strip()
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
-    return token
-
-
-def _decode_client_jwt_payload(request: Request) -> dict[str, Any]:
-    token = _extract_bearer_token(request)
-    allow_unsigned = os.environ.get("VV_CLIENT_JWT_ALLOW_UNSIGNED", "0").strip() == "1"
-    try:
-        if os.environ.get("VV_CLIENT_JWT_SECRET", "").strip():
-            return jwt.decode(token, key=_auth_secret(), algorithms=[JWT_ALGORITHM], options={"verify_aud": False})
-        if allow_unsigned:
-            return jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="JWT verification misconfigured on server",
-        )
-    except jwt.ExpiredSignatureError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired") from exc
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid JWT") from exc
-
-
-def _sanitize_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(raw, dict):
-        return {}
-    clean: dict[str, Any] = {}
-    for k, v in raw.items():
-        key = str(k).strip()
-        if not key:
-            continue
-        if key.lower() in SENSITIVE_METADATA_KEYS:
-            continue
-        if len(clean) >= 24:
-            break
-        if isinstance(v, (str, int, float, bool)) or v is None:
-            clean[key[:80]] = v
-        else:
-            clean[key[:80]] = str(v)[:512]
-    return clean
-
-
-def _event_rate_limit_key(tenant_id: str, username: str | None) -> str:
-    return f"{tenant_id}:{(username or 'anonymous').strip().lower()}"
-
-
-def _enforce_event_rate_limit(rate_key: str) -> None:
-    now = time.time()
-    with _event_rate_limit_lock:
-        bucket = _event_rate_limit_buckets[rate_key]
-        while bucket and now - bucket[0] > EVENT_RATE_LIMIT_WINDOW_SECONDS:
-            bucket.popleft()
-        if len(bucket) >= EVENT_RATE_LIMIT_MAX:
-            raise HTTPException(status_code=429, detail="Event rate limit exceeded")
-        bucket.append(now)
-
-
-def _insert_client_activity_event(record: dict[str, Any]) -> None:
-    try:
-        with SessionLocal() as db:
-            db.execute(
-                text(
-                    """INSERT INTO client_activity_events
-                       (id, tenant_id, user_id, event_type, object_type, object_id, severity, timestamp, metadata_json)
-                       VALUES (:id, :tenant_id, :user_id, :event_type, :object_type, :object_id, :severity, :timestamp, CAST(:metadata_json AS JSONB))"""
-                ),
-                record,
-            )
-            db.commit()
-    except Exception:
-        # Telemetry must never block or break the portal UX.
-        return
 
 
 def _resolve_login_tenant(db: Session, requested_tenant_id: str | None) -> str:
@@ -779,58 +656,6 @@ def root_health() -> dict[str, Any]:
 @app.get("/healthz", tags=["system"])
 def healthz() -> dict[str, Any]:
     return root_health()
-
-
-@app.post(
-    "/api/v1/client/events",
-    response_model=ClientActivityEventAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-    tags=["client"],
-)
-def create_client_event(
-    payload: ClientActivityEventIn,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(_get_db),
-):
-    tenant_id = str(get_current_tenant(request))
-    event_type = (payload.event_type or "").strip().upper()
-    object_type = (payload.object_type or "").strip().lower()
-    if event_type not in ALLOWED_EVENT_TYPES:
-        raise HTTPException(status_code=422, detail=f"Unsupported event_type: {payload.event_type}")
-    if object_type not in ALLOWED_OBJECT_TYPES:
-        raise HTTPException(status_code=422, detail=f"Unsupported object_type: {payload.object_type}")
-
-    jwt_payload = _decode_client_jwt_payload(request)
-    username = str(jwt_payload.get("sub", "")).strip() or None
-    _enforce_event_rate_limit(_event_rate_limit_key(tenant_id, username))
-
-    user_id: int | None = None
-    if username:
-        users = _load_table("users")
-        row = db.execute(select(users.c.id).where(users.c.username == username).limit(1)).mappings().first()
-        if row:
-            user_id = int(row["id"])
-
-    event_ts = payload.timestamp or datetime.now(timezone.utc)
-    if event_ts.tzinfo is None:
-        event_ts = event_ts.replace(tzinfo=timezone.utc)
-
-    background_tasks.add_task(
-        _insert_client_activity_event,
-        {
-            "id": str(uuid4()),
-            "tenant_id": tenant_id,
-            "user_id": user_id,
-            "event_type": event_type,
-            "object_type": object_type,
-            "object_id": payload.object_id,
-            "severity": (payload.severity or "").strip().lower() or None,
-            "timestamp": event_ts,
-            "metadata_json": json.dumps(_sanitize_metadata(payload.metadata_json)),
-        },
-    )
-    return ClientActivityEventAccepted(accepted=True)
 
 
 def _prediction_to_client_contract(row: dict[str, Any] | None, fallback_explanation: str) -> ClientMLResponse:

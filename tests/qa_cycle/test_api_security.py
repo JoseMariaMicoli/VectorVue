@@ -42,7 +42,6 @@ class TestApiVerificationAndSecurity(unittest.TestCase):
             "/api/v1/client/remediation",
             "/api/v1/client/remediation-status",
             "/api/v1/client/theme",
-            "/api/v1/client/events",
             "/ml/client/security-score",
             "/ml/client/risk",
             "/ml/client/detection-gaps",
@@ -52,6 +51,9 @@ class TestApiVerificationAndSecurity(unittest.TestCase):
         }
         missing = sorted(required - paths)
         self.assertFalse(missing, f"missing OpenAPI paths: {missing}")
+        self.assertNotIn("/api/v1/client/events", paths)
+        for path in paths:
+            self.assertFalse(path.startswith("/api/v1/integrations/spectrastrike"))
 
     def test_auth_is_enforced_for_client_read_routes(self):
         protected = [
@@ -103,4 +105,3 @@ class TestApiVerificationAndSecurity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

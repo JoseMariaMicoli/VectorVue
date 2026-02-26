@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
-import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -36,47 +35,25 @@ class TestWorkflowIntegrityAndPerformance(unittest.TestCase):
         cls.lead_headers = auth_headers(cls.lead_token)
         cls.tenant_id = ACME_VIEWER.tenant_id
 
-    def test_event_ingestion_and_db_persistence(self):
-        with psycopg.connect(PG_URL) as conn, conn.cursor() as cur:
-            cur.execute(
-                "SELECT COUNT(*) FROM client_activity_events WHERE tenant_id=%s",
-                (self.tenant_id,),
-            )
-            before = int(cur.fetchone()[0])
-
-        payload = {
-            "event_type": "DASHBOARD_VIEWED",
-            "object_type": "dashboard",
-            "object_id": "qa-overview",
-            "metadata_json": {"screen": "overview", "ip": "should_be_filtered"},
-        }
+    def test_telemetry_ingestion_endpoint_removed(self):
         r = requests.post(
             f"{BASE_URL}/api/v1/client/events",
             headers=self.viewer_headers,
-            json=payload,
+            json={"event_type": "DASHBOARD_VIEWED", "object_type": "dashboard"},
             timeout=10,
         )
-        self.assertEqual(r.status_code, 202, r.text[:200])
-        time.sleep(0.7)
+        self.assertEqual(r.status_code, 404, r.text[:200])
 
         with psycopg.connect(PG_URL) as conn, conn.cursor() as cur:
             cur.execute(
-                """SELECT COUNT(*), metadata_json
-                   FROM client_activity_events
-                   WHERE tenant_id=%s
-                   GROUP BY metadata_json
-                   ORDER BY COUNT(*) DESC
-                   LIMIT 1""",
-                (self.tenant_id,),
+                """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'client_activity_events'
+                """
             )
-            row = cur.fetchone()
-            self.assertIsNotNone(row)
-            cur.execute(
-                "SELECT COUNT(*) FROM client_activity_events WHERE tenant_id=%s",
-                (self.tenant_id,),
-            )
-            after = int(cur.fetchone()[0])
-        self.assertGreaterEqual(after, before + 1, "event insert did not persist")
+            table_exists = int(cur.fetchone()[0])
+        self.assertEqual(table_exists, 0, "client_activity_events table should be removed")
 
     def test_workflow_no_orphan_remediation_records(self):
         with psycopg.connect(PG_URL) as conn, conn.cursor() as cur:
@@ -184,14 +161,12 @@ class TestWorkflowIntegrityAndPerformance(unittest.TestCase):
             cur.execute(
                 """
                 SELECT COUNT(*)
-                FROM client_activity_events
-                WHERE tenant_id=%s
-                  AND timestamp > (NOW() + INTERVAL '5 minutes')
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'client_activity_events'
                 """,
-                (self.tenant_id,),
             )
-            future_events = int(cur.fetchone()[0])
-        self.assertEqual(future_events, 0, f"future-dated client_activity_events found: {future_events}")
+            table_exists = int(cur.fetchone()[0])
+        self.assertEqual(table_exists, 0, "client_activity_events table should be absent")
 
     def test_performance_simulate_10k_events_and_parallel_exports(self):
         # Bulk append to analytics.events for 10k-row performance scenario.
