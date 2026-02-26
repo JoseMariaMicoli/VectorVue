@@ -178,12 +178,12 @@ Security Gate:
 ## Sprint 5.1 — Service Identity
 
 ### VV-5.1.1 Service-to-Service mTLS
-- [ ] Each microservice has identity cert
+- [x] Each microservice has identity cert
 - Commit:
   - `security(zero-trust): enforce service identity authentication`
 
 ### VV-5.1.2 Remove Shared Secrets
-- [ ] Replace env secrets with cert-based trust
+- [x] Replace env secrets with cert-based trust
 - Commit:
   - `refactor(security): remove shared service secrets`
 

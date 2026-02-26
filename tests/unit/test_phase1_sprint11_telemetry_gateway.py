@@ -33,8 +33,9 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         self.private_key = Ed25519PrivateKey.generate()
         public_key_raw = self.private_key.public_key().public_bytes_raw()
         self.public_key_b64 = base64.b64encode(public_key_raw).decode("utf-8")
+        self.cert_fp = "a" * 64
 
-        os.environ["VV_TG_SPECTRASTRIKE_CERT_SHA256"] = "a" * 64
+        os.environ["VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON"] = '{"spectrastrike-producer":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
         os.environ["VV_TG_SPECTRASTRIKE_ED25519_PUBKEY"] = self.public_key_b64
         os.environ["VV_TG_REQUIRE_MTLS"] = "1"
         os.environ["VV_TG_REQUIRE_PAYLOAD_SIGNATURE"] = "1"
@@ -47,6 +48,16 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         os.environ["VV_TG_QUEUE_SUBJECT"] = "vectorvue.telemetry.ingest"
         os.environ["VV_TG_DLQ_SUBJECT"] = "vectorvue.telemetry.dlq"
         os.environ["VV_TG_OPERATOR_TENANT_MAP"] = '{"op-001":"10000000-0000-0000-0000-000000000001"}'
+        os.environ["VV_SERVICE_IDENTITY_CERT_PATH"] = "/tmp/vv_identity_server.crt"
+        os.environ["VV_SERVICE_IDENTITY_KEY_PATH"] = "/tmp/vv_identity_server.key"
+        os.environ["VV_SERVICE_IDENTITY_CA_PATH"] = "/tmp/vv_identity_ca.crt"
+        for path in (
+            "/tmp/vv_identity_server.crt",
+            "/tmp/vv_identity_server.key",
+            "/tmp/vv_identity_ca.crt",
+        ):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("test-cert")
 
         _clear_replay_cache_for_tests()
         self.client = TestClient(app)
@@ -83,12 +94,13 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
             },
         }
 
-    def _signed_headers(self, payload: dict, cert_fp: str = "a" * 64) -> dict[str, str]:
+    def _signed_headers(self, payload: dict, cert_fp: str | None = None, service_identity: str = "spectrastrike-producer") -> dict[str, str]:
         raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         msg = f"{payload['timestamp']}.{payload['nonce']}.".encode("utf-8") + raw
         signature = self.private_key.sign(msg)
         return {
-            "X-Client-Cert-Sha256": cert_fp,
+            "X-Service-Identity": service_identity,
+            "X-Client-Cert-Sha256": cert_fp or self.cert_fp,
             "X-Telemetry-Timestamp": str(payload["timestamp"]),
             "X-Telemetry-Nonce": payload["nonce"],
             "X-Telemetry-Signature": base64.b64encode(signature).decode("utf-8"),
@@ -111,9 +123,19 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 401)
 
+    def test_rejects_unknown_service_identity(self):
+        payload = self._payload("nonce-002a")
+        res = self.client.post(
+            "/internal/v1/telemetry",
+            headers=self._signed_headers(payload, service_identity="unknown-service"),
+            json=payload,
+        )
+        self.assertEqual(res.status_code, 401)
+
     def test_rejects_unsigned_payload(self):
         payload = self._payload("nonce-003")
         headers = {
+            "X-Service-Identity": "spectrastrike-producer",
             "X-Client-Cert-Sha256": "a" * 64,
             "X-Telemetry-Timestamp": str(payload["timestamp"]),
             "X-Telemetry-Nonce": payload["nonce"],

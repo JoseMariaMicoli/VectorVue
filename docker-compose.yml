@@ -49,8 +49,13 @@ services:
       VV_TG_NATS_URL: nats://nats:4222
       VV_TG_QUEUE_SUBJECT: vectorvue.telemetry.ingest
       VV_TG_DLQ_SUBJECT: vectorvue.telemetry.dlq
-      VV_TG_SPECTRASTRIKE_CERT_SHA256: "${VV_TG_SPECTRASTRIKE_CERT_SHA256:?required}"
+      VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON: "${VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON:?required}"
       VV_TG_SPECTRASTRIKE_ED25519_PUBKEY: "${VV_TG_SPECTRASTRIKE_ED25519_PUBKEY:?required}"
+      VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
+      VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
+      VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
+    volumes:
+      - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /run:size=16m,nosuid,nodev
@@ -100,6 +105,9 @@ services:
       VV_REPORTS_DIR: /var/lib/vectorvue/reports
       VV_LOG_DIR: /var/lib/vectorvue/logs
       VV_CLIENT_JWT_SECRET: change-me-phase7b-client-jwt-secret
+      VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
+      VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
+      VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
       TERM: xterm-256color
       COLORTERM: truecolor
       FORCE_COLOR: "1"
@@ -109,6 +117,7 @@ services:
       - vectorvue_runtime:/var/lib/vectorvue/run
       - vectorvue_tmp:/var/lib/vectorvue/tmp
       - vectorvue_config:/opt/vectorvue/config
+      - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /run:size=16m,nosuid,nodev
@@ -147,6 +156,11 @@ services:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
       NODE_ENV: production
+      VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
+      VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
+      VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
+    volumes:
+      - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /app/.next/cache:size=128m,nosuid,nodev
@@ -201,10 +215,14 @@ services:
       VV_REDIS_PASSWORD: strongpassword
       VV_LOG_DIR: /var/lib/vectorvue/logs
       VV_RUN_MODE: service
+      VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
+      VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
+      VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
     volumes:
       - vectorvue_logs:/var/lib/vectorvue/logs
       - vectorvue_runtime:/var/lib/vectorvue/run
       - vectorvue_tmp:/var/lib/vectorvue/tmp
+      - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /run:size=16m,nosuid,nodev
@@ -236,10 +254,14 @@ services:
       VV_REDIS_URL: redis://:strongpassword@redis:6379/0
       VV_ANALYTICS_STORAGE_DIR: /storage
       VV_ML_WORKER_LOG_LEVEL: INFO
+      VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
+      VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
+      VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
     volumes:
       - vectorvue_logs:/var/lib/vectorvue/logs
       - vectorvue_analytics:/storage
       - vectorvue_tmp:/var/lib/vectorvue/tmp
+      - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /run:size=16m,nosuid,nodev
@@ -264,9 +286,13 @@ services:
       VV_DB_URL: postgresql://vectorvue:strongpassword@postgres:5432/vectorvue_db
       VV_REDIS_URL: redis://:strongpassword@redis:6379/0
       VV_COMPLIANCE_WORKER_LOG_LEVEL: INFO
+      VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
+      VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
+      VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
     volumes:
       - vectorvue_logs:/var/lib/vectorvue/logs
       - vectorvue_tmp:/var/lib/vectorvue/tmp
+      - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /run:size=16m,nosuid,nodev
@@ -292,9 +318,13 @@ services:
       VV_REDIS_URL: redis://:strongpassword@redis:6379/0
       VV_COMPLIANCE_WORKER_LOG_LEVEL: INFO
       VV_COMPLIANCE_SIGNING_KEY: change-me-phase9-compliance-signing-key
+      VV_SERVICE_IDENTITY_CERT_PATH: /etc/vectorvue/certs/server.crt
+      VV_SERVICE_IDENTITY_KEY_PATH: /etc/vectorvue/certs/server.key
+      VV_SERVICE_IDENTITY_CA_PATH: /etc/vectorvue/certs/ca.crt
     volumes:
       - vectorvue_logs:/var/lib/vectorvue/logs
       - vectorvue_tmp:/var/lib/vectorvue/tmp
+      - ./deploy/certs:/etc/vectorvue/certs:ro
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /run:size=16m,nosuid,nodev

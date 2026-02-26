@@ -20,6 +20,7 @@ import base64
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 import time
 from dataclasses import dataclass
@@ -70,7 +71,10 @@ class TelemetryIngestResponse(BaseModel):
 @dataclass(frozen=True)
 class GatewaySettings:
     require_mtls: bool
-    pinned_client_cert_sha256: str
+    allowed_service_identities: dict[str, str]
+    identity_cert_path: str
+    identity_key_path: str
+    identity_ca_path: str
     require_payload_signature: bool
     spectrastrike_ed25519_public_key_b64: str
     allowed_clock_skew_seconds: int
@@ -143,9 +147,13 @@ def _parse_bool(name: str, default: str = "1") -> bool:
 
 
 def _load_settings() -> GatewaySettings:
-    pinned = os.environ.get("VV_TG_SPECTRASTRIKE_CERT_SHA256", "").strip().lower()
-    if not HEX_64_RE.fullmatch(pinned):
-        raise RuntimeError("VV_TG_SPECTRASTRIKE_CERT_SHA256 must be a 64-char sha256 hex fingerprint")
+    allowed_identities = _load_allowed_service_identities()
+    cert_path = os.environ.get("VV_SERVICE_IDENTITY_CERT_PATH", "/etc/vectorvue/certs/server.crt").strip()
+    key_path = os.environ.get("VV_SERVICE_IDENTITY_KEY_PATH", "/etc/vectorvue/certs/server.key").strip()
+    ca_path = os.environ.get("VV_SERVICE_IDENTITY_CA_PATH", "/etc/vectorvue/certs/ca.crt").strip()
+    for p in (cert_path, key_path, ca_path):
+        if not Path(p).exists():
+            raise RuntimeError(f"Service identity artifact missing: {p}")
 
     pubkey = os.environ.get("VV_TG_SPECTRASTRIKE_ED25519_PUBKEY", "").strip()
     if not pubkey:
@@ -163,7 +171,10 @@ def _load_settings() -> GatewaySettings:
 
     return GatewaySettings(
         require_mtls=_parse_bool("VV_TG_REQUIRE_MTLS", "1"),
-        pinned_client_cert_sha256=pinned,
+        allowed_service_identities=allowed_identities,
+        identity_cert_path=cert_path,
+        identity_key_path=key_path,
+        identity_ca_path=ca_path,
         require_payload_signature=_parse_bool("VV_TG_REQUIRE_PAYLOAD_SIGNATURE", "1"),
         spectrastrike_ed25519_public_key_b64=pubkey,
         allowed_clock_skew_seconds=skew,
@@ -175,6 +186,27 @@ def _load_settings() -> GatewaySettings:
         queue_backend=os.environ.get("VV_TG_QUEUE_BACKEND", "nats").strip().lower(),
         operator_tenant_map=_load_operator_tenant_map(),
     )
+
+
+def _load_allowed_service_identities() -> dict[str, str]:
+    raw = os.environ.get("VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON", "").strip() or "{}"
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON must be valid JSON object") from exc
+    if not isinstance(parsed, dict) or not parsed:
+        raise RuntimeError("VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON must be a non-empty JSON object")
+
+    out: dict[str, str] = {}
+    for service_id, fingerprint in parsed.items():
+        sid = str(service_id).strip()
+        fp = str(fingerprint).strip().lower()
+        if not sid:
+            raise RuntimeError("service identity id cannot be empty")
+        if not HEX_64_RE.fullmatch(fp):
+            raise RuntimeError("service identity fingerprint must be 64-char sha256 hex")
+        out[sid] = fp
+    return out
 
 
 def _load_operator_tenant_map() -> dict[str, str]:
@@ -202,12 +234,16 @@ def _require_header(request: Request, header: str) -> str:
     return value
 
 
-def _enforce_mtls_and_pinning(request: Request, settings: GatewaySettings) -> str:
+def _enforce_service_identity_auth(request: Request, settings: GatewaySettings) -> str:
+    service_id = _require_header(request, "X-Service-Identity")
     cert_fp = _require_header(request, "X-Client-Cert-Sha256").lower()
     if not HEX_64_RE.fullmatch(cert_fp):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid client certificate fingerprint format")
-    if settings.require_mtls and cert_fp != settings.pinned_client_cert_sha256:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client certificate fingerprint mismatch")
+    expected = settings.allowed_service_identities.get(service_id)
+    if not expected:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown service identity")
+    if settings.require_mtls and cert_fp != expected:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Service identity certificate fingerprint mismatch")
     return cert_fp
 
 
@@ -322,6 +358,7 @@ def healthz() -> dict[str, Any]:
     return {
         "status": "healthy",
         "require_mtls": settings.require_mtls,
+        "trusted_identities": sorted(settings.allowed_service_identities.keys()),
         "require_payload_signature": settings.require_payload_signature,
         "nonce_ttl_seconds": settings.nonce_ttl_seconds,
         "nonce_backend": settings.nonce_backend,
@@ -340,7 +377,7 @@ async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
     queue_settings = load_queue_settings()
     queue = SecureQueuePublisher(queue_settings)
 
-    _enforce_mtls_and_pinning(request, settings)
+    _enforce_service_identity_auth(request, settings)
 
     raw = await request.body()
     if not raw:

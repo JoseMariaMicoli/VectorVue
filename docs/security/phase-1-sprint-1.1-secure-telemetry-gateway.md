@@ -15,7 +15,7 @@
 ## Mitigations Implemented
 - New internal-only gateway service: `services.telemetry_gateway.main`.
 - Mandatory mTLS identity header gate (`X-Client-Cert-Sha256`).
-- Certificate pinning against `VV_TG_SPECTRASTRIKE_CERT_SHA256`.
+- Certificate pinning against trusted service identity certificate fingerprints.
 - Mandatory Ed25519 payload signature validation via pinned public key (`VV_TG_SPECTRASTRIKE_ED25519_PUBKEY`).
 - Strict timestamp skew validation (default 30s).
 - Nonce replay guard with TTL enforcement.
