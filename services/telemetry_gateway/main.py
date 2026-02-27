@@ -1,27 +1,29 @@
 # Copyright (c) 2026 NyxeraLabs
-# Author: José María Micoli
+# Author: Jose Maria Micoli
 # Licensed under BSL 1.1
-# Change Date: 2033-02-17 → Apache-2.0
+# Change Date: 2033-02-22 -> Apache-2.0
 #
 # You may:
-# ✔ Study
-# ✔ Modify
-# ✔ Use for internal security testing
+# Study
+# Modify
+# Use for internal security testing
 #
 # You may NOT:
-# ✘ Offer as a commercial service
-# ✘ Sell derived competing products
+# Offer as a commercial service
+# Sell derived competing products
 
 """Internal-only telemetry gateway with mTLS identity + cert pinning."""
 
 from __future__ import annotations
 
 import base64
+import hmac
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import secrets
 import time
 from dataclasses import dataclass
 from threading import Lock
@@ -71,6 +73,43 @@ class TelemetryIngestResponse(BaseModel):
     request_id: str
 
 
+class ExecutionGraphMetadataRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operator_id: str = Field(min_length=1, max_length=128)
+    tenant_id: str = Field(pattern=r"^[a-fA-F0-9-]{36}$")
+    execution_fingerprint: str = Field(min_length=64, max_length=64, pattern=r"^[a-fA-F0-9]{64}$")
+    timestamp: int
+    nonce: str = Field(min_length=8, max_length=128)
+    schema_version: str = Field(min_length=1, max_length=32)
+    graph: dict[str, Any]
+
+
+class FeedbackQueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operator_id: str = Field(min_length=1, max_length=128)
+    tenant_id: str = Field(pattern=r"^[a-fA-F0-9-]{36}$")
+    timestamp: int
+    nonce: str = Field(min_length=8, max_length=128)
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class FeedbackAdjustment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str = Field(pattern=r"^[a-fA-F0-9-]{36}$")
+    execution_fingerprint: str = Field(min_length=64, max_length=64, pattern=r"^[a-fA-F0-9]{64}$")
+    target_urn: str = Field(min_length=1, max_length=512)
+    action: str = Field(min_length=1, max_length=32)
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str = Field(min_length=1, max_length=2048)
+    control: str = Field(default="execution", min_length=1, max_length=64)
+    ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+    timestamp: int
+    schema_version: str = Field(min_length=1, max_length=32)
+
+
 class FederationVerifyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -101,6 +140,7 @@ class GatewaySettings:
     operator_tenant_map: dict[str, str]
     enforce_schema_version: bool
     allowed_schema_version: str
+    feedback_signing_secret: str
 
 
 class ReplayGuard:
@@ -145,6 +185,8 @@ class MemoryRateLimiter:
 
 
 _rate_limiter = MemoryRateLimiter()
+_graph_store_lock = Lock()
+_execution_graph_store: dict[str, list[ExecutionGraphMetadataRequest]] = {}
 
 
 def _get_redis_client(settings: GatewaySettings) -> Redis:
@@ -185,6 +227,10 @@ def _load_settings() -> GatewaySettings:
     if skew < 1 or nonce_ttl < 30 or rate_limit_per_min < 1:
         raise RuntimeError("Clock skew must be >=1, nonce TTL >=30, and rate limit >=1")
 
+    feedback_signing_secret = os.environ.get("VV_TG_FEEDBACK_SIGNING_SECRET", "").strip()
+    if not feedback_signing_secret:
+        raise RuntimeError("VV_TG_FEEDBACK_SIGNING_SECRET must be configured")
+
     return GatewaySettings(
         require_mtls=_parse_bool("VV_TG_REQUIRE_MTLS", "1"),
         allowed_service_identities=allowed_identities,
@@ -203,6 +249,7 @@ def _load_settings() -> GatewaySettings:
         operator_tenant_map=_load_operator_tenant_map(),
         enforce_schema_version=_parse_bool("VV_TG_ENFORCE_SCHEMA_VERSION", "0"),
         allowed_schema_version=os.environ.get("VV_TG_ALLOWED_SCHEMA_VERSION", "1.0").strip(),
+        feedback_signing_secret=feedback_signing_secret,
     )
 
 
@@ -382,6 +429,74 @@ def _enforce_schema_version(
         )
 
 
+def _feedback_signature(
+    *,
+    settings: GatewaySettings,
+    tenant_id: str,
+    signed_at: int,
+    nonce: str,
+    payload: list[dict[str, Any]],
+) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    signing_input = f"{tenant_id}|{signed_at}|{nonce}|{canonical}"
+    return hmac.new(
+        settings.feedback_signing_secret.encode("utf-8"),
+        signing_input.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _build_feedback_adjustments(
+    *,
+    records: list[ExecutionGraphMetadataRequest],
+) -> list[FeedbackAdjustment]:
+    out: list[FeedbackAdjustment] = []
+    for record in records:
+        graph_nodes = record.graph.get("nodes", [])
+        target_urn = str(record.graph.get("target_urn", "urn:target:unknown"))
+        action = "observe"
+        confidence = 0.55
+        rationale = "graph telemetry received; monitoring baseline adjustments"
+        if isinstance(graph_nodes, list) and len(graph_nodes) >= 8:
+            action = "tighten"
+            confidence = 0.82
+            rationale = "high-complexity execution graph exceeded cognitive threshold"
+        out.append(
+            FeedbackAdjustment(
+                tenant_id=record.tenant_id,
+                execution_fingerprint=record.execution_fingerprint.lower(),
+                target_urn=target_urn,
+                action=action,
+                confidence=confidence,
+                rationale=rationale,
+                control="execution",
+                ttl_seconds=1800,
+                timestamp=int(time.time()),
+                schema_version="feedback.adjustment.v1",
+            )
+        )
+    return out
+
+
+def _enforce_operator_tenant_pair(
+    *,
+    operator_id: str,
+    tenant_id: str,
+    settings: GatewaySettings,
+) -> None:
+    expected_tenant = settings.operator_tenant_map.get(operator_id)
+    if not expected_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operator is not mapped to any tenant",
+        )
+    if expected_tenant != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operator tenant mapping violation",
+        )
+
+
 app = FastAPI(title="VectorVue Telemetry Gateway", version="3.2.0")
 
 
@@ -551,6 +666,106 @@ async def ingest_telemetry(request: Request) -> TelemetryIngestResponse:
         raise
 
 
+@app.post("/internal/v1/cognitive/execution-graph", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_execution_graph(request: Request) -> dict[str, Any]:
+    request_id = str(uuid4())
+    audit_log = get_tamper_audit_log()
+    settings = _load_settings()
+    raw = await request.body()
+    _enforce_service_identity_auth(request, settings)
+    if settings.require_payload_signature:
+        _verify_signature(request, settings, raw)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unsigned telemetry is disabled by policy",
+        )
+    payload = ExecutionGraphMetadataRequest.model_validate_json(raw)
+    _enforce_operator_tenant_pair(
+        operator_id=payload.operator_id,
+        tenant_id=payload.tenant_id,
+        settings=settings,
+    )
+    _enforce_operator_rate_limit("graph:" + payload.operator_id, settings)
+    with _graph_store_lock:
+        tenant_records = _execution_graph_store.setdefault(payload.tenant_id, [])
+        tenant_records.append(payload)
+        if len(tenant_records) > 1000:
+            del tenant_records[:-1000]
+    audit_log.append_event(
+        event_type="cognitive.graph.accepted",
+        actor="telemetry_gateway",
+        details={
+            "request_id": request_id,
+            "tenant_id": payload.tenant_id,
+            "operator_id": payload.operator_id,
+            "execution_fingerprint": payload.execution_fingerprint.lower(),
+            "schema_version": payload.schema_version,
+        },
+    )
+    return {
+        "request_id": request_id,
+        "status": "accepted",
+        "data": {"graph_synced": True},
+        "errors": [],
+    }
+
+
+@app.post("/internal/v1/cognitive/feedback/adjustments/query", status_code=status.HTTP_200_OK)
+async def query_feedback_adjustments(request: Request) -> dict[str, Any]:
+    request_id = str(uuid4())
+    audit_log = get_tamper_audit_log()
+    settings = _load_settings()
+    raw = await request.body()
+    _enforce_service_identity_auth(request, settings)
+    if settings.require_payload_signature:
+        _verify_signature(request, settings, raw)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unsigned telemetry is disabled by policy",
+        )
+    query = FeedbackQueryRequest.model_validate_json(raw)
+    _enforce_operator_tenant_pair(
+        operator_id=query.operator_id,
+        tenant_id=query.tenant_id,
+        settings=settings,
+    )
+    with _graph_store_lock:
+        records = list(_execution_graph_store.get(query.tenant_id, []))
+    selected = records[-query.limit :]
+    adjustments = _build_feedback_adjustments(records=selected)
+    data = [item.model_dump(mode="json") for item in adjustments]
+    signed_at = int(time.time())
+    response_nonce = secrets.token_urlsafe(18)
+    signature = _feedback_signature(
+        settings=settings,
+        tenant_id=query.tenant_id,
+        signed_at=signed_at,
+        nonce=response_nonce,
+        payload=data,
+    )
+    audit_log.append_event(
+        event_type="cognitive.feedback.issued",
+        actor="telemetry_gateway",
+        details={
+            "request_id": request_id,
+            "tenant_id": query.tenant_id,
+            "adjustment_count": len(data),
+        },
+    )
+    return {
+        "request_id": request_id,
+        "status": "accepted",
+        "data": data,
+        "errors": [],
+        "signature": signature,
+        "signed_at": signed_at,
+        "nonce": response_nonce,
+        "schema_version": "feedback.response.v1",
+    }
+
+
 async def _publish_dead_letter_or_fail(
     *,
     queue: SecureQueuePublisher,
@@ -570,4 +785,6 @@ async def _publish_dead_letter_or_fail(
 def _clear_replay_cache_for_tests() -> None:
     _replay_guard.clear()
     _rate_limiter.clear()
+    with _graph_store_lock:
+        _execution_graph_store.clear()
     clear_memory_messages()

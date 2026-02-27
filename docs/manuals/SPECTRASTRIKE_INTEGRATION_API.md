@@ -28,6 +28,33 @@ SpectraStrike integration is now supported only through the hardened internal te
 - [Security Expansion Appendix](../Expansion_Appendix.md)
 - [Product Roadmap](../ROADMAP.md)
 
+## Internal Cognitive API (Sprint 31 Alignment)
+
+These endpoints are internal-only and protected by the same mTLS + signature controls as telemetry ingest:
+
+- `POST /internal/v1/cognitive/execution-graph`
+- `POST /internal/v1/cognitive/feedback/adjustments/query`
+
+Feedback responses are signed and replay-protected. SpectraStrike must reject any response missing:
+
+- `signature`
+- `signed_at`
+- `nonce`
+- `schema_version`
+
+Each feedback item must include:
+
+- `tenant_id`
+- `execution_fingerprint`
+- `target_urn`
+- `action`
+- `confidence`
+- `rationale`
+- `timestamp`
+- `schema_version`
+
+Cognitive request payloads must include `operator_id` and the gateway enforces `operator_id -> tenant_id` mapping on both graph ingest and feedback query routes.
+
 ## Security Requirements (Current)
 
 - Zero-trust service-to-service communication.
@@ -36,6 +63,8 @@ SpectraStrike integration is now supported only through the hardened internal te
 - Replay protection (timestamp window + nonce enforcement).
 - Tenant mapping enforcement through signed metadata.
 - Tamper-evident logging of accept/reject outcomes.
+- Signed feedback response verification before policy binding.
+- Feedback replay rejection (response nonce + signed timestamp window).
 
 ## Prohibited Patterns
 

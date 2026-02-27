@@ -49,6 +49,7 @@ Trust is explicit and per-request.
 3. Freshness trust: timestamp skew validation + nonce replay lock.
 4. Tenant trust: signed metadata equality checks + operator-to-tenant mapping.
 5. Processing trust: strict schema + MITRE mapping + sanitization.
+6. Cognitive trust: signed feedback responses bound to tenant and replay-safe nonce/timestamp.
 
 Threat Model:
 - Attack vector: Assume internal source is trusted without proof.
@@ -114,6 +115,25 @@ Threat Model:
 - Impact: Processing faults, dropped data, hidden exploitation attempts.
 - Mitigation: strict validation + DLQ routing + logged reject reasons.
 - Residual risk: DLQ flood volume can increase storage pressure.
+
+## 5.6 Cognitive Feedback Flow (Sprint 31 Alignment)
+1. SpectraStrike sends execution graph metadata to `/internal/v1/cognitive/execution-graph`.
+2. Gateway applies mTLS identity, signature verification, and replay checks.
+3. VectorVue stores graph metadata under tenant scope.
+4. SpectraStrike queries `/internal/v1/cognitive/feedback/adjustments/query`.
+5. Gateway returns tenant-scoped adjustments with response signature, nonce, and signed timestamp.
+6. SpectraStrike verifies signature + replay window and rejects unsigned/forged/replayed responses.
+7. Only verified adjustments are bound into policy evaluation context.
+
+Required feedback item fields:
+- `tenant_id`
+- `execution_fingerprint`
+- `target_urn`
+- `action`
+- `confidence`
+- `rationale`
+- `timestamp`
+- `schema_version`
 
 ## 6. Identity & Certificate Management
 Identity model:

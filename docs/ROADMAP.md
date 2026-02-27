@@ -91,9 +91,11 @@ VectorVue has evolved from a single-operator red team notebook into an enterpris
 ## Phase 5.6 Operational Closure (Dockerized Federation Setup) ✅ COMPLETE
 
 - [x] Internal telemetry gateway ingress route enabled for `/internal/v1/telemetry`
+- [x] Internal cognitive ingress routes enabled for `/internal/v1/cognitive/*`
 - [x] mTLS cert chain regenerated with compliant CA/server/client X509 extensions
 - [x] SpectraStrike service identity fingerprint pin updated in gateway allowlist
 - [x] Gateway runtime wired with operator->tenant map and schema enforcement env
+- [x] Signed feedback response contract enforced (`signature` + `signed_at` + `nonce`)
 - [x] Redis + gateway + ingress connectivity validated for nonce/rate-limit checks
 - [x] Live `nmap -> SpectraStrike -> VectorVue` telemetry accepted through gateway
 - [x] Live Metasploit telemetry accepted through gateway

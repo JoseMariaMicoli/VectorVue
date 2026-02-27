@@ -1,7 +1,7 @@
 # Copyright (c) 2026 NyxeraLabs
-# Author: José María Micoli
+# Author: Jose Maria Micoli
 # Licensed under BSL 1.1
-# Change Date: 2033-02-17 -> Apache-2.0
+# Change Date: 2033-02-22 -> Apache-2.0
 
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ class Phase9Sprint91GatewayAttackSimulationTests(unittest.TestCase):
         os.environ["VV_TG_SPECTRASTRIKE_ED25519_PUBKEY"] = self.public_key_b64
         os.environ["VV_TG_REQUIRE_MTLS"] = "1"
         os.environ["VV_TG_REQUIRE_PAYLOAD_SIGNATURE"] = "1"
+        os.environ["VV_TG_FEEDBACK_SIGNING_SECRET"] = "feedback-test-secret"
         os.environ["VV_TG_ALLOWED_CLOCK_SKEW_SECONDS"] = "30"
         os.environ["VV_TG_NONCE_TTL_SECONDS"] = "120"
         os.environ["VV_TG_NONCE_BACKEND"] = "memory"

@@ -1,16 +1,16 @@
 # Copyright (c) 2026 NyxeraLabs
-# Author: José María Micoli
+# Author: Jose Maria Micoli
 # Licensed under BSL 1.1
-# Change Date: 2033-02-17 → Apache-2.0
+# Change Date: 2033-02-22 -> Apache-2.0
 #
 # You may:
-# ✔ Study
-# ✔ Modify
-# ✔ Use for internal security testing
+# Study
+# Modify
+# Use for internal security testing
 #
 # You may NOT:
-# ✘ Offer as a commercial service
-# ✘ Sell derived competing products
+# Offer as a commercial service
+# Sell derived competing products
 
 from __future__ import annotations
 
@@ -39,6 +39,7 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         os.environ["VV_TG_SPECTRASTRIKE_ED25519_PUBKEY"] = self.public_key_b64
         os.environ["VV_TG_REQUIRE_MTLS"] = "1"
         os.environ["VV_TG_REQUIRE_PAYLOAD_SIGNATURE"] = "1"
+        os.environ["VV_TG_FEEDBACK_SIGNING_SECRET"] = "feedback-test-secret"
         os.environ["VV_TG_ALLOWED_CLOCK_SKEW_SECONDS"] = "30"
         os.environ["VV_TG_NONCE_TTL_SECONDS"] = "120"
         os.environ["VV_TG_NONCE_BACKEND"] = "memory"
@@ -283,6 +284,93 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
             json=payload,
         )
         self.assertEqual(res.status_code, 202)
+
+    def test_accepts_signed_execution_graph_and_returns_signed_feedback(self):
+        graph_payload = {
+            "operator_id": "op-001",
+            "tenant_id": "10000000-0000-0000-0000-000000000001",
+            "execution_fingerprint": "c" * 64,
+            "timestamp": int(time.time()),
+            "nonce": "nonce-020",
+            "schema_version": "execution.graph.v1",
+            "graph": {
+                "graph_id": "g-001",
+                "tenant_id": "10000000-0000-0000-0000-000000000001",
+                "target_urn": "urn:target:ip:10.0.0.5",
+                "nodes": [{"id": "n1"}, {"id": "n2"}],
+                "edges": [{"from": "n1", "to": "n2"}],
+            },
+        }
+        graph_res = self.client.post(
+            "/internal/v1/cognitive/execution-graph",
+            headers=self._signed_headers(graph_payload),
+            json=graph_payload,
+        )
+        self.assertEqual(graph_res.status_code, 202)
+
+        query_payload = {
+            "operator_id": "op-001",
+            "tenant_id": "10000000-0000-0000-0000-000000000001",
+            "timestamp": int(time.time()),
+            "nonce": "nonce-021",
+            "limit": 10,
+        }
+        feedback_res = self.client.post(
+            "/internal/v1/cognitive/feedback/adjustments/query",
+            headers=self._signed_headers(query_payload),
+            json=query_payload,
+        )
+        self.assertEqual(feedback_res.status_code, 200)
+        body = feedback_res.json()
+        self.assertIn("signature", body)
+        self.assertIn("signed_at", body)
+        self.assertIn("nonce", body)
+        self.assertEqual(body.get("schema_version"), "feedback.response.v1")
+        self.assertEqual(body.get("status"), "accepted")
+        self.assertTrue(isinstance(body.get("data"), list))
+        self.assertEqual(body["data"][0]["tenant_id"], query_payload["tenant_id"])
+        self.assertEqual(body["data"][0]["execution_fingerprint"], "c" * 64)
+
+    def test_rejects_unsigned_feedback_query(self):
+        query_payload = {
+            "operator_id": "op-001",
+            "tenant_id": "10000000-0000-0000-0000-000000000001",
+            "timestamp": int(time.time()),
+            "nonce": "nonce-022",
+            "limit": 10,
+        }
+        res = self.client.post(
+            "/internal/v1/cognitive/feedback/adjustments/query",
+            headers={
+                "X-Service-Identity": "spectrastrike-producer",
+                "X-Client-Cert-Sha256": "a" * 64,
+                "Content-Type": "application/json",
+            },
+            json=query_payload,
+        )
+        self.assertEqual(res.status_code, 401)
+
+    def test_replay_feedback_query_nonce_is_rejected(self):
+        query_payload = {
+            "operator_id": "op-001",
+            "tenant_id": "10000000-0000-0000-0000-000000000001",
+            "timestamp": int(time.time()),
+            "nonce": "nonce-023",
+            "limit": 10,
+        }
+        headers = self._signed_headers(query_payload)
+        first = self.client.post(
+            "/internal/v1/cognitive/feedback/adjustments/query",
+            headers=headers,
+            json=query_payload,
+        )
+        second = self.client.post(
+            "/internal/v1/cognitive/feedback/adjustments/query",
+            headers=headers,
+            json=query_payload,
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 409)
 
 
 if __name__ == "__main__":
