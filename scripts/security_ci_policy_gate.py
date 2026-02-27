@@ -36,10 +36,25 @@ def _load_compose(path: Path) -> dict:
         _fail(f"compose parse failed: {exc}")
 
 
+def _compose_env_to_map(env: object) -> dict[str, str]:
+    if isinstance(env, dict):
+        return {str(k): str(v) for k, v in env.items()}
+    if isinstance(env, list):
+        out: dict[str, str] = {}
+        for item in env:
+            text = str(item)
+            if "=" not in text:
+                continue
+            key, value = text.split("=", 1)
+            out[key.strip()] = value.strip()
+        return out
+    return {}
+
+
 def _check_runtime_security_flags(compose: dict) -> None:
     services = compose.get("services") or {}
     gateway = services.get("vectorvue_telemetry_gateway") or {}
-    env = gateway.get("environment") or {}
+    env = _compose_env_to_map(gateway.get("environment"))
 
     mtls = str(env.get("VV_TG_REQUIRE_MTLS", "")).strip().lower()
     if mtls not in {"1", "true", "yes", "on"}:

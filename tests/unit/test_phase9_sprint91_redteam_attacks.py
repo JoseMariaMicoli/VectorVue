@@ -98,6 +98,7 @@ class Phase9Sprint91GatewayAttackSimulationTests(unittest.TestCase):
                 "description": "Observed suspicious process chain",
                 "attributes": {
                     "asset_ref": "host-nyc-01",
+                    "schema_version": "1.0",
                     "attestation_measurement_hash": "b" * 64,
                 },
             },

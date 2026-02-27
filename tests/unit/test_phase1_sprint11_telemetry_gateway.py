@@ -97,6 +97,7 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
                 "description": "Observed suspicious process chain",
                 "attributes": {
                     "asset_ref": "host-nyc-01",
+                    "schema_version": "1.0",
                     "attestation_measurement_hash": "b" * 64,
                 },
             },
@@ -273,6 +274,7 @@ class TelemetryGatewaySecurityTests(unittest.TestCase):
         os.environ["VV_TG_ENFORCE_SCHEMA_VERSION"] = "1"
         os.environ["VV_TG_ALLOWED_SCHEMA_VERSION"] = "1.0"
         payload = self._payload("nonce-018")
+        payload["payload"]["attributes"].pop("schema_version", None)
         res = self.client.post(
             "/internal/v1/telemetry",
             headers=self._signed_headers(payload),
