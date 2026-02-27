@@ -1,18 +1,19 @@
+#
+# Copyright (c) 2026 NyxeraLabs
+# Author: Jose Maria Micoli
+# Licensed under BSL 1.1
+# Change Date: 2033-02-22 -> Apache-2.0
+#
 name: Security Enforcement
 
 on:
   push:
     branches:
-      - "feat/**"
-      - dev
-      - QA
-      - qa
+      - "**"
   pull_request:
     branches:
-      - dev
-      - QA
-      - qa
-      - main
+      - "**"
+  workflow_dispatch:
 
 permissions:
   contents: read

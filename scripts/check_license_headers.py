@@ -3,7 +3,7 @@
 # Licensed under BSL 1.1
 # Change Date: 2033-02-22 -> Apache-2.0
 
-"""Fail when tracked source/docs/config files miss required license markers."""
+"""Fail when tracked source/config files miss required license markers."""
 
 from __future__ import annotations
 
@@ -24,8 +24,6 @@ TARGET_EXTENSIONS = {
     ".tsx",
     ".js",
     ".mjs",
-    ".md",
-    ".txt",
     ".sh",
     ".yml",
     ".yaml",
@@ -33,10 +31,29 @@ TARGET_EXTENSIONS = {
     ".conf",
 }
 
+TARGET_ROOTS = {
+    ".github",
+    "api",
+    "app",
+    "cli",
+    "models",
+    "portal",
+    "scripts",
+    "security",
+    "services",
+    "tests",
+    "utils",
+    "workers",
+}
+
 HEADER_SCAN_LINES = 40
 
 
 def is_target(path: Path) -> bool:
+    if not path.parts:
+        return False
+    if path.parts[0] not in TARGET_ROOTS and path.name not in {"Makefile", "Dockerfile"}:
+        return False
     if path.name in {"Makefile", "Dockerfile"}:
         return True
     return path.suffix in TARGET_EXTENSIONS

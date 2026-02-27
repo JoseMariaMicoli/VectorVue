@@ -9,16 +9,11 @@ name: CI
 on:
   push:
     branches:
-      - 'feat/**'
-      - dev
-      - qa
-      - QA
+      - '**'
   pull_request:
     branches:
-      - dev
-      - qa
-      - QA
-      - main
+      - '**'
+  workflow_dispatch:
 
 permissions:
   contents: read
