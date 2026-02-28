@@ -55,3 +55,10 @@ Primary detailed log:
 ## Final Conclusion
 
 VectorVue federation ingress/feedback loop is operating with mandatory asymmetric verification, replay protection, and strict tenant/service identity controls. Functional E2E flow is accepted; only wrapper-level Sliver command compatibility remains for execution-path completeness.
+
+## Local Persistent Configuration Note (2026-02-28)
+
+- Runtime local federation values are persisted in gitignored `local_federation/.env.vectorvue.local`.
+- `make local-federation-up` reuses this local file if present.
+- Tracked dummy template for docs/onboarding:
+  - `docs/examples/vectorvue_local_federation.env.dummy`
