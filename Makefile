@@ -583,15 +583,15 @@ local-federation-up:
 	@if [ ! -f local_federation/.env.vectorvue.local ]; then \
 		printf '%s\n' \
 		"# Local-only VectorVue federation runtime config (gitignored)" \
-		"VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON={\"spectrastrike-producer\":\"a8525203fbc1ecf03b1ccf2d21b9f6faeeb8d84ba291a823d24c087cb4ca48df\"}" \
+		"VV_TG_ALLOWED_SERVICE_IDENTITIES_JSON={\"spectrastrike-producer\":\"26f2748599c5679b6d2a81738c8f9a23bf467269344cdda839bc269e9c73e08b\"}" \
 		"VV_TG_OPERATOR_TENANT_MAP={\"op-001\":\"10000000-0000-0000-0000-000000000001\"}" \
 		"VV_TG_REQUIRE_MTLS=1" \
 		"VV_TG_REQUIRE_PAYLOAD_SIGNATURE=1" \
 		"VV_TG_ENFORCE_SCHEMA_VERSION=1" \
 		"VV_TG_ALLOWED_SCHEMA_VERSION=1.0" \
 		"VV_TG_FEEDBACK_ACTIVE_KID=default" \
-		"VV_TG_FEEDBACK_ED25519_KEYS_JSON={\"default\":\"/home/xoce/Workspace/VectorVue/deploy/certs/vectorvue_feedback_ed25519.key\"}" \
-		"VV_TG_SPECTRASTRIKE_ED25519_PUBKEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" \
+		"VV_TG_FEEDBACK_ED25519_KEYS_JSON={\"default\":\"/opt/vectorvue/deploy/certs/vectorvue_feedback_ed25519.key\"}" \
+		"VV_TG_SPECTRASTRIKE_ED25519_PUBKEY=ukV9kUhkTEKpQQ7xDJUkAuy3DG+QiTHMFy8ayuREdCI=" \
 		> local_federation/.env.vectorvue.local; \
 	fi
 	@if [ ! -f local_federation/federation-compose.override.yml ]; then \

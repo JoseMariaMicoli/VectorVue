@@ -75,3 +75,20 @@ Feedback adjustments bind to execution fingerprints and attestation hashes. Unve
 - Rotate mTLS and Ed25519 keys on schedule.
 - Separate signing domains per tenant for high-scale deployments.
 - Mirror audit logs into immutable external storage.
+
+## Local Persistent Federation Setup
+
+For local persistent runs, keep runtime federation values in gitignored:
+
+- `local_federation/.env.vectorvue.local`
+
+Bootstrap/start:
+
+```bash
+cd VectorVue
+make local-federation-up
+```
+
+Tracked dummy template for documentation and onboarding:
+
+- `docs/examples/vectorvue_local_federation.env.dummy`
